@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from '../dist/world-data.js';
+import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS } from '../dist/world-data.js';
 
 // The widest friend needs a 5.4-unit corridor. The route check uses a separate
 // occupancy grid, so a safe-looking destination cannot conceal a sealed route.
@@ -29,12 +29,17 @@ test('all fifteen friends start clear of scenery and each other, including wide 
 test('landmark arrivals and all neighborhoods connect to the town square for a wide friend', () => {
   const reached = new Set(['48,47']);
   const queue = [[48, 47]];
+  const occupancy = new Map();
+  function gridBlocked(x, z, key) {
+    if (!occupancy.has(key)) occupancy.set(key, blocked(x, z));
+    return occupancy.get(key);
+  }
   for (let head = 0; head < queue.length; head++) {
     const [x, z] = queue[head];
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, nz = z + dz;
       const key = `${nx},${nz}`;
-      if (!reached.has(key) && !blocked(nx, nz)) {
+      if (!reached.has(key) && !gridBlocked(nx, nz, key)) {
         reached.add(key);
         queue.push([nx, nz]);
       }
@@ -45,5 +50,26 @@ test('landmark arrivals and all neighborhoods connect to the town square for a w
     assert.ok(reached.has(`${landmark.arrival.x},${landmark.arrival.z}`), `${landmark.name} has no safe route`);
   }
   for (const p of FRIEND_STARTS) assert.ok(reached.has(`${p.x},${p.z}`), `Unreachable start at ${p.x},${p.z}`);
-  assert.ok(BUILDINGS.length >= 15, 'The expanded town keeps its many buildings');
+  for (const approach of BUILDING_APPROACHES) {
+    assert.ok(!blocked(approach.x, approach.z), `${approach.name} approach is blocked`);
+    assert.ok(reached.has(`${approach.x},${approach.z}`), `${approach.name} is cut off from the town`);
+  }
+  for (const entrance of EXPANSION_CONNECTIONS) {
+    assert.ok(reached.has(`${entrance.x},${entrance.z}`), `${entrance.id} has no clear connection to the town`);
+  }
+});
+
+test('the larger town has fifty homes, ten stores, and open areas reserved for activities', () => {
+  assert.deepEqual(WORLD, { width: 300, depth: 250, margin: 2 });
+  assert.equal(BUILDINGS.filter(b => b.kind === 'house').length, 50);
+  assert.equal(BUILDINGS.filter(b => ['shop', 'bakery', 'cafe'].includes(b.kind)).length, 10);
+  for (const kind of ['library', 'school', 'hall']) assert.equal(BUILDINGS.filter(b => b.kind === kind).length, 1);
+  assert.equal(new Set(BUILDINGS.map(b => b.id)).size, BUILDINGS.length);
+  assert.equal(BUILDING_APPROACHES.length, BUILDINGS.length);
+  assert.ok(ROAD_SEGMENTS.every(r => r.width >= 10), 'Main streets need room for wide friends');
+  for (const o of OBSTACLES) {
+    const farX = o.radius !== undefined ? o.x + o.radius : o.x + o.w;
+    const farZ = o.radius !== undefined ? o.z + o.radius : o.z + o.d;
+    assert.ok(farX <= 196 && farZ <= 166, `${o.id} intrudes into a reserved activity area`);
+  }
 });

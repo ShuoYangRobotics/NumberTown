@@ -164,6 +164,38 @@ const PLACES = {
     sleepy: ['The flowers look ready for a gentle doze.', 'A quiet garden rest sounds just right.'],
     sad: ['A gentle moment with the flowers might help.', 'Growing takes time. Feeling better can, too.'],
   },
+  park: {
+    happy: ['A big green park for little adventures!', 'Trees, paths, and friends. I love our park!'],
+    excited: ['Hooray! A whole park to explore together!', 'Let’s count the trees on our park adventure!'],
+    curious: ['How many shades of green can we find in the park?', 'I wonder which park path we should explore.'],
+    surprised: ['Oh! That tree is taller than all my blocks!', 'Wow! Our park has so many little paths!'],
+    sleepy: ['A shady park bench looks wonderfully cozy.', 'The park trees are whispering a sleepy song.'],
+    sad: ['A gentle walk in the park might help today.', 'I can share a quiet park bench with a friend.'],
+  },
+  football: {
+    happy: ['Pass the football! Everyone gets a turn.', 'Playing together is the best part of football!'],
+    excited: ['Goal! Hooray for our whole team!', 'A friendly football match! Let’s get kicking!'],
+    curious: ['Which way will the football roll next?', 'How many passes can we make before a goal?'],
+    surprised: ['Oh! What a surprising bounce from that ball!', 'Wow! That ball rolled right into the goal!'],
+    sleepy: ['Half-time! The football can rest for a moment.', 'A little rest, then another friendly game of football.'],
+    sad: ['Missed a goal? We can help each other try again.', 'Our football team has room for every feeling.'],
+  },
+  hill: {
+    happy: ['One little hill, so many wonderful views!', 'Every step up this hill is an adventure.'],
+    excited: ['Up the hill we go! Look at that lovely view!', 'Hooray! A whole town to spot from the hill!'],
+    curious: ['What can we see from the top of this hill?', 'How many steps will take us up this hill?'],
+    surprised: ['Wow! The view from this hill goes on and on!', 'Oh! Our town looks tiny from up this hill!'],
+    sleepy: ['That hill climb calls for a little rest.', 'A quiet moment with this hilltop view sounds nice.'],
+    sad: ['One small step up the hill is enough today.', 'A friend and a gentle hilltop breeze might help.'],
+  },
+  river: {
+    happy: ['Hello, river! Your ripples look like little smiles.', 'The river has a lovely, gentle song.'],
+    excited: ['Look at those sparkly river ripples!', 'A river adventure! Let’s explore the bank together.'],
+    curious: ['Where do all these river ripples go?', 'How many sparkles can we spot on the river?'],
+    surprised: ['Oh! That river sparkle looks like a tiny star!', 'Wow! The river winds all the way around that bend!'],
+    sleepy: ['The gentle river sounds make me feel cozy.', 'I’ll rest by the river and listen to its song.'],
+    sad: ['A quiet moment beside the river might help.', 'I can take a gentle breath and watch the river flow.'],
+  },
 };
 
 const MOOD_LINES = {

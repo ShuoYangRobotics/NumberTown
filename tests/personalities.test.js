@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EMOTIONS, chooseRemark } from '../dist/personalities.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
-const places = ['library', 'town-square', 'garden', 'pond'];
+const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river'];
 const samples = [0, .12, .25, .4, .58, .75, .99];
 
 test('all six moods have usable, unique display options', () => {
@@ -45,6 +45,10 @@ test('landmark dialogue stays relevant to its location', () => {
     'town-square': /square|fountain|friends/i,
     pond: /duck|pond|ripples/i,
     garden: /flower|garden|blossom|seed|grow/i,
+    park: /park|tree/i,
+    football: /football|ball|goal|team/i,
+    hill: /hill|view/i,
+    river: /river/i,
   };
   for (const place of places) {
     for (const emotion of moods) {

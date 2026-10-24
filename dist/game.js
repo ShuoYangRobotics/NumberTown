@@ -2,13 +2,23 @@ import * as THREE from './vendor/three.module.js';
 import { CHARACTERS, getCharacterMetrics } from './character-data.js';
 import { createCharacter } from './characters3d.js';
 import { createTown } from './world3d.js';
-import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS } from './world-data.js';
+import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from './world-data.js';
 import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp } from './navigation.js';
 import { EMOTIONS, chooseRemark } from './personalities.js';
 
+import { createLandscape } from './terrain.js';
+import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, RIVER_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
+import { createPark, PARK_LANDMARK, PARK_OBSTACLES } from './park.js';
+import { createFootball, createBallState, stepBall, kickBall, updateBallContact, resetBall, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from './football.js';
+import { mountTownMap } from './town-map.js';
+
+const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TERRAIN_OBSTACLES];
+const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,RIVER_LANDMARK];
+const townCounts={houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
 const canvas = $('#world');
-const help = $('#help-dialog');
+const help = $('#help-dialog'), mapDialog=$('#map-dialog');
+const modalOpen=()=>help.open||mapDialog.open;
 const debug = new URLSearchParams(location.search).has('debug');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const errors = [];
@@ -30,7 +40,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#dcebe4');
-scene.fog = new THREE.Fog('#dcebe4', 85, 180);
+scene.fog = new THREE.Fog('#dcebe4', 150, 430);
 scene.add(new THREE.HemisphereLight('#fff8de', '#8fbd9a', 2.0));
 const sunlight = new THREE.DirectionalLight('#fff1d4', 2.5);
 sunlight.position.set(24, 63, 40);
@@ -42,21 +52,23 @@ sunlight.shadow.bias = -.0003;
 sunlight.shadow.normalBias = .035;
 scene.add(sunlight, sunlight.target);
 const fillLight = new THREE.DirectionalLight('#d8eaf5', .8); fillLight.position.set(85,25,10); scene.add(fillLight);
-const town = createTown(); scene.add(town.root);
+const town = createTown(), landscape=createLandscape(), park=createPark(), football=createFootball(), ballState=createBallState();
+scene.add(town.root,landscape.root,park.root,football.root);
+football.update(ballState,0);
 
 const players = CHARACTERS.map((definition,index) => {
   const model = createCharacter(definition.number);
   const metrics = getCharacterMetrics(definition.number);
   const radius = metrics.radius ?? Math.hypot(metrics.width / 2, .5) + .12;
-  const start = nearestOpenPosition(FRIEND_STARTS[index], OBSTACLES, WORLD, radius);
+  const start = nearestOpenPosition(FRIEND_STARTS[index], ALL_OBSTACLES, WORLD, radius);
   const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', yaw:0};
-  model.root.position.set(player.x,0,player.z);
+  model.root.position.set(player.x,groundHeight(player.x,player.z),player.z);
   model.root.userData.playerNumber = definition.number;
   scene.add(model.root);
   return player;
 });
 let active = players[10];
-const camera = new THREE.PerspectiveCamera(42, 1, .1, 240);
+const camera = new THREE.PerspectiveCamera(42, 1, .3, 650);
 const orbit = {yaw:.26, elevation:.64, distance:46, targetDistance:46};
 const target = new THREE.Vector3(active.x, 2.1, active.z);
 const raycaster = new THREE.Raycaster();
@@ -68,7 +80,7 @@ const selectionShadow = new THREE.Mesh(new THREE.CircleGeometry(1,40),new THREE.
 selectionShadow.rotation.x=-Math.PI/2;selectionShadow.position.y=.13;scene.add(selectionShadow);
 
 let time=0, lastTime=0, muted=true, nextRemark=9, nextNeighbor=15, currentPlace=null, audioContext;
-let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0;
+let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, activityUntil=0, activityMessage='';
 const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
 let drag=null, pinchDistance=0, suppressClick=false;
 const bubbles = [{element:$('#speech'),player:active,until:0},{element:$('#neighbor-speech'),player:players[0],until:0}];
@@ -124,26 +136,33 @@ function updateMood(){
 function setEmotion(player,emotion,seconds=16){player.emotion=emotion;player.moodUntil=time+seconds;player.model.setEmotion(emotion);if(player===active)updateMood();}
 function closeMood(){$('#mood-menu').hidden=true;$('#mood-toggle').setAttribute('aria-expanded','false');}
 $('#mood-toggle').addEventListener('click',()=>{const open=$('#mood-menu').hidden;$('#mood-menu').hidden=!open;$('#mood-toggle').setAttribute('aria-expanded',String(open));clearInput();});
-const placeIcons={'town-square':'⌘',library:'▤',garden:'❀',pond:'≈',school:'✎'};
-for(const id of ['town-square','library','garden','pond']){
-  const place=LANDMARKS.find(item=>item.id===id);if(!place)continue;
+const placeIcons={'town-square':'⌘',library:'▤',market:'▥',park:'☼',football:'⚽',hill:'△',river:'≈'};
+for(const id of ['town-square','market','library','park','football','hill','river']){
+  const place=ALL_PLACES.find(item=>item.id===id);if(!place)continue;
   const button=document.createElement('button');button.type='button';button.dataset.place=id;button.innerHTML=`<span aria-hidden="true">${placeIcons[id]}</span>${id==='garden'?'Gardens':place.name}`;
   button.addEventListener('click',()=>visit(place));$('#destinations').append(button);
 }
-function walkingObstacles(player){return [...OBSTACLES,...players.filter(p=>p!==player).map(p=>({x:p.x,z:p.z,radius:p.radius+.08}))];}
+function walkingObstacles(player){return [...ALL_OBSTACLES,...players.filter(p=>p!==player).map(p=>({x:p.x,z:p.z,radius:p.radius+.08}))];}
 function visit(place){
   clearInput();closeMood();Object.assign(active,nearestOpenPosition(place.arrival,walkingObstacles(active),WORLD,active.radius));
-  active.jump=0;active.jumpVelocity=0;active.yaw=orbit.yaw;currentPlace=place;
+  active.jump=0;active.jumpVelocity=0;currentPlace=place;
+  if(['park','football','hill','river'].includes(place.id)){
+    orbit.yaw=place.id==='hill'?Math.PI:0;orbit.elevation=place.id==='park'?.48:.64;
+    orbit.targetDistance=place.id==='park'?115:place.id==='football'?65:place.id==='river'?115:58;zoom(0);
+  }
+  active.yaw=place.id==='football'?Math.PI:orbit.yaw;
+  active.model.root.position.set(active.x,groundHeight(active.x,active.z),active.z);
   // Fast travel should feel immediate, without flying through buildings.
-  target.set(active.x,Math.max(1.4,active.height*.45),active.z);
+  target.set(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
   setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:place.id});updateLocation();focusGame();
 }
-function findPlace(player){return LANDMARKS.filter(place=>Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;}
+function findPlace(player){return ALL_PLACES.filter(place=>Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;}
 function updateLocation(){
   const place=findPlace(active);
   if(place?.id!==currentPlace?.id){currentPlace=place;}
   $('#location-name').textContent=place?.name||'Neighborhood lanes';
   document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id));
+  updateActivity(place);if(mapDialog.open)townMap.update(active);
 }
 function remark(player,context={}){
   const place=findPlace(player);
@@ -154,15 +173,17 @@ function remark(player,context={}){
 }
 function speak(text,player){if(muted||!('speechSynthesis'in window))return;speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;speechSynthesis.speak(utterance);}
 function tone(){if(muted)return;try{audioContext ||= new(window.AudioContext||window.webkitAudioContext)();audioContext.resume();const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();oscillator.frequency.setValueAtTime(490,audioContext.currentTime);oscillator.frequency.exponentialRampToValueAtTime(780,audioContext.currentTime+.13);gain.gain.setValueAtTime(.025,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+.2);oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start();oscillator.stop(audioContext.currentTime+.2);}catch{}}
-function jump(){if(help.open||active.jump>.01||time-lastJumpAt<.4)return;active.jumpVelocity=7.4;hopCount++;lastJumpAt=time;setEmotion(active,'excited',6);tone();}
+function jump(){if(modalOpen()||active.jump>.01||time-lastJumpAt<.4)return;active.jumpVelocity=7.4;hopCount++;lastJumpAt=time;setEmotion(active,'excited',6);tone();}
 $('#sound').addEventListener('click',()=>{muted=!muted;$('#sound').setAttribute('aria-pressed',String(!muted));$('#sound').setAttribute('aria-label',muted?'Turn voices on':'Turn voices off');$('#sound-wave').setAttribute('d',muted?'m16 9 6 6m0-6-6 6':'M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14');if(muted&&'speechSynthesis'in window)speechSynthesis.cancel();else speak(`Hello, I'm ${active.name}! Welcome to NumberTown.`,active);focusGame();});
 
 const moves=['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'];
 function clearInput(){keys.clear();touches.clear();tapUntil.clear();players.forEach(p=>p.moving=false);document.querySelectorAll('[data-move]').forEach(button=>button.classList.remove('active'));}
 addEventListener('keydown',event=>{
-  if(event.metaKey||event.ctrlKey||event.altKey||help.open)return;
+  if(event.metaKey||event.ctrlKey||event.altKey)return;
   if(['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))return;
   const key=event.key.toLowerCase();
+  if(!event.repeat&&key==='m'&&!help.open){event.preventDefault();if(mapDialog.open)mapDialog.close();else openMap();return;}
+  if(modalOpen())return;
   if(moves.includes(key)){event.preventDefault();keys.add(key);if(!event.repeat)tapUntil.set(key,time+.075);closeMood();}
   if(key==='shift')keys.add('shift');
   if(event.code==='Space'&&event.target.tagName!=='BUTTON'){event.preventDefault();if(!event.repeat)jump();}
@@ -172,6 +193,7 @@ addEventListener('keydown',event=>{
   if(!event.repeat&&key==='e'){const index=EMOTIONS.findIndex(m=>m.id===active.emotion);setEmotion(active,EMOTIONS[(index+1)%EMOTIONS.length].id,25);remark(active);}
   if(key==='q'||key==='r'){event.preventDefault();keys.add(key);if(!event.repeat)orbit.yaw+=(key==='q'?-.12:.12);}
   if(!event.repeat&&key==='c')resetCamera();
+  if(!event.repeat&&key==='f'){event.preventDefault();kick();}
   if(!event.repeat&&(key==='+'||key==='='))zoom(-3);
   if(!event.repeat&&(key==='-'||key==='_'))zoom(3);
   if(!event.repeat&&key==='[')selectFriend(active.number===1?15:active.number-1);
@@ -189,7 +211,7 @@ for(const button of document.querySelectorAll('[data-move]')){
 $('#touch-jump').addEventListener('pointerdown',event=>{event.preventDefault();jump();});
 function isDown(...names){return names.some(name=>keys.has(name)||touches.has(name)||(tapUntil.get(name)||0)>time);}
 
-function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,100);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=100;}
+function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,220);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=220;}
 function resetCamera(){orbit.yaw=.26;orbit.elevation=.64;orbit.targetDistance=46;zoom(0);focusGame();}
 $('#zoom-in').addEventListener('click',()=>{zoom(-4);focusGame();});$('#zoom-out').addEventListener('click',()=>{zoom(4);focusGame();});
 $('#rotate-left').addEventListener('click',()=>{orbit.yaw-=Math.PI/4;focusGame();});$('#rotate-right').addEventListener('click',()=>{orbit.yaw+=Math.PI/4;focusGame();});$('#reset-camera').addEventListener('click',resetCamera);
@@ -223,11 +245,42 @@ function closeHelp(){help.close();focusGame();}
 $('#close-help').addEventListener('click',closeHelp);$('#lets-play').addEventListener('click',closeHelp);help.addEventListener('close',()=>{clearInput();focusGame();});
 help.addEventListener('click',event=>{if(event.target===help){const r=help.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeHelp();}});
 
+const townMap=mountTownMap($('#map-content'),ALL_PLACES,place=>{mapDialog.close();visit(place);});
+function openMap(){clearInput();closeMood();townMap.update(active);mapDialog.showModal();}
+$('#open-map').addEventListener('click',openMap);
+$('#close-map').addEventListener('click',()=>mapDialog.close());
+mapDialog.addEventListener('close',()=>{clearInput();focusGame();});
+mapDialog.addEventListener('click',event=>{if(event.target===mapDialog){const r=mapDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)mapDialog.close();}});
+function kick(){
+  if(modalOpen()||active.jump>.3)return;
+  if(kickBall(ballState,active)){kickCount++;tone();activityMessage='Nice kick! Follow the ball for another pass.';activityUntil=time+2.5;}
+  else{activityMessage='Walk closer to the ball, then press F to kick.';activityUntil=time+2.5;}
+  updateActivity(findPlace(active));focusGame();
+}
+$('#kick-ball').addEventListener('click',kick);
+$('#reset-ball').addEventListener('click',()=>{resetBall(ballState);activityMessage='Ball back at the center. Ready to play!';activityUntil=time+3;updateActivity(findPlace(active));focusGame();});
+$('#view-town').addEventListener('click',()=>{orbit.yaw=0;orbit.elevation=.36;orbit.targetDistance=100;zoom(0);focusGame();});
+function updateActivity(place){
+  const id=place?.id,isFootball=id==='football',isLookout=id==='lookout';
+  $('#activity').hidden=!['park','football','hill','lookout','river'].includes(id);
+  $('#football-actions').hidden=!isFootball;$('#view-town').hidden=!isLookout;
+  let title='',detail='';
+  if(isFootball){title=`Football · ${ballState.goals} ${ballState.goals===1?'goal':'goals'}`;detail=time<activityUntil?activityMessage:'Walk into the ball to dribble · F to kick in your walking direction';}
+  if(id==='park'){title='Wheel Park · 18 cabins';detail='Count the colorful cabins as they turn. Take a stroll through the park.';}
+  if(id==='hill'){title=`Sunny Hill · ${Math.round(groundHeight(active.x,active.z))} / 12 m`;detail='Follow the cream trail up to the scenic deck. WASD to climb.';}
+  if(isLookout){title='You made it! · Scenic deck';detail='Drag to look around, or take in the view across NumberTown.';}
+  if(id==='river'){title='Riverside walk';detail='Follow the water and cross the wooden bridge.';}
+  $('#activity-title').textContent=title;$('#activity-detail').textContent=detail;
+}
+
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();requestAnimationFrame(keepSelectedCardVisible);}
 addEventListener('resize',resize);resize();selectFriend(11,true);
 function updateCamera(dt){
   if(keys.has('q'))orbit.yaw-=dt*1.25;if(keys.has('r'))orbit.yaw+=dt*1.25;
-  const desired=new THREE.Vector3(active.x,Math.max(1.4,active.height*.45),active.z);
+  const desired=new THREE.Vector3(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
+  // Frame the entire wheel above the visitor when taking in the park.
+  if(currentPlace?.id==='park'&&orbit.targetDistance>=80){desired.y+=11;desired.z-=15;}
+  if(currentPlace?.id==='river'&&orbit.targetDistance>=80){desired.x-=10;desired.y+=4;desired.z+=20;}
   target.lerp(desired,1-Math.exp(-dt*5));
   orbit.distance=THREE.MathUtils.lerp(orbit.distance,orbit.targetDistance,1-Math.exp(-dt*7));
   // Keep the character in the open space above the card tray, also on portrait screens.
@@ -252,7 +305,7 @@ function updateBubbles(){
 function animate(timestamp){
   requestAnimationFrame(animate);
   const dt=lastTime?Math.min((timestamp-lastTime)/1000,.05):1/60;lastTime=timestamp;if(document.hidden)return;time+=dt;
-  if(!help.open){
+  if(!modalOpen()){
     const horizontal=Number(isDown('d','arrowright','right'))-Number(isDown('a','arrowleft','left'));
     const vertical=Number(isDown('s','arrowdown','down'))-Number(isDown('w','arrowup','up'));
     const velocity=movementVector(horizontal,vertical,orbit.yaw,keys.has('shift')?9:6);
@@ -261,23 +314,28 @@ function animate(timestamp){
     if(active.moving)active.yaw=angleLerp(active.yaw,Math.atan2(velocity.x,velocity.z),1-Math.exp(-dt*13));
     for(const player of players){
       if(player.jump>0||player.jumpVelocity>0){player.jumpVelocity-=18*dt;player.jump=Math.max(0,player.jump+player.jumpVelocity*dt);if(!player.jump)player.jumpVelocity=0;}
-      player.model.root.position.set(player.x,player.jump,player.z);player.model.root.rotation.y=player.yaw;
+      player.model.root.position.set(player.x,groundHeight(player.x,player.z)+player.jump,player.z);player.model.root.rotation.y=player.yaw;
       player.model.update(dt,{time:reducedMotion?0:time,moving:player.moving,emotion:player.emotion});
       if(player.moodUntil<time){setEmotion(player,['happy','happy','curious','excited','surprised','sleepy'][Math.floor(Math.random()*6)],18+Math.random()*19);}
     }
     if(time>nextRemark)remark(active);
     if(time>nextNeighbor){const nearby=players.filter(p=>p!==active&&Math.hypot(p.x-active.x,p.z-active.z)<22);if(nearby.length)remark(nearby[Math.floor(Math.random()*nearby.length)]);nextNeighbor=time+16+Math.random()*9;}
-    town.update(reducedMotion?0:time);
+    town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);
+    if(active.jump<.3)updateBallContact(ballState,active,dt);
+    const goal=stepBall(ballState,dt);football.update(ballState,time);
+    if(goal){activityMessage=`Goal! ${ballState.goals} scored. Back to the center!`;activityUntil=time+4;setEmotion(active,'excited',8);tone();}
+
   }else active.moving=false;
   updateCamera(dt);
-  const radius=Math.max(.9,active.width*.57);selectedRing.scale.set(radius,radius,1);selectedRing.position.x=active.x;selectedRing.position.z=active.z;
-  selectionShadow.scale.set(radius*.9,.7,1);selectionShadow.position.x=active.x;selectionShadow.position.z=active.z;
+  const radius=Math.max(.9,active.width*.57);selectedRing.scale.set(radius,radius,1);selectedRing.position.x=active.x;selectedRing.position.z=active.z;selectedRing.position.y=groundHeight(active.x,active.z)+.16;
+  selectionShadow.scale.set(radius*.9,.7,1);selectionShadow.position.x=active.x;selectionShadow.position.z=active.z;selectionShadow.position.y=groundHeight(active.x,active.z)+.13;
+  sunlight.target.position.set(active.x,groundHeight(active.x,active.z),active.z);sunlight.position.set(active.x-24,groundHeight(active.x,active.z)+63,active.z-2);
   updateBubbles();renderer.render(scene,camera);
   frameCount++;
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,width:WORLD.width,depth:WORLD.depth},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

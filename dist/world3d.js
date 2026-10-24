@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN } from './world-data.js';
+import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN, ROAD_SEGMENTS } from './world-data.js';
 
 const COLORS = {
   grass: '#b7cda4', soil: '#dfd0ad', path: '#f3e6cc', edge: '#fff5df',
@@ -57,6 +57,7 @@ export function createTown() {
     cylinder: new THREE.CylinderGeometry(1, 1, 1, 12),
     cone: new THREE.ConeGeometry(1, 1, 12),
     circle: new THREE.CircleGeometry(1, 40),
+    plane: new THREE.PlaneGeometry(1, 1),
     torus: new THREE.TorusGeometry(1, .1, 6, 32),
     roof: gableGeometry(), door: archGeometry(),
   };
@@ -89,14 +90,14 @@ export function createTown() {
   const ball = (x, y, z, sx, sy, sz, color, cast = true) => put('sphere', color, x, y, z, sx, sy, sz, 0, 0, 0, cast);
   const cylinder = (x, y, z, radius, h, color) => put('cylinder', color, x, y, z, radius, h, radius);
 
-  function horizontal(shape, color, x, z, w, d, y = .025) {
-    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material(color));
-    mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, y, z);
-    mesh.receiveShadow = true; root.add(mesh); return mesh;
-  }
-
   function path(x, z, w, d, color = COLORS.path, y = .028) {
-    return horizontal(roundedRectangle(w, d, Math.min(2, w / 3, d / 3)), color, x, z, w, d, y);
+    // Hundreds of street/door-path parts still need just two instanced draws.
+    const r = Math.min(2, w / 3, d / 3);
+    put('plane', color, x, y, z, w - 2 * r, d, 1, -Math.PI / 2, 0, 0, false);
+    put('plane', color, x, y, z, w, d - 2 * r, 1, -Math.PI / 2, 0, 0, false);
+    for (const dx of [-1, 1]) for (const dz of [-1, 1]) {
+      put('circle', color, x + dx * (w / 2 - r), y, z + dz * (d / 2 - r), r, r, 1, -Math.PI / 2, 0, 0, false);
+    }
   }
 
   // The rounded, layered island reads as a little model of a real place.
@@ -107,9 +108,10 @@ export function createTown() {
   island.position.set(WORLD.width / 2, -1, WORLD.depth / 2);
   island.receiveShadow = true; root.add(island);
 
-  for (const z of [29, 47, 66]) path(48, z, 89, z === 47 ? 11.5 : 9.5);
-  path(22, 43, 9, 73); path(74, 51, 9, 57);
-  path(48, 48, 11, 49);
+  for (const road of ROAD_SEGMENTS) {
+    path((road.x1 + road.x2) / 2, (road.z1 + road.z2) / 2,
+      Math.abs(road.x2 - road.x1) || road.width, Math.abs(road.z2 - road.z1) || road.width);
+  }
   path(48, 47, 28, 24, '#f6e9d0', .042);
   // Inlaid border and pale cobbles give the square its own identity.
   for (const x of [34.5, 61.5]) box(x, .052, 47, .28, .025, 22.5, '#ded1b5', 0, 0, false);
@@ -125,7 +127,7 @@ export function createTown() {
       continue;
     }
     const front = b.z + b.d / 2;
-    const street = b.z < 25 ? 29 : b.z < 45 ? 47 : b.z < 65 ? 66 : 81;
+    const street = b.street ?? (b.z < 25 ? 29 : b.z < 45 ? 47 : b.z < 65 ? 66 : 81);
     if (street > front) path(b.x, (front + street) / 2, b.kind === 'library' ? 9 : 3.7, street - front + .6, COLORS.path, .034);
   }
 
@@ -148,13 +150,13 @@ export function createTown() {
     const cacheKey = `${text}|${bg}|${ink}`;
     let texture = textureCache.get(cacheKey);
     if (!texture) {
-      const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 128;
+      const canvas = document.createElement('canvas'); canvas.width = text.length < 5 ? 128 : 1024; canvas.height = 128;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `700 ${text.length < 8 ? 72 : 61}px "Trebuchet MS", sans-serif`;
-      ctx.fillText(text, 512, 68, 970);
+      ctx.fillText(text, canvas.width / 2, 68, canvas.width - 16);
       texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
       textureCache.set(cacheKey, texture);
     }
@@ -257,12 +259,13 @@ export function createTown() {
 
   for (const tree of TREES) {
     const { x, z, h, tint } = tree;
+    const s = tree.crownScale ?? 1;
     cylinder(x, h * .29, z, .23, h * .58, '#a88d70');
     const green = COLORS.leaves[tint];
-    ball(x, h * .75, z, 1.8, h * .32, 1.75, green);
-    ball(x - .8, h * .63, z + .3, 1.25, 1.25, 1.25, green);
-    ball(x + .75, h * .64, z - .25, 1.25, 1.2, 1.25, green);
-    ball(x, h * .98, z, 1.05, 1.1, 1.05, green);
+    ball(x, h * .75, z, 1.8 * s, h * .32, 1.75 * s, green);
+    ball(x - .8 * s, h * .63, z + .3 * s, 1.25 * s, 1.25 * s, 1.25 * s, green);
+    ball(x + .75 * s, h * .64, z - .25 * s, 1.25 * s, 1.2 * s, 1.25 * s, green);
+    ball(x, h * .98, z, 1.05 * s, 1.1 * s, 1.05 * s, green);
   }
 
   function bench({ x, z, rotation }) {
