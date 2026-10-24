@@ -89,6 +89,46 @@ const PERSONAL = {
     sleepy: ['I’ll count ten gentle breaths and rest.'],
     sad: ['I’ll take a breath. It’s okay to feel quiet.'],
   },
+  11: {
+    happy: ['Eleven friends make a whole football team!', 'Pass the ball! Everyone gets a turn.', 'A friendly football game makes my day.'],
+    excited: ['Goal! Three cheers for our whole team!'],
+    curious: ['How many passes can our football team make?'],
+    surprised: ['Wow! That football took a surprising bounce!'],
+    sleepy: ['Half-time! My football boots could use a rest.'],
+    sad: ['I missed a goal. My team can help me try again.'],
+  },
+  12: {
+    happy: ['Three by four, or two by six. Super rectangles!', 'Twelve blocks, so many rectangles to explore!', 'A super rectangle is ready to help!'],
+    excited: ['Super rectangles to the rescue!'],
+    curious: ['How many rectangles can my twelve blocks make?'],
+    surprised: ['Oh! Another way to make a twelve-block rectangle!'],
+    sleepy: ['Even super rectangles need a cozy rest.'],
+    sad: ['Even a super rectangle needs a little kindness.'],
+  },
+  13: {
+    happy: ['Thirteen blocks, and another chance to try!', 'A wobble won’t stop my next adventure.', 'Lucky or not, I can keep trying!'],
+    excited: ['Thirteen cheers! I’m ready to try again!'],
+    curious: ['What can I learn from that little wobble?'],
+    surprised: ['Oops! A surprise wobble. I’ll find my balance.'],
+    sleepy: ['I’ll rest now and try again after a little nap.'],
+    sad: ['That tumble felt tough. I can rest and try again.'],
+  },
+  14: {
+    happy: ['Fourteen blocks, ready for a rainbow ride!', 'My skateboard and I love a gentle roll.', 'Two sevens make fourteen rainbow blocks!'],
+    excited: ['Whee! A rainbow ride on my skateboard!'],
+    curious: ['Where will a gentle skateboard ride take me?'],
+    surprised: ['Whoa! My skateboard found a little bump!'],
+    sleepy: ['I’ll park my skateboard and take a little rest.'],
+    sad: ['A quiet rainbow moment could brighten my day.'],
+  },
+  15: {
+    happy: ['My staircase has five steps and fifteen blocks!', 'One plus two plus three plus four plus five makes fifteen!', 'Step Squad, let’s help each other climb!'],
+    excited: ['Step Squad, up we go! One happy step at a time!'],
+    curious: ['How do five growing steps make fifteen blocks?'],
+    surprised: ['Oh! What a surprising view from my top step!'],
+    sleepy: ['Fifteen sleepy blocks. Time for a staircase rest.'],
+    sad: ['A small step is enough today. My squad is here.'],
+  },
 };
 
 const PLACES = {

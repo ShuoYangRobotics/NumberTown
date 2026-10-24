@@ -1,30 +1,50 @@
-# Numberblock Town
+# NumberTown
 
-A cheerful isometric town starring ten colorful Numberblock friends inspired by the provided references. The expanded neighborhood has cottages, shops, a new town square, and a library with a reading garden. Buildings, roads, trees, water, and characters are drawn directly with Canvas; no image assets or runtime dependencies are needed.
+A cozy, fully 3D browser playground with fifteen Numberblock friends, a town square, a library, sixteen buildings, and garden paths. The game runs locally with a vendored Three.js renderer; no build step, account, or external asset downloads are required.
+
+## Run locally
+
+```sh
+python3 -m http.server 5180 --bind 127.0.0.1 --directory dist
+```
+
+Open **http://127.0.0.1:5180** in a browser supporting WebGL 2. `npm start` runs the same server. Use a web server rather than opening the HTML file directly, since the game uses JavaScript modules.
 
 ## Play
 
-Serve `dist/` with any static server, for example `python3 -m http.server 5180 --directory dist`, and open `http://localhost:5180`.
+| Control | Action |
+| --- | --- |
+| WASD or arrow keys | Walk relative to the current camera view |
+| Shift + movement | A faster stroll |
+| Drag the world / Q and R | Orbit the camera; vertical dragging changes elevation |
+| Mouse wheel / + and − | Zoom |
+| C / camera reset button | Restore the starting view |
+| Space | Hop |
+| E / feeling menu | Change expression |
+| 1–9 and 0 | Choose One through Ten |
+| Shift + 1–5 | Choose Eleven through Fifteen |
+| Character cards, previous/next, or click a character | Choose any friend |
+| Place buttons | Visit the square, library, gardens, or pond |
 
-- **WASD / arrow keys:** walk around the town.
-- **1–9 / 0 / character cards:** choose a friend (0 selects Ten). Each friend keeps their own position.
-- **Space:** hop.
-- **E / feeling menu:** change the selected friend's expression. Feelings also change naturally while exploring.
-- **Town square / Library / Gardens:** visit a destination immediately, or walk there along the connected streets.
-- **+ / −:** zoom.
-- **House icon:** bring the selected friend to the new town square.
-- Touch screens have a direction pad and Hop button.
+Touch screens have a direction pad and hop button. Drag with one finger to orbit; pinch with two to zoom. Help pauses walking. Losing window focus clears held inputs.
 
-Buildings, trees, water, and the rounded island edges block movement. Wider friends have wider collision footprints. Characters can walk on roads or grass. Friends share short, personality-specific thoughts periodically, and react to their location and feelings. Speech bubbles always appear; optional spoken words use browser speech synthesis when sound is enabled and a voice is available. Voices and sound effects start muted. The question-mark button opens the controls. Focus loss clears held movement keys. Aside from optional Google Fonts and browser-dependent voices, the game works offline once served.
+All bodies are made from **exactly the corresponding number of equal 1×1×1 cubes**. Every cube has real depth and is visible from any angle; the world has a perspective camera, volumetric buildings, and dynamic lighting and shadows. Characters keep their own locations. Collisions account for their different widths, using a conservative circular footprint to allow safe turns.
 
-Six uses a 2×3 block layout, Seven a 1×7 rainbow stack, Eight 2×4, Nine 3×3, and Ten 2×5. Happy, excited, curious, surprised, sleepy, and sad expressions are available for every character.
+Eleven has a two-by-five body plus one red cube. Twelve is three by four. Thirteen has three yellow cubes extending above and beside a ten-block body. Fourteen has four green blocks above ten white ones. Fifteen is a 1+2+3+4+5 staircase, with a cyan last column. These layouts follow the supplied references.
+
+Happy, excited, curious, surprised, sleepy, and sad expressions are available for every friend. Speech bubbles appear periodically and respond to locations and feelings. Voices are optional, initially muted, and use the browser's speech synthesis when available.
 
 ## Source
 
-- `dist/game.js`: game loop, camera, input, character selection, audio, and UI.
-- `dist/town.js`: town artwork and collision geometry.
-- `dist/characters.js`: animated character artwork.
-- `dist/personalities.js`: emotions and contextual character dialogue.
-- `dist/physics.js`: movement projection and collisions.
+- `dist/game.js`: Three.js scene, perspective camera, input, selection, dialogue, and interface.
+- `dist/character-data.js`: exact unit-cube layouts and dimensions for all fifteen characters.
+- `dist/characters3d.js`: mesh bodies, faces, accessories, and animation.
+- `dist/world-data.js`: town layout, obstacles, destinations, and safe spawn positions.
+- `dist/world3d.js`: buildings, paths, vegetation, furniture, and water.
+- `dist/navigation.js`: camera-relative motion and collision handling.
+- `dist/personalities.js`: six emotions and character-specific contextual dialogue.
+- `dist/vendor/`: pinned Three.js r180 and its MIT license.
 
-Run `npm test` or `node --test tests/*.test.js` for the movement and collision checks.
+Run `npm test` or `node --test tests/*.test.js` for the geometry, movement, route, and dialogue checks. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
+
+The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 3D iteration is developed and tested locally.

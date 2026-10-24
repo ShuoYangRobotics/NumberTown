@@ -1,0 +1,50 @@
+/** Cell coordinates use unit cubes: x grows right, y grows up from the feet. */
+const WHITE = '#fffaf1';
+const RED_EDGE = '#d9384a';
+const RAINBOW = ['#ec3546', '#ff9d2e', '#f9dc31', '#35bb66', '#2ac6df', '#8654cb', '#bd63cb'];
+
+function grid(columns, rows, color, outline) {
+  return Array.from({ length: columns * rows }, (_, index) => {
+    const x = index % columns, y = Math.floor(index / columns);
+    return { x, y, color: typeof color === 'function' ? color(x, y) : color, ...(outline ? { outline } : {}) };
+  });
+}
+function ten() { return grid(2, 5, WHITE, RED_EDGE); }
+function character(number, name, color, dark, description, cells) {
+  return Object.freeze({
+    number, name, color, dark, description,
+    cells: Object.freeze(cells.map(cell => Object.freeze(cell))),
+    width: Math.max(...cells.map(cell => cell.x)) + 1,
+    height: Math.max(...cells.map(cell => cell.y)) + 1,
+  });
+}
+
+export const CHARACTERS = Object.freeze([
+  character(1, 'One', '#ef5352', '#ae292f', 'Small, brave, and ready to explore.', grid(1, 1, '#ef5352')),
+  character(2, 'Two', '#ffb349', '#a13786', 'Two blocks, twice the adventure.', grid(1, 2, '#ffb349')),
+  character(3, 'Three', '#f6d649', '#d5433a', 'A little crown and a big imagination.', grid(1, 3, '#f6d649')),
+  character(4, 'Four', '#61c981', '#278b52', 'A cheerful green friend.', grid(1, 4, '#61c981')),
+  character(5, 'Five', '#4dc5df', '#187fb1', 'A star with a friendly high five.', grid(1, 5, '#4dc5df')),
+  character(6, 'Six', '#9460d1', '#ce278c', 'Six spots and a playful purple smile.', grid(2, 3, '#9460d1')),
+  character(7, 'Seven', '#9d59d2', '#a43fa5', 'Seven rainbow blocks, full of wonder.', grid(1, 7, (_, y) => RAINBOW[y])),
+  character(8, 'Eight', '#f93e9b', '#713a2e', 'An eight-limbed, pink superhero.', grid(2, 4, '#f93e9b')),
+  character(9, 'Nine', '#a5adae', '#344b58', 'A thoughtful friend, three by three.', grid(3, 3, (_, y) => ['#c3c8c6', '#afb5b4', '#969e9f'][y])),
+  character(10, 'Ten', WHITE, '#c82c40', 'Ten bright blocks and two starry eyes.', ten()),
+  character(11, 'Eleven', '#ef5352', '#4d7427', 'A football-loving friend, ten and one.', [...ten(), { x: 1, y: 5, color: '#ef5352' }]),
+  character(12, 'Twelve', '#ffb349', '#9e2845', 'Three by four, with lots to discover.', grid(3, 4, (x, y) => x === 1 && (y === 1 || y === 2) ? '#ffb349' : WHITE, RED_EDGE)),
+  character(13, 'Thirteen', '#f6d649', '#803b7e', 'Ten and three, full of happy surprises.', [...ten(), { x: 1, y: 5, color: '#f6d649' }, { x: 2, y: 5, color: '#f6d649' }, { x: 2, y: 4, color: '#f6d649' }]),
+  character(14, 'Fourteen', '#61c981', '#278b52', 'Ten and four, ready for an adventure.', [...ten(), ...grid(2, 2, '#61c981').map(cell => ({ ...cell, y: cell.y + 5 }))]),
+  character(15, 'Fifteen', '#4dc5df', '#233f80', 'A staircase of friends, step by step.', Array.from({ length: 5 }, (_, x) => Array.from({ length: x + 1 }, (_, y) => ({ x, y, color: x === 4 ? '#4dc5df' : WHITE, ...(x === 4 ? {} : { outline: RED_EDGE }) }))).flat()),
+]);
+
+export function getCharacterDefinition(number) {
+  const value = Number(number);
+  const index = Number.isFinite(value) ? Math.max(1, Math.min(15, Math.round(value))) - 1 : 0;
+  return CHARACTERS[index];
+}
+
+/** Body dimensions in world units; feet, faces, limbs and numeral are additional art. */
+export function getCharacterMetrics(number) {
+  const { width, height } = getCharacterDefinition(number);
+  return { width, height, depth: 1, radius: Math.hypot(width / 2, .5) };
+}

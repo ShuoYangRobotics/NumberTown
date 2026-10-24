@@ -1,332 +1,285 @@
-import { CHARACTERS, drawCharacter, getCharacterMetrics } from './characters.js';
-import { WORLD, project, obstacles, townObjects, drawGround, LANDMARKS, FRIEND_STARTS } from './town.js';
-import { movementVector, moveWithCollisions, nearestOpenPosition } from './physics.js';
+import * as THREE from './vendor/three.module.js';
+import { CHARACTERS, getCharacterMetrics } from './character-data.js';
+import { createCharacter } from './characters3d.js';
+import { createTown } from './world3d.js';
+import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS } from './world-data.js';
+import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp } from './navigation.js';
 import { EMOTIONS, chooseRemark } from './personalities.js';
 
 const $ = selector => document.querySelector(selector);
-const canvas = $('#world'), ctx = canvas.getContext('2d');
-const helpDialog = $('#help-dialog');
-const keys = new Set(), touches = new Set();
+const canvas = $('#world');
+const help = $('#help-dialog');
+const debug = new URLSearchParams(location.search).has('debug');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const BLOCK_SIZE = 32;
-let width = innerWidth, height = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
-let zoom = 1, baseScale = 1, time = 0, lastTime = 0;
-let muted = true, audioContext, hopCooldown = 0, nextFootstep = 0, nextNeighborTalk = 7;
-let camera = { x: 0, y: 0 }, currentPlace = null;
-let lastArrival = -10, blockedTime = 0, nextOops = 0;
-const particles = [], friendButtons = [], previewCanvases = [];
-const players = CHARACTERS.map((character, index) => ({
-  ...character, ...nearestOpenPosition(FRIEND_STARTS[index], obstacles, WORLD, 14 + (character.cols - 1) * 9),
-  radius: 14 + (character.cols - 1) * 9,
-  facing: 1, moving: false, jump: 0, jumpVelocity: 0, phase: index * 1.8,
-  emotion: 'happy', emotionUntil: 8 + index * 2.3, nextTalk: 10 + index * 1.7, lastText: ''
-}));
-let active = players[0];
-const bubbles = [
-  { element: $('#speech'), player: active, until: 5 },
-  { element: $('#neighbor-speech'), player: null, until: 0 }
-];
+const errors = [];
+addEventListener('error', e => errors.push(e.message));
+addEventListener('unhandledrejection', e => errors.push(String(e.reason)));
 
-for (const friend of CHARACTERS) {
-  const button = document.createElement('button');
-  button.className = 'friend'; button.type = 'button';
-  button.setAttribute('aria-label', `Play as ${friend.name}, ${friend.number} ${friend.number === 1 ? 'block' : 'blocks'}`);
-  button.setAttribute('aria-pressed', String(friend.number === active.number));
-  button.title = `${friend.name} · press ${friend.number % 10}`;
-  const accent = friend.number === 10 ? '#dc5265' : friend.color;
-  button.style.setProperty('--friend-color', accent);
-  button.style.setProperty('--friend-dark', friend.number === 10 ? '#a32d43' : friend.dark);
-  button.style.setProperty('--friend-bg', `${accent}17`);
-  button.style.setProperty('--friend-shadow', `${accent}2b`);
-  const preview = document.createElement('canvas'); preview.width = 144; preview.height = 156;
-  const image = document.createElement('img'); image.alt = ''; image.setAttribute('aria-hidden', 'true');
-  const key = document.createElement('span'); key.className = 'friend-key'; key.textContent = friend.number === 10 ? '0' : friend.number;
-  const name = document.createElement('span'); name.className = 'friend-name'; name.textContent = friend.name;
-  const chosen = document.createElement('span'); chosen.className = 'chosen'; chosen.textContent = '✓'; chosen.setAttribute('aria-hidden', 'true');
-  button.append(key, image, name, chosen);
-  button.addEventListener('click', () => { selectFriend(friend.number); focusGame(); });
-  $('#friends').append(button);
-  friendButtons.push(button); previewCanvases.push({ canvas: preview, image });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false, powerPreference:'high-performance'});
+} catch (error) {
+  $('#loading').hidden = true; $('#error').hidden = false; $('#error-message').textContent = `Please enable hardware acceleration and try again. ${error.message}`;
+  throw error;
 }
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#dcebe4');
+scene.fog = new THREE.Fog('#dcebe4', 85, 180);
+scene.add(new THREE.HemisphereLight('#fff8de', '#8fbd9a', 2.0));
+const sunlight = new THREE.DirectionalLight('#fff1d4', 2.5);
+sunlight.position.set(24, 63, 40);
+sunlight.target.position.set(48, 0, 42);
+sunlight.castShadow = true;
+sunlight.shadow.mapSize.set(2048, 2048);
+Object.assign(sunlight.shadow.camera, {left:-65,right:65,top:65,bottom:-65,near:1,far:140});
+sunlight.shadow.bias = -.0003;
+sunlight.shadow.normalBias = .035;
+scene.add(sunlight, sunlight.target);
+const fillLight = new THREE.DirectionalLight('#d8eaf5', .8); fillLight.position.set(85,25,10); scene.add(fillLight);
+const town = createTown(); scene.add(town.root);
 
-function redrawPreviews() {
-  previewCanvases.forEach(({ canvas: preview, image }, index) => {
-    const pctx = preview.getContext('2d'), metrics = getCharacterMetrics(index + 1, 1);
-    const size = Math.min(23, 62 / metrics.visualHeight, 60 / metrics.visualWidth);
-    pctx.clearRect(0, 0, preview.width, preview.height);
-    pctx.save(); pctx.scale(2, 2);
-    drawCharacter(pctx, index + 1, 36, 73, { blockSize: size, time: 0, preview: true, selected: false, showNumber: false, emotion: 'happy' });
-    pctx.restore(); image.src = preview.toDataURL('image/png');
-  });
-}
+const players = CHARACTERS.map((definition,index) => {
+  const model = createCharacter(definition.number);
+  const metrics = getCharacterMetrics(definition.number);
+  const radius = metrics.radius ?? Math.hypot(metrics.width / 2, .5) + .12;
+  const start = nearestOpenPosition(FRIEND_STARTS[index], OBSTACLES, WORLD, radius);
+  const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', yaw:0};
+  model.root.position.set(player.x,0,player.z);
+  model.root.userData.playerNumber = definition.number;
+  scene.add(model.root);
+  return player;
+});
+let active = players[10];
+const camera = new THREE.PerspectiveCamera(42, 1, .1, 240);
+const orbit = {yaw:.26, elevation:.64, distance:46, targetDistance:46};
+const target = new THREE.Vector3(active.x, 2.1, active.z);
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const projection = new THREE.Vector3();
+const selectedRing = new THREE.Mesh(new THREE.RingGeometry(.88,1.02,48),new THREE.MeshBasicMaterial({color:'#fff8d0',transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}));
+selectedRing.rotation.x = -Math.PI/2; selectedRing.position.y = .16; scene.add(selectedRing);
+const selectionShadow = new THREE.Mesh(new THREE.CircleGeometry(1,40),new THREE.MeshBasicMaterial({color:'#54734e',transparent:true,opacity:.12,depthWrite:false}));
+selectionShadow.rotation.x=-Math.PI/2;selectionShadow.position.y=.13;scene.add(selectionShadow);
 
-function focusGame() { canvas.focus({ preventScroll: true }); }
-function placeAt(player) {
-  return LANDMARKS.filter(place => Math.hypot(player.x - place.x, player.y - place.y) < place.radius)
-    .sort((a, b) => Math.hypot(player.x - a.x, player.y - a.y) - Math.hypot(player.x - b.x, player.y - b.y))[0] || null;
-}
-function updateMoodControl() {
-  const emotion = EMOTIONS.find(item => item.id === active.emotion) || EMOTIONS[0];
-  $('#mood-icon').textContent = emotion.icon;
-  $('#mood-name').textContent = `${active.name} feels ${emotion.label.toLowerCase()}`;
-  $('#mood-toggle').setAttribute('aria-label', `${active.name} feels ${emotion.label.toLowerCase()}. Change emotion`);
-  document.querySelectorAll('[data-emotion]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.emotion === active.emotion)));
-}
-function setEmotion(player, emotion, duration = 14) {
-  if (!EMOTIONS.some(item => item.id === emotion)) return;
-  player.emotion = emotion; player.emotionUntil = time + duration;
-  if (player === active) updateMoodControl();
-}
-function speak(text, player) {
-  if (muted || !('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return;
-  try {
-    if (speechSynthesis.speaking) return;
-    const voice = new SpeechSynthesisUtterance(text);
-    voice.lang = 'en-US'; voice.rate = .96; voice.pitch = 1.05 + (player.number % 4) * .1; voice.volume = .7;
-    const available = speechSynthesis.getVoices();
-    const english = available.find(item => item.lang.startsWith('en') && item.localService) || available.find(item => item.lang.startsWith('en'));
-    if (english) voice.voice = english;
-    speechSynthesis.speak(voice);
-  } catch { /* Speech bubbles remain available when the browser has no voice. */ }
-}
-function say(player, text, subtext = '', options = {}) {
-  if (player === active) bubbles[1].until = 0;
-  const bubble = bubbles[player === active ? 0 : 1];
-  bubble.player = player; bubble.until = time + (options.duration || 4.8);
-  bubble.element.replaceChildren(document.createTextNode(text));
-  const subtitle = subtext || `${player.name} · ${player.emotion}`;
-  const sub = document.createElement('span'); sub.textContent = subtitle; bubble.element.append(sub);
-  bubble.element.classList.remove('hidden'); player.lastText = text;
-  player.nextTalk = time + 11 + Math.random() * 7;
-  if (player === active && options.voice !== false) speak(text, player);
-}
-function remark(player, context = {}) {
-  const nearby = players.find(friend => friend !== player && Math.hypot(friend.x - player.x, friend.y - player.y) < 120);
-  const line = chooseRemark(player.number, {
-    place: placeAt(player)?.id, moving: player.moving, emotion: player.emotion,
-    nearbyName: nearby?.name, lastText: player.lastText, ...context
-  });
-  setEmotion(player, line.emotion, 12 + Math.random() * 7);
-  say(player, line.text);
-}
-function selectFriend(number) {
-  const friend = players.find(player => player.number === number);
-  if (!friend) return;
-  active.moving = false; active = friend; blockedTime = 0;
-  bubbles[1].until = 0;
-  friendButtons.forEach((button, index) => button.setAttribute('aria-pressed', String(index + 1 === number)));
-  updateMoodControl(); currentPlace = placeAt(active);
-  remark(active);
-  playTone(300 + number * 55, .12, .04);
-}
+let time=0, lastTime=0, muted=true, nextRemark=9, nextNeighbor=15, currentPlace=null, audioContext;
+let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0;
+const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
+let drag=null, pinchDistance=0, suppressClick=false;
+const bubbles = [{element:$('#speech'),player:active,until:0},{element:$('#neighbor-speech'),player:players[0],until:0}];
 
-for (const emotion of EMOTIONS) {
-  const button = document.createElement('button'); button.type = 'button'; button.dataset.emotion = emotion.id;
-  const icon = document.createElement('span'); icon.textContent = emotion.icon;
-  button.append(icon, document.createTextNode(emotion.label));
-  button.setAttribute('aria-pressed', String(emotion.id === active.emotion));
-  button.addEventListener('click', () => {
-    setEmotion(active, emotion.id, 24); remark(active, { emotion: emotion.id });
-    active.emotionUntil = time + 24; closeMood(); focusGame();
-  });
+function miniSVG(definition) {
+  const w=definition.width, h=definition.height;
+  const cubes=definition.cells.map(cell=>`<rect x="${cell.x}" y="${h-1-cell.y}" width="1" height="1" rx=".035" fill="${cell.color}" stroke="${definition.number>=10?'#dd6d70':definition.dark}" stroke-width=".04"/>`).join('');
+  const cx = definition.number===15?3.95:w/2;
+  const eyeY = definition.number>=11?h-1.0:Math.min(1,h*.44);
+  const eyeSize = w>1?.24:.22;
+  const face=definition.number===1?`<circle cx="${cx}" cy="${eyeY-.12}" r=".29" fill="white"/><circle cx="${cx}" cy="${eyeY-.12}" r=".15" fill="#283b36"/>`:[-.31,.31].map(offset=>`<circle cx="${cx+offset}" cy="${eyeY}" r="${eyeSize}" fill="white"/><circle cx="${cx+offset+.035}" cy="${eyeY+.02}" r="${eyeSize*.52}" fill="#283b36"/>`).join('');
+  return `<svg viewBox="-.2 -.1 ${w+.4} ${h+.4}" aria-hidden="true">${cubes}${face}<path d="M ${cx-.22} ${eyeY+.4} q .22 .2 .44 0" fill="none" stroke="#854352" stroke-width=".07" stroke-linecap="round"/></svg>`;
+}
+for(const definition of CHARACTERS){
+  const button=document.createElement('button');button.type='button';button.className='friend-card';button.dataset.number=definition.number;
+  button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
+  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>10?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
+  button.addEventListener('click',()=>selectFriend(definition.number));$('#friends').append(button);
+}
+function focusGame(){canvas.focus({preventScroll:true});}
+function selectFriend(number, initial=false){
+  active=players.find(p=>p.number===number)||players[0];clearInput();
+  document.querySelectorAll('.friend-card').forEach(button=>button.setAttribute('aria-pressed',String(+button.dataset.number===active.number)));
+  $('#friend-name').textContent=active.name;$('#friend-description').textContent=active.description;
+  $('#block-count').textContent=`${active.number} ${active.number===1?'cube':'cubes'}`;
+  $('#shape-size').textContent=`${active.width} wide · ${active.height} tall`;
+  // A broad character needs a slightly wider view; all cubes retain the same world size.
+  orbit.targetDistance=Math.max(orbit.targetDistance,active.width>3?30:26);zoom(0);
+  updateMood();currentPlace=null;updateLocation();
+  bubbles[0].until=0;bubbles[1].until=0;
+  if(!initial){remark(active);focusGame();}
+  keepSelectedCardVisible();
+}
+function keepSelectedCardVisible(){
+  const card=$(`.friend-card[data-number="${active.number}"]`),strip=$('#friends');if(!card)return;
+  const item=card.getBoundingClientRect(),row=strip.getBoundingClientRect();
+  if(item.left<row.left||item.right>row.right)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
+}
+$('#previous-friend').addEventListener('click',()=>selectFriend(active.number===1?15:active.number-1));
+$('#next-friend').addEventListener('click',()=>selectFriend(active.number===15?1:active.number+1));
+
+for(const emotion of EMOTIONS){
+  const button=document.createElement('button');button.type='button';button.dataset.emotion=emotion.id;
+  button.setAttribute('aria-label',`Feel ${emotion.label.toLowerCase()}`);
+  button.innerHTML=`<span>${emotion.icon}</span>${emotion.label}`;
+  button.addEventListener('click',()=>{setEmotion(active,emotion.id,25);remark(active);closeMood();focusGame();});
   $('#emotion-options').append(button);
 }
-$('#mood-toggle').addEventListener('click', () => {
-  const open = $('#mood-menu').hidden;
-  $('#mood-menu').hidden = !open; $('#mood-toggle').setAttribute('aria-expanded', String(open));
-});
-function closeMood() { $('#mood-menu').hidden = true; $('#mood-toggle').setAttribute('aria-expanded', 'false'); }
-$('#game').addEventListener('pointerdown', event => { if (!event.target.closest('.mood-control')) closeMood(); });
+function updateMood(){
+  const mood=EMOTIONS.find(m=>m.id===active.emotion)||EMOTIONS[0];$('#mood-icon').textContent=mood.icon;$('#mood-name').textContent=`Feeling ${mood.label.toLowerCase()}`;
+  document.querySelectorAll('[data-emotion]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.emotion===mood.id)));
+}
+function setEmotion(player,emotion,seconds=16){player.emotion=emotion;player.moodUntil=time+seconds;player.model.setEmotion(emotion);if(player===active)updateMood();}
+function closeMood(){$('#mood-menu').hidden=true;$('#mood-toggle').setAttribute('aria-expanded','false');}
+$('#mood-toggle').addEventListener('click',()=>{const open=$('#mood-menu').hidden;$('#mood-menu').hidden=!open;$('#mood-toggle').setAttribute('aria-expanded',String(open));clearInput();});
+const placeIcons={'town-square':'⌘',library:'▤',garden:'❀',pond:'≈',school:'✎'};
+for(const id of ['town-square','library','garden','pond']){
+  const place=LANDMARKS.find(item=>item.id===id);if(!place)continue;
+  const button=document.createElement('button');button.type='button';button.dataset.place=id;button.innerHTML=`<span aria-hidden="true">${placeIcons[id]}</span>${id==='garden'?'Gardens':place.name}`;
+  button.addEventListener('click',()=>visit(place));$('#destinations').append(button);
+}
+function walkingObstacles(player){return [...OBSTACLES,...players.filter(p=>p!==player).map(p=>({x:p.x,z:p.z,radius:p.radius+.08}))];}
+function visit(place){
+  clearInput();closeMood();Object.assign(active,nearestOpenPosition(place.arrival,walkingObstacles(active),WORLD,active.radius));
+  active.jump=0;active.jumpVelocity=0;active.yaw=orbit.yaw;currentPlace=place;
+  // Fast travel should feel immediate, without flying through buildings.
+  target.set(active.x,Math.max(1.4,active.height*.45),active.z);
+  setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:place.id});updateLocation();focusGame();
+}
+function findPlace(player){return LANDMARKS.filter(place=>Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;}
+function updateLocation(){
+  const place=findPlace(active);
+  if(place?.id!==currentPlace?.id){currentPlace=place;}
+  $('#location-name').textContent=place?.name||'Neighborhood lanes';
+  document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id));
+}
+function remark(player,context={}){
+  const place=findPlace(player);
+  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:place?.id,lastText:player.lastText,...context});player.lastText=next.text;
+  const bubble=bubbles[player===active?0:1];bubble.player=player;bubble.until=time+5.7;
+  bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=player.name;bubble.element.append(name,document.createTextNode(next.text));
+  if(player===active){nextRemark=time+11+Math.random()*6;speak(next.text,player);}
+}
+function speak(text,player){if(muted||!('speechSynthesis'in window))return;speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;speechSynthesis.speak(utterance);}
+function tone(){if(muted)return;try{audioContext ||= new(window.AudioContext||window.webkitAudioContext)();audioContext.resume();const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();oscillator.frequency.setValueAtTime(490,audioContext.currentTime);oscillator.frequency.exponentialRampToValueAtTime(780,audioContext.currentTime+.13);gain.gain.setValueAtTime(.025,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+.2);oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start();oscillator.stop(audioContext.currentTime+.2);}catch{}}
+function jump(){if(help.open||active.jump>.01||time-lastJumpAt<.4)return;active.jumpVelocity=7.4;hopCount++;lastJumpAt=time;setEmotion(active,'excited',6);tone();}
+$('#sound').addEventListener('click',()=>{muted=!muted;$('#sound').setAttribute('aria-pressed',String(!muted));$('#sound').setAttribute('aria-label',muted?'Turn voices on':'Turn voices off');$('#sound-wave').setAttribute('d',muted?'m16 9 6 6m0-6-6 6':'M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14');if(muted&&'speechSynthesis'in window)speechSynthesis.cancel();else speak(`Hello, I'm ${active.name}! Welcome to NumberTown.`,active);focusGame();});
 
-for (const id of ['town-square', 'library', 'garden']) {
-  const place = LANDMARKS.find(item => item.id === id); if (!place) continue;
-  const button = document.createElement('button'); button.type = 'button'; button.dataset.place = id;
-  button.textContent = `${id === 'library' ? '▤' : id === 'town-square' ? '⌘' : '❀'}  ${id === 'garden' ? 'Gardens' : place.name}`;
-  button.title = `Visit ${place.name}`;
-  button.addEventListener('click', () => visit(place)); $('#destinations').append(button);
+const moves=['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'];
+function clearInput(){keys.clear();touches.clear();tapUntil.clear();players.forEach(p=>p.moving=false);document.querySelectorAll('[data-move]').forEach(button=>button.classList.remove('active'));}
+addEventListener('keydown',event=>{
+  if(event.metaKey||event.ctrlKey||event.altKey||help.open)return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))return;
+  const key=event.key.toLowerCase();
+  if(moves.includes(key)){event.preventDefault();keys.add(key);if(!event.repeat)tapUntil.set(key,time+.075);closeMood();}
+  if(key==='shift')keys.add('shift');
+  if(event.code==='Space'&&event.target.tagName!=='BUTTON'){event.preventDefault();if(!event.repeat)jump();}
+  if(!event.repeat&&/^Digit[0-9]$/.test(event.code)){
+    const digit=+event.code.slice(-1);const number=event.shiftKey&&digit>=1&&digit<=5?digit+10:digit===0?10:digit;selectFriend(number);
+  }
+  if(!event.repeat&&key==='e'){const index=EMOTIONS.findIndex(m=>m.id===active.emotion);setEmotion(active,EMOTIONS[(index+1)%EMOTIONS.length].id,25);remark(active);}
+  if(key==='q'||key==='r'){event.preventDefault();keys.add(key);if(!event.repeat)orbit.yaw+=(key==='q'?-.12:.12);}
+  if(!event.repeat&&key==='c')resetCamera();
+  if(!event.repeat&&(key==='+'||key==='='))zoom(-3);
+  if(!event.repeat&&(key==='-'||key==='_'))zoom(3);
+  if(!event.repeat&&key==='[')selectFriend(active.number===1?15:active.number-1);
+  if(!event.repeat&&key===']')selectFriend(active.number===15?1:active.number+1);
+  if(key==='escape')closeMood();
+});
+addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
+addEventListener('blur',()=>{clearInput();pointerPositions.clear();drag=null;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();lastTime=0;if('speechSynthesis'in window)speechSynthesis.cancel();}});
+for(const button of document.querySelectorAll('[data-move]')){
+  button.addEventListener('pointerdown',event=>{event.preventDefault();button.setPointerCapture(event.pointerId);touches.add(button.dataset.move);tapUntil.set(button.dataset.move,time+.12);button.classList.add('active');});
+  const release=()=>{touches.delete(button.dataset.move);button.classList.remove('active');};
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(name,release);
 }
-function visit(place) {
-  clearInput();
-  Object.assign(active, nearestOpenPosition(place.arrival, obstacles, WORLD, active.radius), { jump: 0, jumpVelocity: 0, moving: false });
-  currentPlace = place; lastArrival = time; bubbles[1].until = 0;
-  setEmotion(active, place.id === 'library' ? 'curious' : 'excited');
-  remark(active, { place: place.id }); focusGame();
-}
+$('#touch-jump').addEventListener('pointerdown',event=>{event.preventDefault();jump();});
+function isDown(...names){return names.some(name=>keys.has(name)||touches.has(name)||(tapUntil.get(name)||0)>time);}
 
-function resize() {
-  width = innerWidth; height = innerHeight; dpr = Math.min(devicePixelRatio || 1, 2);
-  canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
-  baseScale = Math.max(.5, Math.min(width / 1850, (height - 180) / 1000));
-  redrawPreviews();
+function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,100);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=100;}
+function resetCamera(){orbit.yaw=.26;orbit.elevation=.64;orbit.targetDistance=46;zoom(0);focusGame();}
+$('#zoom-in').addEventListener('click',()=>{zoom(-4);focusGame();});$('#zoom-out').addEventListener('click',()=>{zoom(4);focusGame();});
+$('#rotate-left').addEventListener('click',()=>{orbit.yaw-=Math.PI/4;focusGame();});$('#rotate-right').addEventListener('click',()=>{orbit.yaw+=Math.PI/4;focusGame();});$('#reset-camera').addEventListener('click',resetCamera);
+canvas.addEventListener('wheel',event=>{event.preventDefault();zoom(Math.sign(event.deltaY)*2);},{passive:false});
+canvas.addEventListener('contextmenu',event=>event.preventDefault());
+canvas.addEventListener('pointerdown',event=>{
+  focusGame();closeMood();canvas.setPointerCapture(event.pointerId);pointerPositions.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(pointerPositions.size===1){drag={id:event.pointerId,x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY};suppressClick=false;}
+  else{const p=[...pointerPositions.values()];pinchDistance=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);suppressClick=true;drag=null;}
+});
+canvas.addEventListener('pointermove',event=>{
+  if(!pointerPositions.has(event.pointerId))return;
+  pointerPositions.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(pointerPositions.size===2){const p=[...pointerPositions.values()];const distance=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);zoom((pinchDistance-distance)*.07);pinchDistance=distance;return;}
+  if(!drag||drag.id!==event.pointerId)return;
+  const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+  if(Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)>4)suppressClick=true;
+  orbit.yaw-=dx*.007;orbit.elevation=THREE.MathUtils.clamp(orbit.elevation+dy*.005,.26,1.25);drag.x=event.clientX;drag.y=event.clientY;
+});
+function pointerEnd(event){
+  if(event.type==='pointerup'&&!suppressClick&&drag){
+    const rect=canvas.getBoundingClientRect();ndc.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(ndc,camera);
+    const hits=raycaster.intersectObjects(players.map(p=>p.model.root),true);
+    if(hits.length){let object=hits[0].object;while(object&&!object.userData.playerNumber)object=object.parent;if(object)selectFriend(object.userData.playerNumber);}
+  }
+  pointerPositions.delete(event.pointerId);drag=null;
 }
-addEventListener('resize', resize); resize();
-const initialPosition = project(active.x, active.y);
-camera = { x: initialPosition.x, y: initialPosition.y - 100 };
-updateMoodControl();
+canvas.addEventListener('pointerup',pointerEnd);canvas.addEventListener('pointercancel',pointerEnd);canvas.addEventListener('lostpointercapture',pointerEnd);
+$('#help').addEventListener('click',()=>{clearInput();closeMood();help.showModal();});
+function closeHelp(){help.close();focusGame();}
+$('#close-help').addEventListener('click',closeHelp);$('#lets-play').addEventListener('click',closeHelp);help.addEventListener('close',()=>{clearInput();focusGame();});
+help.addEventListener('click',event=>{if(event.target===help){const r=help.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeHelp();}});
 
-function playTone(frequency, duration = .12, gain = .035, type = 'sine') {
-  if (muted) return;
-  try {
-    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
-    const oscillator = audioContext.createOscillator(), envelope = audioContext.createGain();
-    oscillator.type = type; oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(frequency * .75, audioContext.currentTime + duration);
-    envelope.gain.setValueAtTime(gain, audioContext.currentTime); envelope.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + duration);
-    oscillator.connect(envelope); envelope.connect(audioContext.destination); oscillator.start(); oscillator.stop(audioContext.currentTime + duration);
-  } catch { /* Audio is optional. */ }
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();requestAnimationFrame(keepSelectedCardVisible);}
+addEventListener('resize',resize);resize();selectFriend(11,true);
+function updateCamera(dt){
+  if(keys.has('q'))orbit.yaw-=dt*1.25;if(keys.has('r'))orbit.yaw+=dt*1.25;
+  const desired=new THREE.Vector3(active.x,Math.max(1.4,active.height*.45),active.z);
+  target.lerp(desired,1-Math.exp(-dt*5));
+  orbit.distance=THREE.MathUtils.lerp(orbit.distance,orbit.targetDistance,1-Math.exp(-dt*7));
+  // Keep the character in the open space above the card tray, also on portrait screens.
+  const distance=orbit.distance*(innerWidth<700?1.23:1);
+  const horizontal=Math.cos(orbit.elevation)*distance;
+  camera.position.set(target.x+Math.sin(orbit.yaw)*horizontal,target.y+Math.sin(orbit.elevation)*distance,target.z+Math.cos(orbit.yaw)*horizontal);
+  camera.lookAt(target);camera.updateMatrixWorld();
+  $('#compass').style.transform=`rotate(${-orbit.yaw}rad)`;
 }
-function jump() {
-  if (helpDialog.open || active.jump > 0 || time < hopCooldown) return;
-  active.jumpVelocity = 260; hopCooldown = time + .5; setEmotion(active, 'excited', 5);
-  playTone(480, .22, .04);
-  if (!reducedMotion) for (let i = 0; i < 5; i++) particles.push({ x: active.x, y: active.y, age: 0, life: .6, angle: i * Math.PI * 2 / 5, kind: 'spark' });
+function updateBubbles(){
+  for(const bubble of bubbles){
+    const visible=time<bubble.until;
+    if(visible){projection.set(bubble.player.x,bubble.player.model.root.position.y+bubble.player.height+1.7,bubble.player.z).project(camera);
+      const x=(projection.x*.5+.5)*innerWidth,y=(-projection.y*.5+.5)*innerHeight;
+      const inView=projection.z<1&&projection.z>-1&&x>90&&x<innerWidth-90&&y>120&&y<innerHeight-155;
+      const minTop=innerHeight<520?118:innerWidth<700?285:145;
+      const bubbleY=Math.max(y,minTop+bubble.element.offsetHeight);
+      bubble.element.classList.toggle('hidden',!inView||bubbleY>innerHeight-145);bubble.element.style.left=`${x}px`;bubble.element.style.top=`${bubbleY}px`;
+    }else bubble.element.classList.add('hidden');
+  }
 }
-const movementKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright'];
-addEventListener('keydown', event => {
-  if (event.metaKey || event.ctrlKey || event.altKey || helpDialog.open) return;
-  const key = event.key.toLowerCase();
-  if (key === 'escape') { closeMood(); return; }
-  if (movementKeys.includes(key) || event.code === 'Space') {
-    if (event.code === 'Space' && document.activeElement?.tagName === 'BUTTON') return;
-    event.preventDefault(); closeMood();
-    if (event.code === 'Space') { if (!event.repeat) jump(); } else keys.add(key);
-  }
-  if (/^[0-9]$/.test(key) && !event.repeat) { selectFriend(key === '0' ? 10 : Number(key)); focusGame(); }
-  if (key === 'e' && !event.repeat) {
-    const index = EMOTIONS.findIndex(item => item.id === active.emotion);
-    const emotion = EMOTIONS[(index + 1) % EMOTIONS.length].id;
-    setEmotion(active, emotion, 24); remark(active, { emotion }); active.emotionUntil = time + 24;
-  }
-});
-addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
-function clearInput() { keys.clear(); touches.clear(); players.forEach(player => player.moving = false); document.querySelectorAll('.dpad .active').forEach(button => button.classList.remove('active')); }
-addEventListener('blur', clearInput);
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { clearInput(); lastTime = 0; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
-});
-document.querySelectorAll('[data-move]').forEach(button => {
-  button.addEventListener('pointerdown', event => { event.preventDefault(); button.setPointerCapture(event.pointerId); touches.add(button.dataset.move); button.classList.add('active'); });
-  const release = () => { touches.delete(button.dataset.move); button.classList.remove('active'); };
-  button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('lostpointercapture', release);
-});
-$('#touch-jump').addEventListener('pointerdown', event => { event.preventDefault(); jump(); });
-$('#sound').addEventListener('click', event => {
-  muted = !muted; const button = event.currentTarget;
-  button.setAttribute('aria-pressed', String(!muted));
-  button.setAttribute('aria-label', muted ? 'Turn voices and sounds on' : 'Turn voices and sounds off');
-  button.title = muted ? 'Turn voices and sounds on' : 'Turn voices and sounds off';
-  if (muted && 'speechSynthesis' in window) speechSynthesis.cancel();
-  playTone(660, .18, .045); if (!muted) speak(`Hello! I'm ${active.name}. Let's explore!`, active); focusGame();
-});
-$('#help').addEventListener('click', () => { clearInput(); closeMood(); if ('speechSynthesis' in window) speechSynthesis.cancel(); helpDialog.showModal(); });
-function closeHelp() { helpDialog.close(); focusGame(); }
-$('#close-help').addEventListener('click', closeHelp); $('#lets-play').addEventListener('click', closeHelp);
-helpDialog.addEventListener('click', event => { if (event.target === helpDialog) { const rect = helpDialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeHelp(); } });
-helpDialog.addEventListener('close', () => { clearInput(); focusGame(); });
-function changeZoom(amount) {
-  zoom = Math.round(Math.max(.5, Math.min(1.7, zoom + amount)) * 10) / 10;
-  $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`;
-  $('#zoom-out').disabled = zoom <= .5; $('#zoom-in').disabled = zoom >= 1.7; focusGame();
-}
-$('#zoom-in').addEventListener('click', () => changeZoom(.1)); $('#zoom-out').addEventListener('click', () => changeZoom(-.1));
-$('#recenter').addEventListener('click', () => visit(LANDMARKS.find(item => item.id === 'town-square')));
-canvas.addEventListener('pointerdown', event => {
-  focusGame(); const scale = baseScale * zoom;
-  const sx = (event.clientX - width / 2) / scale + camera.x, sy = (event.clientY - height * .46) / scale + camera.y;
-  const clicked = [...players].sort((a, b) => b.x + b.y - a.x - a.y).find(player => {
-    const p = project(player.x, player.y), m = getCharacterMetrics(player.number, BLOCK_SIZE);
-    return Math.abs(sx - p.x) < m.visualWidth / 2 && sy < p.y + 12 - player.jump && sy > p.y - m.visualHeight - player.jump;
-  });
-  if (clicked && clicked !== active) selectFriend(clicked.number);
-});
-
-function update(dt) {
-  const horizontal = Number(keys.has('d') || keys.has('arrowright') || touches.has('right')) - Number(keys.has('a') || keys.has('arrowleft') || touches.has('left'));
-  const vertical = Number(keys.has('s') || keys.has('arrowdown') || touches.has('down')) - Number(keys.has('w') || keys.has('arrowup') || touches.has('up'));
-  const movement = movementVector(horizontal, vertical, 165), before = { x: active.x, y: active.y };
-  moveWithCollisions(active, movement.x * dt, movement.y * dt, obstacles, WORLD);
-  active.moving = Math.hypot(active.x - before.x, active.y - before.y) > .01;
-  if (horizontal) active.facing = horizontal;
-  if (active.moving && time > nextFootstep) {
-    nextFootstep = time + .27;
-    if (!reducedMotion) particles.push({ x: active.x, y: active.y, age: 0, life: .45, kind: 'dust', angle: Math.random() * Math.PI * 2 });
-    playTone(140 + active.number * 15, .045, .008, 'triangle');
-  }
-  blockedTime = (horizontal || vertical) && !active.moving ? blockedTime + dt : 0;
-  if (blockedTime > .6 && time > nextOops) {
-    nextOops = time + 10; setEmotion(active, 'surprised', 4); say(active, 'Oops! Let’s try going around.');
-  }
-  for (const player of players) {
-    if (player.jumpVelocity || player.jump) { player.jump += player.jumpVelocity * dt; player.jumpVelocity -= 700 * dt; if (player.jump <= 0) { player.jump = 0; player.jumpVelocity = 0; } }
-    if (time > player.emotionUntil) {
-      const moods = ['happy', 'happy', 'curious', 'excited', 'surprised', 'sleepy'];
-      setEmotion(player, moods[Math.floor(Math.random() * moods.length)], 12 + Math.random() * 13);
+function animate(timestamp){
+  requestAnimationFrame(animate);
+  const dt=lastTime?Math.min((timestamp-lastTime)/1000,.05):1/60;lastTime=timestamp;if(document.hidden)return;time+=dt;
+  if(!help.open){
+    const horizontal=Number(isDown('d','arrowright','right'))-Number(isDown('a','arrowleft','left'));
+    const vertical=Number(isDown('s','arrowdown','down'))-Number(isDown('w','arrowup','up'));
+    const velocity=movementVector(horizontal,vertical,orbit.yaw,keys.has('shift')?9:6);
+    const travelled=moveWithCollisions(active,velocity.x*dt,velocity.z*dt,walkingObstacles(active),WORLD);
+    active.moving=travelled>.001;
+    if(active.moving)active.yaw=angleLerp(active.yaw,Math.atan2(velocity.x,velocity.z),1-Math.exp(-dt*13));
+    for(const player of players){
+      if(player.jump>0||player.jumpVelocity>0){player.jumpVelocity-=18*dt;player.jump=Math.max(0,player.jump+player.jumpVelocity*dt);if(!player.jump)player.jumpVelocity=0;}
+      player.model.root.position.set(player.x,player.jump,player.z);player.model.root.rotation.y=player.yaw;
+      player.model.update(dt,{time:reducedMotion?0:time,moving:player.moving,emotion:player.emotion});
+      if(player.moodUntil<time){setEmotion(player,['happy','happy','curious','excited','surprised','sleepy'][Math.floor(Math.random()*6)],18+Math.random()*19);}
     }
-  }
-  for (let i = particles.length - 1; i >= 0; i--) { particles[i].age += dt; if (particles[i].age > particles[i].life) particles.splice(i, 1); }
-  const p = project(active.x, active.y), smoothing = reducedMotion ? 1 : 1 - Math.exp(-dt * 4.5);
-  camera.x += (p.x - camera.x) * smoothing; camera.y += (p.y - 100 - camera.y) * smoothing;
-  const place = placeAt(active);
-  $('#location-name').textContent = place?.name || (active.x > 1100 ? 'East neighborhood' : active.y > 1000 ? 'South lane' : 'Cottage lane');
-  if (place?.id !== currentPlace?.id) {
-    currentPlace = place;
-    if (place && time - lastArrival > 10 && time > bubbles[0].until + 1) { lastArrival = time; setEmotion(active, place.id === 'library' ? 'curious' : 'happy'); remark(active, { place: place.id }); }
-  }
-  document.querySelectorAll('[data-place]').forEach(button => button.classList.toggle('current', button.dataset.place === place?.id));
-  if (time > active.nextTalk && time > bubbles[0].until + 2) remark(active);
-  if (time > nextNeighborTalk && time > bubbles[0].until + 1) {
-    nextNeighborTalk = time + 9 + Math.random() * 5;
-    const candidates = players.filter(player => {
-      if (player === active) return false;
-      const point = project(player.x, player.y), scale = baseScale * zoom;
-      const x = width / 2 + (point.x - camera.x) * scale, y = height * .46 + (point.y - camera.y) * scale;
-      return x > 100 && x < width - 100 && y > 210 && y < height - 210;
-    });
-    if (candidates.length) remark(candidates[Math.floor(Math.random() * candidates.length)]);
+    if(time>nextRemark)remark(active);
+    if(time>nextNeighbor){const nearby=players.filter(p=>p!==active&&Math.hypot(p.x-active.x,p.z-active.z)<22);if(nearby.length)remark(nearby[Math.floor(Math.random()*nearby.length)]);nextNeighbor=time+16+Math.random()*9;}
+    town.update(reducedMotion?0:time);
+  }else active.moving=false;
+  updateCamera(dt);
+  const radius=Math.max(.9,active.width*.57);selectedRing.scale.set(radius,radius,1);selectedRing.position.x=active.x;selectedRing.position.z=active.z;
+  selectionShadow.scale.set(radius*.9,.7,1);selectionShadow.position.x=active.x;selectionShadow.position.z=active.z;
+  updateBubbles();renderer.render(scene,camera);
+  frameCount++;
+  if(timestamp-statsAt>500){
+    fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();
+    canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
-function drawParticles() {
-  for (const particle of particles) {
-    const p = project(particle.x, particle.y), progress = particle.age / particle.life;
-    ctx.save(); ctx.globalAlpha = (1 - progress) * .55;
-    if (particle.kind === 'spark') {
-      const x = p.x + Math.cos(particle.angle) * progress * 35, y = p.y + Math.sin(particle.angle) * progress * 15 - 6;
-      ctx.strokeStyle = '#fffdf2'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3); ctx.stroke();
-    } else { ctx.fillStyle = '#faf4d5'; ctx.beginPath(); ctx.ellipse(p.x + Math.cos(particle.angle) * progress * 18, p.y - 4 - progress * 6, 3 + progress * 5, 2 + progress * 2, 0, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
-  }
-}
-function draw() {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height);
-  const scale = baseScale * zoom;
-  ctx.save(); ctx.translate(width / 2, height * .46); ctx.scale(scale, scale); ctx.translate(-camera.x, -camera.y);
-  drawGround(ctx, reducedMotion ? 0 : time); drawParticles();
-  const renderables = townObjects.map(object => ({ depth: object.x + object.y, draw: () => object.draw(ctx, reducedMotion ? 0 : time) }));
-  for (const player of players) renderables.push({ depth: player.x + player.y, draw: () => {
-    const p = project(player.x, player.y);
-    drawCharacter(ctx, player.number, p.x, p.y, { blockSize: BLOCK_SIZE, time: reducedMotion ? 0 : time + player.phase, moving: player.moving, facing: player.facing, jump: player.jump, selected: player === active, showNumber: true, emotion: player.emotion });
-  }});
-  renderables.sort((a, b) => a.depth - b.depth); for (const item of renderables) item.draw(); ctx.restore();
-  for (const bubble of bubbles) {
-    const player = bubble.player;
-    let visible = !!player && time < bubble.until && !helpDialog.open;
-    if (player && visible) {
-      const p = project(player.x, player.y), m = getCharacterMetrics(player.number, BLOCK_SIZE);
-      const x = width / 2 + (p.x - camera.x) * scale;
-      const y = height * .46 + (p.y - camera.y - m.visualHeight - 16 - player.jump) * scale;
-      visible = x > -30 && x < width + 30 && y > 85 && y < height - 180;
-      const padding = Math.min(145, width / 2);
-      bubble.element.style.left = `${Math.max(padding, Math.min(width - padding, x))}px`;
-      bubble.element.style.top = `${Math.max(175, y)}px`;
-    }
-    bubble.element.classList.toggle('hidden', !visible);
-  }
-}
-function frame(timestamp) {
-  const dt = lastTime ? Math.min((timestamp - lastTime) / 1000, .04) : 0; lastTime = timestamp;
-  if (!helpDialog.open && !document.hidden) { time += dt; update(dt); }
-  draw(); requestAnimationFrame(frame);
-}
-$('#loading').hidden = true;
-requestAnimationFrame(redrawPreviews); document.fonts?.ready.then(redrawPreviews); requestAnimationFrame(frame);
+updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;
+requestAnimationFrame(animate);
+setTimeout(()=>{remark(active,{place:undefined});focusGame();},900);
