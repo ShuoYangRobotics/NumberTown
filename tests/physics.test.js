@@ -107,3 +107,34 @@ test('a fully blocked town reports the absence of a valid spawn', () => {
     /open walking space/,
   );
 });
+
+test('wide characters cannot squeeze through a gap that fits a one-block friend', () => {
+  const obstacles = [
+    { x: 400, y: 0, w: 200, d: 480 },
+    { x: 400, y: 520, w: 200, d: 480 },
+  ];
+  const narrow = { x: 100, y: 500, radius: 14 };
+  const wide = { x: 100, y: 500, radius: 32 };
+  moveWithCollisions(narrow, 800, 0, obstacles, world);
+  moveWithCollisions(wide, 800, 0, obstacles, world);
+  close(narrow.x, 900);
+  assert.ok(wide.x <= 368 && wide.x > 360, 'Nine should stop before the narrow passage');
+  assert.equal(collides(wide.x, wide.y, obstacles, world, wide.radius), false);
+  assert.equal(collides(500, 500, obstacles, world, 14), false);
+  assert.equal(collides(500, 500, obstacles, world, 32), true);
+});
+
+test('an explicit footprint overrides player width and spawn recovery respects wide bodies', () => {
+  const obstacles = [{ x: 500, y: 0, w: 1, d: 1000 }];
+  const player = { x: 100, y: 450, radius: 14 };
+  moveWithCollisions(player, 800, 0, obstacles, world, 32);
+  assert.ok(player.x <= 468 && player.x > 460);
+  assert.equal(collides(player.x, player.y, obstacles, world, 32), false);
+
+  const tooClose = { x: 480, y: 450 };
+  assert.equal(collides(tooClose.x, tooClose.y, obstacles, world, 14), false);
+  assert.equal(collides(tooClose.x, tooClose.y, obstacles, world, 32), true);
+  const recovered = nearestOpenPosition(tooClose, obstacles, world, 32);
+  assert.notDeepEqual(recovered, tooClose, 'a wide character needs a different spawn here');
+  assert.equal(collides(recovered.x, recovered.y, obstacles, world, 32), false);
+});
