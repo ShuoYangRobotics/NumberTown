@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from '../dist/vendor/three.module.js';
 import { FIELD, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES, createBallState, resetBall, stepBall, kickBall, updateBallContact, createFootball } from '../dist/football.js';
 import { collides } from '../dist/navigation.js';
+import { WORLD, FIELD_OFFSET, riverX, riverWidth } from '../dist/geography.js';
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 const player = (x, z, yaw = 0, radius = .7) => ({ x, z, yaw, radius, moving: true });
@@ -93,10 +95,9 @@ test('long varied updates stay finite, bounded, and score at most once before re
 });
 
 test('pitch and broad side entrances remain clear of the scenery obstacles', () => {
-  const world = { width: 300, depth: 250, margin: 2 };
   // A full character can enter from either side and stand at the quick-travel point.
-  for (let x = 202; x <= 290; x++) assert.equal(collides(x, FIELD.z, FOOTBALL_OBSTACLES, world, 2.7), false, `entrance blocked at ${x}`);
-  assert.equal(collides(FOOTBALL_LANDMARK.arrival.x, FOOTBALL_LANDMARK.arrival.z, FOOTBALL_OBSTACLES, world, 2.7), false);
+  for (let x = FIELD.minX - 14; x <= FIELD.maxX + 16; x++) assert.equal(collides(x, FIELD.z, FOOTBALL_OBSTACLES, WORLD, 2.7), false, `entrance blocked at ${x}`);
+  assert.equal(collides(FOOTBALL_LANDMARK.arrival.x, FOOTBALL_LANDMARK.arrival.z, FOOTBALL_OBSTACLES, WORLD, 2.7), false);
   for (const obstacle of FOOTBALL_OBSTACLES) {
     const minX = obstacle.radius ? obstacle.x - obstacle.radius : obstacle.x;
     const maxX = obstacle.radius ? obstacle.x + obstacle.radius : obstacle.x + obstacle.w;
@@ -105,6 +106,23 @@ test('pitch and broad side entrances remain clear of the scenery obstacles', () 
     assert.ok(maxX <= FIELD.minX || minX >= FIELD.maxX || maxZ <= FIELD.minZ || minZ >= FIELD.maxZ,
       `${obstacle.id} intrudes into the playable field`);
   }
+});
+
+test('field scenery, ball physics, and rendered ball share east-bank world coordinates', () => {
+  assert.equal(FIELD.x, 245 + FIELD_OFFSET.x); assert.equal(FIELD.z, 149 + FIELD_OFFSET.z);
+  assert.equal(FOOTBALL_LANDMARK.x, FIELD.x); assert.equal(FOOTBALL_LANDMARK.z, FIELD.z);
+  for (let z = FIELD.minZ - 12; z <= FIELD.maxZ + 12; z++) {
+    assert.ok(FIELD.minX - 7 > riverX(z) + riverWidth(z) / 2 + 2.7, 'football scenery intrudes into the river');
+  }
+  const football = createFootball(), state = createBallState();
+  football.update(state); football.root.updateMatrixWorld(true);
+  const rendered = football.ballMesh.getWorldPosition(new THREE.Vector3());
+  near(rendered.x, FIELD.x); near(rendered.z, FIELD.z);
+  const nets = football.root.getObjectByName('Two goal nets'); nets.geometry.computeBoundingBox();
+  const netBounds = nets.geometry.boundingBox.clone().applyMatrix4(nets.matrixWorld);
+  near(netBounds.min.x, FIELD.x - FIELD.goalWidth / 2); near(netBounds.max.x, FIELD.x + FIELD.goalWidth / 2);
+  near(netBounds.min.z, FIELD.minZ - FIELD.goalDepth); near(netBounds.max.z, FIELD.maxZ + FIELD.goalDepth);
+  assert.ok(FOOTBALL_OBSTACLES.every(o => o.x >= FIELD.minX - 7 && o.x < WORLD.width && o.z > 0 && o.z < WORLD.depth));
 });
 
 test('the pitch is real 3D geometry with two nets and a rolling black-and-white ball', () => {

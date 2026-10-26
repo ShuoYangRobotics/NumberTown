@@ -196,6 +196,30 @@ const PLACES = {
     sleepy: ['The gentle river sounds make me feel cozy.', 'I’ll rest by the river and listen to its song.'],
     sad: ['A quiet moment beside the river might help.', 'I can take a gentle breath and watch the river flow.'],
   },
+  beach: {
+    happy: ['Hello, sea! Let’s count the waves from the beach.', 'Warm sand and sea breezes make a lovely adventure.'],
+    excited: ['Hooray! A whole beach of sandy possibilities!', 'Wave hello to the waves! We made it to the sea!'],
+    curious: ['How many waves can we count along the shore?', 'I wonder where the river meets the sea.'],
+    surprised: ['Wow! The sea stretches so far beyond the beach!', 'Oh! That wave made a sparkly line along the shore!'],
+    sleepy: ['The gentle waves sound like a sleepy sea song.', 'A quiet rest on the beach sounds lovely.'],
+    sad: ['A calm moment by the sea might help me feel better.', 'I can take a gentle breath and listen to the waves.'],
+  },
+  mountains: {
+    happy: ['Hello, mountains! Your peaks make a lovely pattern.', 'A mountain view makes our adventure feel grand.'],
+    excited: ['Wow! So many mighty mountain peaks to count!', 'Hooray for mountains and big, bright adventures!'],
+    curious: ['How many mountain peaks can we spot together?', 'Why do faraway mountains look so small?'],
+    surprised: ['Oh! That mountain is taller than all of us together!', 'Wow! Another mountain peak peeking into the sky!'],
+    sleepy: ['A quiet mountain view is wonderfully peaceful.', 'The clouds above those mountains look sleepy.'],
+    sad: ['A calm mountain view gives me space to breathe.', 'A friend beside me makes the mountains feel welcoming.'],
+  },
+  lookout: {
+    happy: ['From this lookout, we can see the town and the sea!', 'What a lovely view of the sea beyond our town.'],
+    excited: ['We made it! Look at that sparkling sea view!', 'Hooray! The lookout shows a whole world to explore!'],
+    curious: ['Can you spot where the river reaches the sea?', 'How many rooftops can we count from this lookout?'],
+    surprised: ['Wow! The sea looks enormous from up here!', 'Oh! Our town looks like a tiny toy from this lookout!'],
+    sleepy: ['A quiet sea view is a lovely reward for our climb.', 'I’ll rest at the lookout and enjoy the gentle sea breeze.'],
+    sad: ['A kind friend and this peaceful sea view might help.', 'It is okay to rest and take in the lookout view.'],
+  },
 };
 
 const MOOD_LINES = {

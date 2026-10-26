@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
-import { WORLD, OBSTACLES, LANDMARKS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, FRIEND_STARTS, ROAD_SEGMENTS } from '../dist/world-data.js';
-import { PARK_LANDMARK, PARK_OBSTACLES } from '../dist/park.js';
+import { WORLD, OBSTACLES, LANDMARKS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, FRIEND_STARTS, ROAD_SEGMENTS, BUILDINGS, SQUARE, POND } from '../dist/world-data.js';
+import { PARK, PARK_LANDMARK, PARK_OBSTACLES } from '../dist/park.js';
 import { FIELD, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from '../dist/football.js';
 import {
-  HILL_TRAIL, DECK, RIVER, HILL_LANDMARK, LOOKOUT_LANDMARK, RIVER_LANDMARK,
-  TERRAIN_OBSTACLES, groundHeight, riverX,
+  HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK,
+  TERRAIN_OBSTACLES, groundHeight, riverX, riverWidth,
 } from '../dist/terrain-data.js';
 
 const radius = 2.7;
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
-const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, RIVER_LANDMARK];
+const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK];
 
 // Independent footprint checks exercise the assembled map, not just the
 // navigation implementation or each attraction in isolation.
@@ -50,8 +50,9 @@ function renderedTrailSamples() {
 }
 
 test('the combined world connects every landmark, building approach, and activity entry to the town square', () => {
-  const reached = new Set(['48,47']), occupancy = new Map(), heights = new Map();
-  const queue = [[48, 47]];
+  const start=LANDMARKS.find(p=>p.id==='town-square').arrival;
+  const reached = new Set([`${Math.round(start.x)},${Math.round(start.z)}`]), occupancy = new Map(), heights = new Map();
+  const queue = [[Math.round(start.x),Math.round(start.z)]];
   const height = (x, z, key) => {
     if (!heights.has(key)) heights.set(key, groundHeight(x, z));
     return heights.get(key);
@@ -74,7 +75,7 @@ test('the combined world connects every landmark, building approach, and activit
     ...EXPANSION_CONNECTIONS.map(entry => ({ name: `${entry.id} entrance`, ...entry })),
     ...FRIEND_STARTS.map((point, index) => ({ name: `Friend ${index + 1}`, ...point })),
   ];
-  const failures = destinations.filter(point => !reached.has(`${point.x},${point.z}`))
+  const failures = destinations.filter(point => obstruction(point.x,point.z)||![-1,0,1].some(dx=>[-1,0,1].some(dz=>reached.has(`${Math.round(point.x)+dx},${Math.round(point.z)+dz}`))))
     .map(point => `${point.name} (${point.x},${point.z}): ${obstruction(point.x, point.z) ?? 'no continuous walking route'}`);
   assert.deepEqual(failures, [], 'Some destinations are disconnected after combining the scenery');
 });
@@ -109,30 +110,39 @@ test('hill-trail elevation climbs continuously and meets the deck without a gap'
   assert.equal(previous, DECK.height, 'The path must arrive on the actual deck surface');
 });
 
-test('park, football, and bridge approaches stay clear when all attraction footprints are combined', () => {
-  const bridgeX = riverX(RIVER.bridgeZ);
+test('park, pitch, and every bridge remain connected and walkable in the complete town', () => {
   const routes = [
-    [[220, 80], [PARK_LANDMARK.arrival.x, PARK_LANDMARK.arrival.z]],
-    [[210, 149], [FIELD.x, FIELD.z], [FOOTBALL_LANDMARK.arrival.x, FOOTBALL_LANDMARK.arrival.z]],
-    [[146, 190], [bridgeX + RIVER.bridgeSpan / 2 + 4, 190]],
+    [[PARK.entrance.x,PARK.entrance.z],[PARK_LANDMARK.arrival.x,PARK_LANDMARK.arrival.z]],
+    [[FIELD.minX-6,FIELD.z],[FIELD.x,FIELD.z],[FOOTBALL_LANDMARK.arrival.x,FOOTBALL_LANDMARK.arrival.z]],
+    ...BRIDGES.map(b=>[[b.x-b.span/2-6,b.z],[b.x+b.span/2+6,b.z]]),
   ];
-  for (const route of routes) for (const [x, z] of segmentSamples(route)) {
-    assert.equal(obstruction(x, z), null, `Activity approach blocked near ${x},${z}`);
-    assert.ok(Number.isFinite(groundHeight(x, z)), `Missing approach surface near ${x},${z}`);
+  for(const route of routes)for(const [x,z] of segmentSamples(route)){
+    assert.equal(obstruction(x,z),null,`Activity approach blocked near ${x},${z}`);
+    assert.ok(Number.isFinite(groundHeight(x,z)));
   }
 });
 
-test('the actual park approach streets turn before the arch and clear both gate posts', () => {
-  const roads = ['rainbow-street-77', 'park-approach-turn', 'park-entry'].map(id => {
-    const road = ROAD_SEGMENTS.find(segment => segment.id === id);
-    assert.ok(road, `Missing park connector ${id}`);
-    return road;
-  });
-  for (const [index, road] of roads.entries()) {
-    if (index) assert.deepEqual([road.x1, road.z1], [roads[index - 1].x2, roads[index - 1].z2], 'Park streets must meet');
-    for (const [x, z] of segmentSamples([[road.x1, road.z1], [road.x2, road.z2]])) {
-      assert.equal(obstruction(x, z), null, `${road.id} runs too close to scenery near ${x},${z}`);
-    }
+test('the river separates fifty west-bank homes from twenty east-bank homes and the attractions',()=>{
+  const west=BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west');
+  const east=BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east');
+  assert.equal(west.length,50);assert.equal(east.length,20);
+  for(const b of west)for(const z of [b.z-b.d/2,b.z,b.z+b.d/2])assert.ok(b.x+b.w/2+2<riverX(z)-riverWidth(z)/2,`${b.id} overlaps west bank`);
+  for(const b of east)for(const z of [b.z-b.d/2,b.z,b.z+b.d/2])assert.ok(b.x-b.w/2-2>riverX(z)+riverWidth(z)/2,`${b.id} overlaps east bank`);
+  assert.ok(PARK.bounds.minX>riverX(PARK.z)+riverWidth(PARK.z)/2);
+  assert.ok(FIELD.minX>riverX(FIELD.z)+riverWidth(FIELD.z)/2);
+  assert.ok(SQUARE.w*SQUARE.d>=64*56);
+  assert.ok(POND.rx>=17&&POND.rz>=12);
+});
+
+test('the river cannot be bypassed on foot except through the three bridge corridors',()=>{
+  assert.equal(BRIDGES.length,3);
+  assert.ok(RIVER.startZ<MOUNTAINS.minZ&&RIVER.endZ>COAST.seaStart,'The water must run out of the mountains and into the sea');
+  for(let z=MOUNTAINS.maxZ+3;z<COAST.seaStart;z+=.5){
+    if(BRIDGES.some(b=>Math.abs(z-b.z)<b.width/2+radius))continue;
+    assert.ok(obstruction(riverX(z),z),`Unprotected river crossing at z${z}`);
   }
-  assert.deepEqual([roads.at(-1).x2, roads.at(-1).z2], [220, 80], 'Approach should meet the middle of the park gate');
+  for(let x=5;x<WORLD.width-5;x+=2){
+    assert.ok(obstruction(x,MOUNTAINS.maxZ-1),`Mountain can be entered at x${x}`);
+    assert.ok(obstruction(x,COAST.seaStart+2),`Sea can be entered at x${x}`);
+  }
 });

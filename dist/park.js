@@ -1,13 +1,24 @@
 import * as THREE from './vendor/three.module.js';
+import { PARK_OFFSET } from './geography.js';
 
-export const PARK = Object.freeze({
+// Construction coordinates stay local; all exported positions are world-space.
+const LOCAL_PARK = Object.freeze({
   x: 249, z: 46, radius: 14, hubHeight: 19, cabinCount: 18,
   speed: .085, entrance: Object.freeze({ x: 220, z: 80 }),
   bounds: Object.freeze({ minX: 208, maxX: 288, minZ: 8, maxZ: 96 }),
 });
+export const PARK = Object.freeze({
+  ...LOCAL_PARK, x: LOCAL_PARK.x + PARK_OFFSET.x, z: LOCAL_PARK.z + PARK_OFFSET.z,
+  entrance: Object.freeze({ x: LOCAL_PARK.entrance.x + PARK_OFFSET.x, z: LOCAL_PARK.entrance.z + PARK_OFFSET.z }),
+  bounds: Object.freeze({
+    minX: LOCAL_PARK.bounds.minX + PARK_OFFSET.x, maxX: LOCAL_PARK.bounds.maxX + PARK_OFFSET.x,
+    minZ: LOCAL_PARK.bounds.minZ + PARK_OFFSET.z, maxZ: LOCAL_PARK.bounds.maxZ + PARK_OFFSET.z,
+  }),
+});
 export const PARK_LANDMARK = Object.freeze({
   id: 'park', name: 'Wheel park', description: 'Count eighteen colorful cabins on the gently turning wheel.',
-  x: 246, z: 65, radius: 35, arrival: Object.freeze({ x: 238, z: 80 }),
+  x: 246 + PARK_OFFSET.x, z: 65 + PARK_OFFSET.z, radius: 35,
+  arrival: Object.freeze({ x: 238 + PARK_OFFSET.x, z: 80 + PARK_OFFSET.z }),
 });
 const TREES = [[214, 17, 7], [226, 12, 6], [244, 11, 7.5], [266, 13, 6.5], [281, 20, 7], [283, 38, 6.5], [281, 58, 6.5], [284, 91, 6], [213, 57, 6], [214, 92, 6]];
 const BENCHES = [{ x: 232, z: 70, rotation: -.25 }, { x: 266, z: 70, rotation: .25 }, { x: 259, z: 88, rotation: Math.PI }];
@@ -21,7 +32,7 @@ export const PARK_OBSTACLES = Object.freeze([
   ...BENCHES.map(({ x, z }, i) => ({ id: `park-bench-${i}`, kind: 'bench', x: x - 2.3, z: z - 1.05, w: 4.6, d: 2.1 })),
   { id: 'park-picnic', kind: 'table', x: 275.5, z: 80.1, radius: 3.45 },
   ...TREES.map(([x, z], i) => ({ id: `park-tree-${i}`, kind: 'tree', x, z, radius: .7 })),
-].map(obstacle => Object.freeze(obstacle)));
+].map(obstacle => Object.freeze({ ...obstacle, x: obstacle.x + PARK_OFFSET.x, z: obstacle.z + PARK_OFFSET.z })));
 
 const PALETTE = ['#e77b83', '#f2a35f', '#e5c55e', '#9dc375', '#65b99f', '#70bed0', '#809fce', '#a094cf', '#c58cbd', '#e999b6', '#ee997b', '#d5bd70', '#94b895', '#78b4ac', '#72acc7', '#94a6d1', '#b391c9', '#d892aa'];
 const CREAM = '#fff5df', STEEL = '#6f9eaa', DARK = '#4f7987';
@@ -122,7 +133,7 @@ function cabin(number, color) {
   return group;
 }
 function ferrisWheel(root) {
-  const center = new THREE.Group(); center.name = 'Ferris wheel structure'; center.position.set(PARK.x, 0, PARK.z); root.add(center);
+  const center = new THREE.Group(); center.name = 'Ferris wheel structure'; center.position.set(LOCAL_PARK.x, 0, LOCAL_PARK.z); root.add(center);
   box(center, 0, .35, 0, 22, .7, 14, '#d1d8c7');
   box(center, 0, .79, 0, 20.8, .18, 13, '#f2e5c9');
   box(center, 0, 1.05, 11, 18, 2.1, 6, '#d3ddd6');
@@ -180,7 +191,7 @@ function signTexture(text) {
   return texture;
 }
 function entrance(root) {
-  const arch = new THREE.Group(); arch.name = 'Wheel park entrance'; arch.position.set(PARK.entrance.x, 0, PARK.entrance.z); arch.rotation.y = -Math.PI / 2; root.add(arch);
+  const arch = new THREE.Group(); arch.name = 'Wheel park entrance'; arch.position.set(LOCAL_PARK.entrance.x, 0, LOCAL_PARK.entrance.z); arch.rotation.y = -Math.PI / 2; root.add(arch);
   for (const side of [-1, 1]) {
     beam(arch, [side * 6.3, .1, 0], [side * 6.3, 10.4, 0], .34, STEEL);
     ball(arch, side * 6.3, 10.45, 0, .5, .5, .5, '#e5bf74');
@@ -267,6 +278,7 @@ function landscaping(root) {
 /** A self-contained park. Time is absolute elapsed seconds, in either direction. */
 export function createPark() {
   const root = new THREE.Group(); root.name = 'Wheel park';
+  root.position.set(PARK_OFFSET.x, 0, PARK_OFFSET.z);
   landscaping(root); entrance(root);
   const { rotor, cabins } = ferrisWheel(root);
   function update(time = 0) {

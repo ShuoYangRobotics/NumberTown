@@ -7,19 +7,21 @@ import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp } fr
 import { EMOTIONS, chooseRemark } from './personalities.js';
 
 import { createLandscape } from './terrain.js';
-import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, RIVER_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
+import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
 import { createPark, PARK_LANDMARK, PARK_OBSTACLES } from './park.js';
 import { createFootball, createBallState, stepBall, kickBall, updateBallContact, resetBall, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from './football.js';
+import { BRIDGES, RIVER, COAST, riverX } from './geography.js';
 import { mountTownMap } from './town-map.js';
 
 const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TERRAIN_OBSTACLES];
-const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,RIVER_LANDMARK];
-const townCounts={houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
+const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,MOUNTAIN_LANDMARK];
+const BRIDGE_IDS=new Set(BRIDGE_LANDMARKS.map(p=>p.id));
+const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
 const canvas = $('#world');
 const help = $('#help-dialog'), mapDialog=$('#map-dialog');
 const modalOpen=()=>help.open||mapDialog.open;
-const debug = new URLSearchParams(location.search).has('debug');
+const debug = new URLSearchParams(location.search).get('debug')==='1';
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const errors = [];
 addEventListener('error', e => errors.push(e.message));
@@ -39,8 +41,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#dcebe4');
-scene.fog = new THREE.Fog('#dcebe4', 150, 430);
+scene.background = new THREE.Color('#dcecf0');
+scene.fog = new THREE.Fog('#dcecf0', 260, 800);
 scene.add(new THREE.HemisphereLight('#fff8de', '#8fbd9a', 2.0));
 const sunlight = new THREE.DirectionalLight('#fff1d4', 2.5);
 sunlight.position.set(24, 63, 40);
@@ -68,8 +70,8 @@ const players = CHARACTERS.map((definition,index) => {
   return player;
 });
 let active = players[10];
-const camera = new THREE.PerspectiveCamera(42, 1, .3, 650);
-const orbit = {yaw:.26, elevation:.64, distance:46, targetDistance:46};
+const camera = new THREE.PerspectiveCamera(42, 1, .3, 1300);
+const orbit = {yaw:.26, elevation:.64, distance:76, targetDistance:76};
 const target = new THREE.Vector3(active.x, 2.1, active.z);
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
@@ -136,37 +138,40 @@ function updateMood(){
 function setEmotion(player,emotion,seconds=16){player.emotion=emotion;player.moodUntil=time+seconds;player.model.setEmotion(emotion);if(player===active)updateMood();}
 function closeMood(){$('#mood-menu').hidden=true;$('#mood-toggle').setAttribute('aria-expanded','false');}
 $('#mood-toggle').addEventListener('click',()=>{const open=$('#mood-menu').hidden;$('#mood-menu').hidden=!open;$('#mood-toggle').setAttribute('aria-expanded',String(open));clearInput();});
-const placeIcons={'town-square':'⌘',library:'▤',market:'▥',park:'☼',football:'⚽',hill:'△',river:'≈'};
-for(const id of ['town-square','market','library','park','football','hill','river']){
+const placeIcons={'town-square':'⌘',pond:'≈',park:'☼',football:'⚽',hill:'△',river:'≋',beach:'☀',mountains:'♧'};
+for(const id of ['town-square','pond','park','football','hill','river','beach','mountains']){
   const place=ALL_PLACES.find(item=>item.id===id);if(!place)continue;
-  const button=document.createElement('button');button.type='button';button.dataset.place=id;button.innerHTML=`<span aria-hidden="true">${placeIcons[id]}</span>${id==='garden'?'Gardens':place.name}`;
+  const button=document.createElement('button');button.type='button';button.dataset.place=id;button.innerHTML=`<span aria-hidden="true">${placeIcons[id]}</span>${id==='river'?'River':id==='mountains'?'Mountains':place.name}`;
   button.addEventListener('click',()=>visit(place));$('#destinations').append(button);
 }
 function walkingObstacles(player){return [...ALL_OBSTACLES,...players.filter(p=>p!==player).map(p=>({x:p.x,z:p.z,radius:p.radius+.08}))];}
 function visit(place){
   clearInput();closeMood();Object.assign(active,nearestOpenPosition(place.arrival,walkingObstacles(active),WORLD,active.radius));
   active.jump=0;active.jumpVelocity=0;currentPlace=place;
-  if(['park','football','hill','river'].includes(place.id)){
-    orbit.yaw=place.id==='hill'?Math.PI:0;orbit.elevation=place.id==='park'?.48:.64;
-    orbit.targetDistance=place.id==='park'?115:place.id==='football'?65:place.id==='river'?115:58;zoom(0);
-  }
+  const presets={
+    'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
+    hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],mountains:[0,.43,180],
+  };
+  const preset=presets[place.id]||(BRIDGE_IDS.has(place.id)?[0,.64,100]:[.26,.64,55]);
+  [orbit.yaw,orbit.elevation,orbit.targetDistance]=preset;zoom(0);
   active.yaw=place.id==='football'?Math.PI:orbit.yaw;
   active.model.root.position.set(active.x,groundHeight(active.x,active.z),active.z);
   // Fast travel should feel immediate, without flying through buildings.
   target.set(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
-  setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:place.id});updateLocation();focusGame();
+  setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:BRIDGE_IDS.has(place.id)?'river':place.id});updateLocation();focusGame();
 }
 function findPlace(player){return ALL_PLACES.filter(place=>Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;}
 function updateLocation(){
   const place=findPlace(active);
   if(place?.id!==currentPlace?.id){currentPlace=place;}
   $('#location-name').textContent=place?.name||'Neighborhood lanes';
-  document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id));
+  $('#bank-name').textContent=active.x<riverX(active.z)?'West bank':'East bank';
+  document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id||(button.dataset.place==='river'&&BRIDGE_IDS.has(place?.id))));
   updateActivity(place);if(mapDialog.open)townMap.update(active);
 }
 function remark(player,context={}){
   const place=findPlace(player);
-  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:place?.id,lastText:player.lastText,...context});player.lastText=next.text;
+  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:BRIDGE_IDS.has(place?.id)?'river':place?.id,lastText:player.lastText,...context});player.lastText=next.text;
   const bubble=bubbles[player===active?0:1];bubble.player=player;bubble.until=time+5.7;
   bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=player.name;bubble.element.append(name,document.createTextNode(next.text));
   if(player===active){nextRemark=time+11+Math.random()*6;speak(next.text,player);}
@@ -211,8 +216,8 @@ for(const button of document.querySelectorAll('[data-move]')){
 $('#touch-jump').addEventListener('pointerdown',event=>{event.preventDefault();jump();});
 function isDown(...names){return names.some(name=>keys.has(name)||touches.has(name)||(tapUntil.get(name)||0)>time);}
 
-function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,220);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=220;}
-function resetCamera(){orbit.yaw=.26;orbit.elevation=.64;orbit.targetDistance=46;zoom(0);focusGame();}
+function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,330);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=330;}
+function resetCamera(){orbit.yaw=.26;orbit.elevation=.64;orbit.targetDistance=76;zoom(0);focusGame();}
 $('#zoom-in').addEventListener('click',()=>{zoom(-4);focusGame();});$('#zoom-out').addEventListener('click',()=>{zoom(4);focusGame();});
 $('#rotate-left').addEventListener('click',()=>{orbit.yaw-=Math.PI/4;focusGame();});$('#rotate-right').addEventListener('click',()=>{orbit.yaw+=Math.PI/4;focusGame();});$('#reset-camera').addEventListener('click',resetCamera);
 canvas.addEventListener('wheel',event=>{event.preventDefault();zoom(Math.sign(event.deltaY)*2);},{passive:false});
@@ -259,17 +264,23 @@ function kick(){
 }
 $('#kick-ball').addEventListener('click',kick);
 $('#reset-ball').addEventListener('click',()=>{resetBall(ballState);activityMessage='Ball back at the center. Ready to play!';activityUntil=time+3;updateActivity(findPlace(active));focusGame();});
+$('#view-sea').addEventListener('click',()=>{orbit.yaw=Math.PI;orbit.elevation=.35;orbit.targetDistance=95;zoom(0);focusGame();});
 $('#view-town').addEventListener('click',()=>{orbit.yaw=0;orbit.elevation=.36;orbit.targetDistance=100;zoom(0);focusGame();});
 function updateActivity(place){
   const id=place?.id,isFootball=id==='football',isLookout=id==='lookout';
-  $('#activity').hidden=!['park','football','hill','lookout','river'].includes(id);
-  $('#football-actions').hidden=!isFootball;$('#view-town').hidden=!isLookout;
+  $('#activity').hidden=!['park','football','hill','lookout','beach','mountains','town-square','pond'].includes(id)&&!BRIDGE_IDS.has(id);
+  $('#football-actions').hidden=!isFootball;$('#lookout-actions').hidden=!isLookout;
   let title='',detail='';
   if(isFootball){title=`Football · ${ballState.goals} ${ballState.goals===1?'goal':'goals'}`;detail=time<activityUntil?activityMessage:'Walk into the ball to dribble · F to kick in your walking direction';}
   if(id==='park'){title='Wheel Park · 18 cabins';detail='Count the colorful cabins as they turn. Take a stroll through the park.';}
   if(id==='hill'){title=`Sunny Hill · ${Math.round(groundHeight(active.x,active.z))} / 12 m`;detail='Follow the cream trail up to the scenic deck. WASD to climb.';}
-  if(isLookout){title='You made it! · Scenic deck';detail='Drag to look around, or take in the view across NumberTown.';}
-  if(id==='river'){title='Riverside walk';detail='Follow the water and cross the wooden bridge.';}
+  if(isLookout){title='You made it! · Scenic deck';detail='A long beach and open sea to the south. Drag to enjoy the view.';}
+  if(BRIDGE_IDS.has(id)){title=place.name;detail='Follow the river from the mountains to the sea. Three bridges join the banks.';}
+  if(id==='beach'){title='Long Beach · Southern Sea';detail='Take a walk along the sand. The river meets the sea just along the shore.';}
+  if(id==='mountains'){title='The northern mountains';detail='Admire the high peaks from the foothills. These steep mountains cannot be climbed.';}
+  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all fifteen friends.';}
+  if(id==='pond'){title='The big duck pond';detail='Follow the shore and say hello to the ducks.';}
+
   $('#activity-title').textContent=title;$('#activity-detail').textContent=detail;
 }
 
@@ -278,9 +289,13 @@ addEventListener('resize',resize);resize();selectFriend(11,true);
 function updateCamera(dt){
   if(keys.has('q'))orbit.yaw-=dt*1.25;if(keys.has('r'))orbit.yaw+=dt*1.25;
   const desired=new THREE.Vector3(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
-  // Frame the entire wheel above the visitor when taking in the park.
+  // Lift scenic framing above the visitor so tall landmarks clear the toolbar.
+  if(currentPlace?.id==='town-square'&&orbit.targetDistance>=55){desired.y+=4;desired.z-=4;}
   if(currentPlace?.id==='park'&&orbit.targetDistance>=80){desired.y+=11;desired.z-=15;}
-  if(currentPlace?.id==='river'&&orbit.targetDistance>=80){desired.x-=10;desired.y+=4;desired.z+=20;}
+  if(BRIDGE_IDS.has(currentPlace?.id)&&orbit.targetDistance>=80){desired.x+=14;desired.y+=2;}
+  if(currentPlace?.id==='beach'&&orbit.targetDistance>=80){desired.z+=15;desired.y+=3;}
+  if(currentPlace?.id==='mountains'&&orbit.targetDistance>=80){desired.z-=10;desired.y+=18;}
+
   target.lerp(desired,1-Math.exp(-dt*5));
   orbit.distance=THREE.MathUtils.lerp(orbit.distance,orbit.targetDistance,1-Math.exp(-dt*7));
   // Keep the character in the open space above the card tray, also on portrait screens.
@@ -335,7 +350,7 @@ function animate(timestamp){
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,width:WORLD.width,depth:WORLD.depth},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

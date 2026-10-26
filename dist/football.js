@@ -1,13 +1,16 @@
 import * as THREE from './vendor/three.module.js';
+import { FIELD_OFFSET } from './geography.js';
 
 export const FIELD = Object.freeze({
-  x: 245, z: 149, width: 58, depth: 76,
-  minX: 216, maxX: 274, minZ: 111, maxZ: 187,
+  x: 245 + FIELD_OFFSET.x, z: 149 + FIELD_OFFSET.z, width: 58, depth: 76,
+  minX: 216 + FIELD_OFFSET.x, maxX: 274 + FIELD_OFFSET.x,
+  minZ: 111 + FIELD_OFFSET.z, maxZ: 187 + FIELD_OFFSET.z,
   goalWidth: 12, goalDepth: 4, goalHeight: 4.8, ballRadius: .5,
 });
 export const FOOTBALL_LANDMARK = Object.freeze({
-  id: 'football', name: 'Football', x: 245, z: 149, radius: 48,
-  description: 'Pass, dribble, and score a friendly goal.', arrival: Object.freeze({ x: 245, z: 158 }),
+  id: 'football', name: 'Football', x: FIELD.x, z: FIELD.z, radius: 48,
+  description: 'Pass, dribble, and score a friendly goal.',
+  arrival: Object.freeze({ x: FIELD.x, z: FIELD.z + 9 }),
 });
 
 // The long sides have a 24-unit opening in the middle. Every fence, stand,
@@ -17,8 +20,9 @@ const FENCES = [
   { x: 279.72, z: 100, w: .28, d: 37 }, { x: 279.72, z: 161, w: .28, d: 37 },
   { x: 210, z: 100, w: 27, d: .28 }, { x: 253, z: 100, w: 27, d: .28 },
   { x: 210, z: 197.72, w: 27, d: .28 }, { x: 253, z: 197.72, w: 27, d: .28 },
-];
-const STANDS = [{ x: 283, z: 119, w: 5, d: 18 }, { x: 283, z: 161, w: 5, d: 18 }];
+].map(shape => ({ ...shape, x: shape.x + FIELD_OFFSET.x, z: shape.z + FIELD_OFFSET.z }));
+const STANDS = [{ x: 283, z: 119, w: 5, d: 18 }, { x: 283, z: 161, w: 5, d: 18 }]
+  .map(shape => ({ ...shape, x: shape.x + FIELD_OFFSET.x, z: shape.z + FIELD_OFFSET.z }));
 const GOAL_FRAMES = ['north', 'south'].flatMap(end => {
   const north = end === 'north', front = north ? FIELD.minZ - .3 : FIELD.maxZ + .3;
   const back = north ? FIELD.minZ - FIELD.goalDepth : FIELD.maxZ + FIELD.goalDepth;

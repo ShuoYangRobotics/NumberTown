@@ -1,6 +1,8 @@
 # NumberTown
 
-A cozy, fully 3D browser playground with fifteen Numberblock friends in a **300 × 250** world. NumberTown has exactly **50 houses, 10 stores, and 3 public buildings**: the library, school, and town hall. Connected streets lead through the neighborhoods to the square and gardens, a Ferris wheel park, a football pitch, a hilltop lookout, and a riverside bridge.
+A cozy, fully 3D browser playground with fifteen Numberblock friends in a **440 × 460** world. NumberTown has exactly **70 houses—50 on the west bank and 20 on the east bank—plus 10 stores and 3 public buildings**: the library, school, and town hall. A continuous river flows from the northern mountain gorge through town to the southern beach and sea. Three bridges connect the two banks.
+
+Connected streets lead to an enlarged town square with a colorful Rubik’s cube statue, a larger duck pond, the east-bank Ferris wheel park and football pitch, and a hilltop lookout over the beach and sea.
 
 The game runs locally with a vendored Three.js renderer; no build step, account, or external asset downloads are required.
 
@@ -29,16 +31,19 @@ Open **http://127.0.0.1:5180** in a browser supporting WebGL 2. `npm start` runs
 | Shift + 1–5 | Choose Eleven through Fifteen |
 | Character cards, previous/next, or click a character | Choose any friend |
 | Place buttons | Travel to a town destination or activity |
+| View sea button on the scenic deck | Turn the camera toward the beach and sea |
 
 Touch screens have a direction pad, hop button, and Kick control. Drag with one finger to orbit; pinch with two to zoom. Help pauses walking. Losing window focus clears held inputs.
 
 ## Explore and play
 
-- **Ferris wheel park:** a rotating wheel carries 18 colorful cabins that remain upright as it turns. Walk through the landscaped park, count the cabins, and visit its picnic area.
-- **Football:** the striped pitch has two goals, nets, bleachers, and a rolling black-and-white ball. Walk into the ball to dribble gently, or press **F** / tap **Kick** for a stronger kick. A whole ball crossing between the posts scores a goal. After a brief pause, the ball returns to the center and keeps the score. Shots outside the goal mouth bounce back into play.
-- **Sunny Hill:** follow the winding trail up the climbable 12-metre hill to the viewing deck, then orbit the camera for a view of the expanded town.
-- **River walk:** follow the winding river and cross its wooden bridge. Walking follows the bridge and hillside elevations.
-- **Town map:** press **M** to find the neighborhoods and activity areas in the larger world.
+- **Town square and pond:** meet by the colorful Rubik’s cube statue in the larger square, then visit the expanded duck pond and gardens.
+- **Ferris wheel park:** on the east bank, a rotating wheel carries 18 colorful cabins that remain upright as it turns. Walk through the landscaped park, count the cabins, and visit its picnic area.
+- **Football:** the east-bank striped pitch has two goals, nets, bleachers, and a rolling black-and-white ball. Walk into the ball to dribble gently, or press **F** / tap **Kick** for a stronger kick. A whole ball crossing between the posts scores a goal. After a brief pause, the ball returns to the center and keeps the score. Shots outside the goal mouth bounce back into play.
+- **Sunny Hill and coast:** follow the winding trail up the climbable 12-metre hill to the viewing deck. Use **View sea** to frame the beach and sea, or orbit freely to explore the view.
+- **River and bridges:** follow one continuous river from the mountain gorge to its mouth at the sea. The North, Market, and Coast bridges connect the west and east neighborhoods. Walking follows the bridge and hillside elevations.
+- **Northern mountains:** the tall range forms a scenic boundary around the river gorge. These mountains cannot be climbed; Sunny Hill provides the walking route to an elevated viewpoint.
+- **Town map:** press **M** to find both neighborhoods, the three crossings, and the activity areas in the larger world.
 
 All bodies are made from **exactly the corresponding number of equal 1×1×1 cubes**. Every cube has real depth and is visible from any angle; the world has a perspective camera, volumetric buildings, and dynamic lighting and shadows. Characters keep their own locations. Collisions account for their different widths, using a conservative circular footprint to allow safe turns.
 
@@ -51,12 +56,13 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 - `dist/game.js`: Three.js scene, perspective camera, input, selection, dialogue, and interface.
 - `dist/character-data.js`: exact unit-cube layouts and dimensions for all fifteen characters.
 - `dist/characters3d.js`: mesh bodies, faces, accessories, and animation.
+- `dist/geography.js`: shared world dimensions, river course, bridges, coast, mountain range, hill, and activity locations.
 - `dist/world-data.js`: town layout, obstacles, destinations, and safe spawn positions.
-- `dist/world3d.js`: buildings, paths, vegetation, furniture, and water.
+- `dist/world3d.js`: buildings, paths, square, Rubik’s cube statue, duck pond, vegetation, and furniture.
 - `dist/park.js`: Ferris wheel, 18 upright cabins, and park scenery.
 - `dist/football.js`: pitch, goals, ball rendering, kicking, dribbling, scoring, and restarts.
-- `dist/terrain-data.js`: shared hill, viewing deck, river, bridge, and walking heights.
-- `dist/terrain.js`: hill trail, lookout, river, and bridge geometry.
+- `dist/terrain-data.js`: terrain landmarks, obstacles, and walking heights for the hill, deck, and three bridges.
+- `dist/terrain.js`: mountain gorge, continuous river, three bridges, hill trail, lookout, beach, and sea geometry.
 - `dist/town-map.js`: town map and destination display.
 - `dist/navigation.js`: camera-relative motion and collision handling.
 - `dist/personalities.js`: six emotions and character-specific contextual dialogue.
@@ -64,4 +70,4 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 
 Run `npm test` or `node --test tests/*.test.js` for the geometry, building counts, movement, routes, terrain, park animation, football physics, and dialogue checks. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
 
-The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 3.0 expansion is developed and tested locally.
+The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.0 expansion is developed and tested locally.

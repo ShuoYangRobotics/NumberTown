@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
 import { PARK, PARK_LANDMARK, PARK_OBSTACLES, createPark } from '../dist/park.js';
 import { collides, moveWithCollisions } from '../dist/navigation.js';
+import { WORLD as world, PARK_OFFSET, riverX, riverWidth } from '../dist/geography.js';
 
-const world = { width: 300, depth: 250, margin: 2 };
 const close = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-7, message || `${a} differs from ${b}`);
 function cabins(root) {
   const result = [];
@@ -83,8 +83,11 @@ test('the wheel has three-dimensional rims, spokes, supports, and finite modest 
 });
 
 test('arrival and the full gate-to-viewing route remain open even for wide characters', () => {
-  assert.deepEqual(PARK_LANDMARK.arrival, { x: 238, z: 80 });
-  const route = [{ x: 208, z: 80 }, PARK.entrance, PARK_LANDMARK.arrival, { x: 249, z: 80 }, { x: 249, z: 66 }];
+  assert.deepEqual(PARK_LANDMARK.arrival, { x: 238 + PARK_OFFSET.x, z: 80 + PARK_OFFSET.z });
+  const route = [
+    { x: PARK.bounds.minX, z: PARK.entrance.z }, PARK.entrance, PARK_LANDMARK.arrival,
+    { x: PARK.x, z: PARK.entrance.z }, { x: PARK.x, z: PARK.z + 20 },
+  ];
   for (const radius of [.6, 1.6, 2.6, 3.5]) {
     assert.equal(collides(PARK_LANDMARK.arrival.x, PARK_LANDMARK.arrival.z, PARK_OBSTACLES, world, radius), false);
     for (let i = 1; i < route.length; i++) {
@@ -98,15 +101,30 @@ test('arrival and the full gate-to-viewing route remain open even for wide chara
 });
 
 test('support and boarding footprints block walking through the attraction', () => {
-  for (const point of [{ x: 249, z: 46 }, { x: 240.3, z: 42 }, { x: 257.7, z: 50 }, { x: 249, z: 57 }]) {
+  for (const point of [
+    { x: PARK.x, z: PARK.z }, { x: PARK.x - 8.7, z: PARK.z - 4 },
+    { x: PARK.x + 8.7, z: PARK.z + 4 }, { x: PARK.x, z: PARK.z + 11 },
+  ]) {
     assert.equal(collides(point.x, point.z, PARK_OBSTACLES, world), true);
   }
   for (const radius of [.6, 2.6]) {
-    const player = { x: 249, z: 80, radius };
+    const player = { x: PARK.x, z: PARK.entrance.z, radius };
     moveWithCollisions(player, 0, -60, PARK_OBSTACLES, world);
-    assert.ok(player.z >= 60 + radius - 1e-7, 'walk passed through the boarding platform');
+    assert.ok(player.z >= PARK.z + 14 + radius - 1e-7, 'walk passed through the boarding platform');
     assert.equal(collides(player.x, player.z, PARK_OBSTACLES, world, radius), false);
   }
+});
+
+test('the rendered park and entrance match relocated world metadata on the east bank', () => {
+  const park = createPark(); park.root.updateMatrixWorld(true);
+  const wheel = park.root.getObjectByName('Ferris wheel structure').getWorldPosition(new THREE.Vector3());
+  const entrance = park.root.getObjectByName('Wheel park entrance').getWorldPosition(new THREE.Vector3());
+  close(wheel.x, PARK.x); close(wheel.z, PARK.z);
+  close(entrance.x, PARK.entrance.x); close(entrance.z, PARK.entrance.z);
+  for (let z = PARK.bounds.minZ; z <= PARK.bounds.maxZ; z++) {
+    assert.ok(PARK.bounds.minX > riverX(z) + riverWidth(z) / 2 + 3.5, 'park footprint intrudes into the river');
+  }
+  assert.ok(PARK.bounds.maxX < world.width && PARK.bounds.maxZ < world.depth);
 });
 
 test('park obstacle declarations stay inside the reserved bounds and use unique IDs', () => {

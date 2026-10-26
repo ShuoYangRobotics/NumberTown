@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN, ROAD_SEGMENTS } from './world-data.js';
+import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN, ROAD_SEGMENTS, SQUARE, STATUE, BUNTING } from './world-data.js';
 
 const COLORS = {
   grass: '#b7cda4', soil: '#dfd0ad', path: '#f3e6cc', edge: '#fff5df',
@@ -112,22 +112,23 @@ export function createTown() {
     path((road.x1 + road.x2) / 2, (road.z1 + road.z2) / 2,
       Math.abs(road.x2 - road.x1) || road.width, Math.abs(road.z2 - road.z1) || road.width);
   }
-  path(48, 47, 28, 24, '#f6e9d0', .042);
-  // Inlaid border and pale cobbles give the square its own identity.
-  for (const x of [34.5, 61.5]) box(x, .052, 47, .28, .025, 22.5, '#ded1b5', 0, 0, false);
-  for (const z of [35.5, 58.5]) box(48, .052, z, 26.8, .025, .28, '#ded1b5', 0, 0, false);
-  for (let x = 37; x <= 59; x += 2.2) {
-    for (const z of [37, 57]) box(x, .058, z, 1.7, .025, .65, '#ede0c5', 0, 0, false);
+  path(SQUARE.x, SQUARE.z, SQUARE.w, SQUARE.d, '#f6e9d0', .042);
+  // A broad, finely paved square leaves plenty of room around the sculpture.
+  for (const side of [-1, 1]) {
+    box(SQUARE.x + side * (SQUARE.w / 2 - .5), .055, SQUARE.z, .38, .02, SQUARE.d - 1, '#ded1b5', 0, 0, false);
+    box(SQUARE.x, .055, SQUARE.z + side * (SQUARE.d / 2 - .5), SQUARE.w - 1, .02, .38, '#ded1b5', 0, 0, false);
   }
+  for (let x = SQUARE.x - SQUARE.w / 2 + 4; x < SQUARE.x + SQUARE.w / 2; x += 4) box(x, .057, SQUARE.z, .045, .015, SQUARE.d - 2, '#e9dcbf', 0, 0, false);
+  for (let z = SQUARE.z - SQUARE.d / 2 + 4; z < SQUARE.z + SQUARE.d / 2; z += 4) box(SQUARE.x, .057, z, SQUARE.w - 2, .015, .045, '#e9dcbf', 0, 0, false);
   // Door paths join the broad street network. They are shallow and walkable.
   for (const b of BUILDINGS) {
     if (b.facing === 'north') {
       const front = b.z - b.d / 2;
-      path(b.x, (front + 66) / 2, 3.7, front - 66 + .6, COLORS.path, .034);
+      path(b.x, (front + b.street) / 2, 3.7, front - b.street + .6, COLORS.path, .034);
       continue;
     }
     const front = b.z + b.d / 2;
-    const street = b.street ?? (b.z < 25 ? 29 : b.z < 45 ? 47 : b.z < 65 ? 66 : 81);
+    const street = b.street;
     if (street > front) path(b.x, (front + street) / 2, b.kind === 'library' ? 9 : 3.7, street - front + .6, COLORS.path, .034);
   }
 
@@ -257,6 +258,48 @@ export function createTown() {
   }
   BUILDINGS.forEach(makeBuilding);
 
+  // The town's centerpiece is a real 3×3×3 puzzle cube: 27 black cubies and
+  // nine raised colored tiles on every one of its six faces, including below.
+  const statue = new THREE.Group();
+  statue.name = "Rubik's Cube statue";
+  statue.position.set(STATUE.x, 0, STATUE.z); statue.rotation.y = Math.PI / 10;
+  const pitch = STATUE.cubieSize + STATUE.gap, size = STATUE.cubieSize;
+  function statueInstances(name, color, transforms) {
+    const mesh = new THREE.InstancedMesh(geometry.box, material(color, { roughness: .52 }), transforms.length);
+    mesh.name = name;
+    transforms.forEach(({ position, scale }, i) => {
+      dummy.position.set(...position); dummy.rotation.set(0, 0, 0); dummy.scale.set(...scale); dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true; mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.computeBoundingSphere(); statue.add(mesh);
+  }
+  const cores = [];
+  for (let i = -1; i <= 1; i++) for (let j = 0; j < 3; j++) for (let k = -1; k <= 1; k++) {
+    cores.push({ position: [i * pitch, STATUE.baseHeight + size / 2 + j * pitch, k * pitch], scale: [size, size, size] });
+  }
+  statueInstances('27 black cubies', '#252b31', cores);
+  const outer = pitch + size / 2 + .04, tile = size * .85;
+  for (const [axis, side, name, color] of [
+    ['x', 1, 'red', '#e75249'], ['x', -1, 'orange', '#eea046'],
+    ['y', 1, 'white', '#fff9e8'], ['y', -1, 'yellow', '#f0d449'],
+    ['z', 1, 'green', '#58af76'], ['z', -1, 'blue', '#558ed3'],
+  ]) {
+    const tiles = [];
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const middleY = STATUE.baseHeight + size / 2 + pitch;
+      if (axis === 'x') tiles.push({ position: [side * outer, middleY + a * pitch, b * pitch], scale: [.08, tile, tile] });
+      else if (axis === 'y') tiles.push({ position: [a * pitch, middleY + side * outer, b * pitch], scale: [tile, .08, tile] });
+      else tiles.push({ position: [a * pitch, middleY + b * pitch, side * outer], scale: [tile, tile, .08] });
+    }
+    statueInstances(`${name} face — 9 tiles`, color, tiles);
+  }
+  root.add(statue);
+  box(STATUE.x, .3, STATUE.z, 16, .6, 16, '#d6c7ad');
+  box(STATUE.x, .85, STATUE.z, 14, .5, 14, '#e8d9ba');
+  box(STATUE.x, 1.3, STATUE.z, 12, .4, 12, '#f4e6c9');
+  makeSign('NUMBER TOWN', STATUE.x, .35, STATUE.z + 8.05, 7.6, .44);
+
   for (const tree of TREES) {
     const { x, z, h, tint } = tree;
     const s = tree.crownScale ?? 1;
@@ -291,11 +334,11 @@ export function createTown() {
   put('circle', '#e0d4b6', POND.x, .045, POND.z, POND.rx + .65, POND.rz + .65, 1, -Math.PI / 2, 0, 0, false);
   const waterMat = material(COLORS.water, { roughness: .24, metalness: .08 });
   put('circle', waterMat, POND.x, .07, POND.z, POND.rx, POND.rz, 1, -Math.PI / 2, 0, 0, false);
-  for (let i = 0; i < 20; i++) {
-    const a = i / 20 * Math.PI * 2;
+  for (let i = 0; i < 64; i++) {
+    const a = i / 64 * Math.PI * 2;
     ball(POND.x + Math.cos(a) * (POND.rx + .15), .17, POND.z + Math.sin(a) * (POND.rz + .15), .47, .24, .36, i % 2 ? '#d2c7b2' : '#e0d5c0');
   }
-  for (const [dx, dz] of [[-2.7, 1.4], [2.8, -1.4], [-1.8, -2]]) {
+  for (const [dx, dz] of [[-10, 4], [9, -5], [-5, -7], [4, 7], [12, 2]]) {
     put('circle', '#96b591', POND.x + dx, .085, POND.z + dz, .45, .35, 1, -Math.PI / 2, 0, 0, false);
     flower(POND.x + dx, POND.z + dz, '#f2c2ca', .18, .65);
   }
@@ -315,7 +358,7 @@ export function createTown() {
     duck.position.set(x, .12, z); root.add(duck);
     animated.ducks.push({ duck, x, z, phase });
   }
-  makeDuck(POND.x - 1, POND.z, 0); makeDuck(POND.x + 1.5, POND.z + 1, 2.1); makeDuck(POND.x + .7, POND.z - 1.5, 4);
+  for (const [i, [dx, dz]] of [[-9, -3], [-4, 4], [3, -4], [8, 2], [-2, 0], [5, 6]].entries()) makeDuck(POND.x + dx, POND.z + dz, i * 1.3);
 
   const fx = FOUNTAIN.x, fz = FOUNTAIN.z;
   cylinder(fx, .16, fz, 2.3, .32, '#d6c7ad');
@@ -334,23 +377,24 @@ export function createTown() {
   }
 
   // Garden beds sit beside the paths, leaving the broad routes open.
-  for (const [x, z, w, d, tint] of [[27, 70, 3.2, 1.5, 0], [35, 68.5, 3.8, 1.2, 2], [18, 60, 1.8, 1.5, 1],
-    [39, 25, 2, 1.2, 2], [58, 25, 2, 1.2, 0], [6, 27, 3.5, 1, 1], [88, 68.5, 3.5, 1, 2]]) planter(x, z, w, d, tint);
+  for (const [x, z, w, d, tint] of [[61, 108, 2, 1, 0], [119, 108, 2, 1, 2], [61, 143, 2, 1, 1],
+    [119, 145, 2, 1, 2], [74, 257, 3.5, 1.2, 0], [22, 294, 3.5, 1.2, 1], [18, 262, 3.5, 1, 2]]) planter(x, z, w, d, tint);
   for (let i = 0; i < 24; i++) {
-    const x = 3.5 + ((i * 17.7) % 88), z = i % 2 ? 3.6 : 81.3;
+    const angle = i / 24 * Math.PI * 2;
+    const x = POND.x + Math.cos(angle) * 22, z = POND.z + Math.sin(angle) * 17;
     flower(x, z, COLORS.flowers[i % 4], .42 + (i % 3) * .08, .75);
   }
 
-  // A welcoming line of little flags above the north entrance to the square.
-  cylinder(37.5, 4.3, 35, .09, 8.6, '#b6a185');
-  cylinder(59.3, 4.3, 35, .09, 8.6, '#b6a185');
-  box(48.4, 8.45, 35, 21.8, .045, .045, '#b4aa92');
+  // Flags mark the library entrance and remain well above the tall friends.
+  cylinder(BUNTING.x1, BUNTING.height / 2, BUNTING.z, .09, BUNTING.height, '#b6a185');
+  cylinder(BUNTING.x2, BUNTING.height / 2, BUNTING.z, .09, BUNTING.height, '#b6a185');
+  box((BUNTING.x1 + BUNTING.x2) / 2, BUNTING.height - .1, BUNTING.z, BUNTING.x2 - BUNTING.x1, .045, .045, '#b4aa92');
   const pennant = new THREE.BufferGeometry();
   pennant.setAttribute('position', new THREE.Float32BufferAttribute([-.42, 0, 0, .42, 0, 0, 0, -.85, 0], 3));
   pennant.computeVertexNormals();
   for (let i = 0; i < 15; i++) {
     const flag = new THREE.Mesh(pennant, material(['#dca6a0', '#f1d490', '#a8bfa7', '#a5bed0', '#bda7c9'][i % 5], { side: THREE.DoubleSide }));
-    flag.position.set(38.5 + i * 1.42, 8.45, 35); flag.castShadow = true; root.add(flag); animated.flags.push(flag);
+    flag.position.set(BUNTING.x1 + 1 + i * (BUNTING.x2 - BUNTING.x1 - 2) / 14, BUNTING.height - .1, BUNTING.z); flag.castShadow = true; root.add(flag); animated.flags.push(flag);
   }
 
   for (const { geo, mat, cast, matrices } of batches.values()) {
@@ -361,10 +405,10 @@ export function createTown() {
   }
 
   return {
-    root,
+    root, statue,
     update(time) {
       for (const { duck, x, z, phase } of animated.ducks) {
-        duck.position.set(x + Math.sin(time * .18 + phase) * .28, .12 + Math.sin(time * 1.8 + phase) * .035, z + Math.cos(time * .15 + phase) * .22);
+        duck.position.set(x + Math.sin(time * .18 + phase) * 1.2, .12 + Math.sin(time * 1.8 + phase) * .035, z + Math.cos(time * .15 + phase) * .9);
         duck.rotation.y = phase + Math.sin(time * .22 + phase) * .3;
       }
       for (const { drop, phase } of animated.drops) {

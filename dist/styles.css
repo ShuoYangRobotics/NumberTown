@@ -21,3 +21,7 @@
 @media(max-height:520px){.destinations{top:65px}.friend-info,.camera-panel{top:116px}.activity{bottom:113px;padding:8px 12px;max-width:calc(100% - 360px);width:max-content}.activity p{max-width:250px;font-size:8px}.activity strong{font-size:10px}#map-content svg{max-height:32vh}.map-places button{padding:5px 8px}#map-dialog{padding:18px 24px}#map-dialog h2{font-size:22px}#map-dialog>p:not(.eyebrow){font-size:10px;margin-bottom:9px}}
 
 @media(max-width:700px) and (max-height:520px){.activity{max-width:calc(100% - 36px);width:calc(100% - 36px);bottom:195px}.activity p{max-width:none}}
+
+/* The riverbank map and two summit views share the same compact controls. */
+#lookout-actions{display:flex;gap:5px}.location-tag #bank-name{font-weight:500;color:#84927d}#map-content svg text{font-size:5px}#map-content svg .map-area{font-size:6.5px;font-weight:800}#map-content svg .map-sea{font-size:8px;letter-spacing:2px;fill:#477d88}.map-places{gap:5px}#map-content svg{max-height:52vh}#map-dialog{width:670px}.activity:has(#lookout-actions:not([hidden])){max-width:min(650px,calc(100% - 300px))}
+@media(max-width:700px){#lookout-actions{flex-direction:column;flex-shrink:0}.activity:has(#lookout-actions:not([hidden])){max-width:calc(100% - 36px)}#map-content svg{max-height:44vh}.map-places button{font-size:9px;padding:6px 8px}.location-tag{max-width:calc(100% - 36px)}}

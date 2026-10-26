@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EMOTIONS, chooseRemark } from '../dist/personalities.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
-const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river'];
+const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'lookout'];
 const samples = [0, .12, .25, .4, .58, .75, .99];
 
 test('all six moods have usable, unique display options', () => {
@@ -49,6 +49,9 @@ test('landmark dialogue stays relevant to its location', () => {
     football: /football|ball|goal|team/i,
     hill: /hill|view/i,
     river: /river/i,
+    beach: /beach|sea|sand|shore|wave/i,
+    mountains: /mountain|peak/i,
+    lookout: /lookout|sea|view/i,
   };
   for (const place of places) {
     for (const emotion of moods) {
@@ -56,6 +59,14 @@ test('landmark dialogue stays relevant to its location', () => {
         assert.match(chooseRemark(8, { place, emotion }, () => sample).text, patterns[place]);
       }
     }
+  }
+});
+
+test('the scenic lookout has sea-view remarks in every emotion', () => {
+  for (const emotion of moods) {
+    const lines = samples.map(sample => chooseRemark(15, { place: 'lookout', emotion }, () => sample));
+    assert.ok(lines.some(line => /sea/i.test(line.text)), `${emotion} needs a sea-view remark`);
+    assert.ok(lines.every(line => line.emotion === emotion));
   }
 });
 
