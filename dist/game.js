@@ -7,6 +7,7 @@ import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp, col
 import { EMOTIONS, chooseRemark } from './personalities.js';
 import { createRoamingController } from './roaming.js';
 import { toSpokenMath } from './speech.js';
+import { mountCharacterShortcut } from './character-shortcut.js';
 
 import { createLandscape } from './terrain.js';
 import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
@@ -105,6 +106,7 @@ function miniSVG(definition) {
 }
 for(const definition of CHARACTERS){
   const button=document.createElement('button');button.type='button';button.className=definition.number>20?'friend-card long-name':'friend-card';button.dataset.number=definition.number;
+  button.title=`${definition.name} · ${definition.number} blocks`;
   button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
   button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>20?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
   button.addEventListener('click',()=>selectFriend(definition.number));$('#friends').append(button);
@@ -231,7 +233,7 @@ const moves=['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'];
 function clearInput(){guidedWalk=null;keys.clear();touches.clear();tapUntil.clear();players.forEach(p=>p.moving=false);document.querySelectorAll('[data-move]').forEach(button=>button.classList.remove('active'));}
 addEventListener('keydown',event=>{
   if(event.metaKey||event.ctrlKey||event.altKey)return;
-  if(['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)||event.target.isContentEditable)return;
   const key=event.key.toLowerCase();
   if(!event.repeat&&key==='m'&&!help.open){event.preventDefault();if(mapDialog.open)mapDialog.close();else openMap();return;}
   if(modalOpen())return;
@@ -252,6 +254,11 @@ addEventListener('keydown',event=>{
   if(!event.repeat&&key===']')selectFriend(active.number===players.length?1:active.number+1);
   if(key==='escape')closeMood();
 });
+mountCharacterShortcut({
+  canvas,input:$('#jump-number'),button:$('#jump-to-friend'),status:$('#jump-status'),
+  maxNumber:players.length,onSelect:selectFriend,
+  onBegin:()=>{clearInput();closeMood();},isBlocked:modalOpen,focusGame,
+});
 addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
 addEventListener('blur',()=>{clearInput();pointerPositions.clear();drag=null;});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();lastTime=0;cancelVoice();}});
@@ -266,7 +273,6 @@ function isDown(...names){return names.some(name=>keys.has(name)||touches.has(na
 function zoom(delta){orbit.targetDistance=THREE.MathUtils.clamp(orbit.targetDistance+delta,17,330);$('#zoom-label').textContent=`${Math.round(46/orbit.targetDistance*100)}%`;$('#zoom-in').disabled=orbit.targetDistance<=17;$('#zoom-out').disabled=orbit.targetDistance>=330;}
 function resetCamera(){if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw=.26;orbit.elevation=.64;orbit.targetDistance=76;zoom(0);focusGame();}
 $('#zoom-in').addEventListener('click',()=>{zoom(-4);focusGame();});$('#zoom-out').addEventListener('click',()=>{zoom(4);focusGame();});
-$('#rotate-left').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw-=Math.PI/4;focusGame();});$('#rotate-right').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw+=Math.PI/4;focusGame();});$('#reset-camera').addEventListener('click',resetCamera);
 canvas.addEventListener('wheel',event=>{event.preventDefault();zoom(Math.sign(event.deltaY)*2);},{passive:false});
 canvas.addEventListener('contextmenu',event=>event.preventDefault());
 canvas.addEventListener('pointerdown',event=>{
@@ -369,20 +375,20 @@ function updateCamera(dt){
   camera.position.set(target.x+Math.sin(orbit.yaw)*horizontal,target.y+Math.sin(orbit.elevation)*distance,target.z+Math.cos(orbit.yaw)*horizontal);
   if(camera.position.z<68&&camera.position.z>=-65)camera.position.y=Math.max(camera.position.y,mountainHeight(camera.position.x,camera.position.z)+5);
   camera.lookAt(target);camera.updateMatrixWorld();
-  $('#compass').style.transform=`rotate(${-orbit.yaw}rad)`;
 }
 function updateBubbles(){
+  const pickerTop=$('.friends-panel').getBoundingClientRect().top;
   for(const bubble of bubbles){
     const visible=time<bubble.until;
     if(visible){projection.set(bubble.player.x,bubble.player.model.root.position.y+bubble.player.height+1.7,bubble.player.z).project(camera);
       const x=(projection.x*.5+.5)*innerWidth,y=(-projection.y*.5+.5)*innerHeight;
-      const inView=projection.z<1&&projection.z>-1&&x>90&&x<innerWidth-90&&y>120&&y<innerHeight-155;
+      const inView=projection.z<1&&projection.z>-1&&x>90&&x<innerWidth-90&&y>120&&y<pickerTop-12;
       const minTop=innerHeight<520?118:innerWidth<700?285:145;
       const bubbleY=Math.max(y,minTop+bubble.element.offsetHeight);
       // Tall friends need their top cubes visible beneath the destination bar.
       const sideOffset=innerWidth>700&&bubbleY>y+8?Math.min(150,bubble.element.offsetWidth*.65):0;
       const bubbleX=THREE.MathUtils.clamp(x+sideOffset,120,innerWidth-120);
-      bubble.element.classList.toggle('hidden',!inView||bubbleY>innerHeight-145);bubble.element.style.left=`${bubbleX}px`;bubble.element.style.top=`${bubbleY}px`;
+      bubble.element.classList.toggle('hidden',!inView||bubbleY>pickerTop-8);bubble.element.style.left=`${bubbleX}px`;bubble.element.style.top=`${bubbleY}px`;
     }else bubble.element.classList.add('hidden');
   }
 }
@@ -432,4 +438,4 @@ function animate(timestamp){
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;
 requestAnimationFrame(animate);
-setTimeout(()=>{if(!active.lastText&&!modalOpen()&&!document.hidden){remark(active);focusGame();}},900);
+setTimeout(()=>{if(!active.lastText&&!modalOpen()&&!document.hidden){remark(active);if(document.activeElement===document.body)focusGame();}},900);

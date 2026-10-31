@@ -22,7 +22,7 @@ Run the command from this `numbertown-mountain-summit` worktree and open [http:/
 | Shift + movement | A faster stroll |
 | Drag the world / Q and R | Orbit the camera; vertical dragging changes elevation |
 | Mouse wheel / + and − | Zoom |
-| C / camera reset button | Restore the starting view |
+| C | Restore the starting view |
 | Space | Hop |
 | F / Kick button | Kick the nearby football in the direction your character faces |
 | E / feeling menu | Change expression |
@@ -30,10 +30,14 @@ Run the command from this `numbertown-mountain-summit` worktree and open [http:/
 | M / map button | Open or close the town map |
 | 1–9 and 0 | Choose One through Ten |
 | Shift + 1–9 and 0 | Choose Eleven through Twenty |
+| Tab + number | Hold Tab, type 1–25, then release Tab to choose a friend |
+| Tab, number, Enter / number field + Go | Choose any friend without holding keys together |
 | Character cards, previous/next, or click a character | Choose any friend |
 | Place buttons | Travel to a town destination or activity |
 | Follow trail / Walk down | Walk the mountain route automatically; Pause walk stops the guide |
 | View sea button on the scenic deck | Turn the camera toward the beach and sea |
+
+The compact bottom bar keeps all twenty-five numbered thumbnails in a scrolling row. From the game, **Tab** focuses the number field; **Escape** cancels. While using other controls or a dialog, Tab and Shift + Tab still move keyboard focus normally. Drag or use **Q / R** to look around; the small **− / +** control adjusts zoom.
 
 Touch screens have a direction pad, hop button, and Kick control. Drag with one finger to orbit; pinch with two to zoom. **WASD, arrow keys, or the direction pad take over from a guided walk immediately.** Opening Help or the map, choosing another friend, or losing window focus stops the guided walk and clears held inputs. Choose Follow trail or Walk down again to continue.
 
@@ -56,6 +60,7 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 ## Source
 
 - `dist/game.js`: Three.js scene, perspective camera, input, selection, dialogue, and interface.
+- `dist/character-shortcut.js`: Tab-and-number selection with input validation and normal menu focus navigation.
 - `dist/character-data.js`: exact unit-cube layouts and dimensions for all twenty-five characters.
 - `dist/characters3d.js`: mesh bodies, faces, accessories, and animation.
 - `dist/geography.js`: shared world dimensions, river course, bridges, coast, mountain range, hill, and activity locations.
@@ -76,4 +81,4 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 
 Run `npm test` or `node --test --test-concurrency=1 tests/*.test.js` for the geometry, building counts, movement, routes, roaming, terrain, park animation, football physics, and dialogue checks. The suites run sequentially so the roaming timing checks do not compete with other CPU-heavy test files. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
 
-The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.3 preview is developed and tested locally in an isolated worktree.
+The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.4 preview is developed and tested locally in an isolated worktree.
