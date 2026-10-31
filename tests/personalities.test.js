@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EMOTIONS, chooseRemark } from '../dist/personalities.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
-const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'lookout'];
+const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'mountain-trail', 'summit', 'lookout'];
 const samples = [0, .12, .25, .4, .58, .75, .99];
 
 test('all six moods have usable, unique display options', () => {
@@ -51,6 +51,8 @@ test('landmark dialogue stays relevant to its location', () => {
     river: /river/i,
     beach: /beach|sea|sand|shore|wave/i,
     mountains: /mountain|peak/i,
+    'mountain-trail': /mountain|trail|path|summit/i,
+    summit: /summit|deck/i,
     lookout: /lookout|sea|view/i,
   };
   for (const place of places) {
@@ -60,6 +62,21 @@ test('landmark dialogue stays relevant to its location', () => {
       }
     }
   }
+});
+
+test('the mountain trail and summit have distinct dialogue for every feeling', () => {
+  for (const emotion of moods) {
+    const trail = samples.map(sample => chooseRemark(11, { place: 'mountain-trail', emotion }, () => sample));
+    const summit = samples.map(sample => chooseRemark(11, { place: 'summit', emotion }, () => sample));
+    assert.ok(new Set(trail.map(line => line.text)).size >= 2);
+    assert.ok(new Set(summit.map(line => line.text)).size >= 2);
+    assert.ok(trail.every(line => /trail|path|summit/i.test(line.text)));
+    assert.ok(summit.every(line => /summit|deck/i.test(line.text)));
+    assert.ok(trail.every(line => !summit.some(other => line.text === other.text)));
+    assert.ok([...trail, ...summit].every(line => line.emotion === emotion));
+  }
+  const mountainLines = samples.map(sample => chooseRemark(1, { place: 'mountains' }, () => sample).text);
+  assert.ok(mountainLines.some(text => /paved mountain trail/i.test(text)), 'the foothills should introduce the new route');
 });
 
 test('the scenic lookout has sea-view remarks in every emotion', () => {

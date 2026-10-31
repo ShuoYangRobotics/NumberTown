@@ -78,7 +78,7 @@ test('landmark arrivals and all neighborhoods connect to the town square for a w
 });
 
 test('the banks have fifty west homes, twenty east homes, and ten stores around a clear large square', () => {
-  assert.deepEqual(WORLD, { width: 440, depth: 460, margin: 2 });
+  assert.deepEqual(WORLD, { width: 440, depth: 460, minZ: -90, margin: 2 });
   assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'west').length, 50);
   assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'east').length, 20);
   assert.equal(BUILDINGS.filter(b => ['shop', 'bakery', 'cafe'].includes(b.kind)).length, 10);

@@ -8,18 +8,21 @@ import {
   HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK,
   TERRAIN_OBSTACLES, groundHeight, riverX, riverWidth,
 } from '../dist/terrain-data.js';
+import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
 
 const radius = 2.7;
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
-const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK];
+const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
 
 // Independent footprint checks exercise the assembled map, not just the
 // navigation implementation or each attraction in isolation.
 function obstruction(x, z) {
   const inset = WORLD.margin + radius;
-  if (x < inset || z < inset || x > WORLD.width - inset || z > WORLD.depth - inset) return 'world boundary';
+  if (x < (WORLD.minX ?? 0) + inset || z < (WORLD.minZ ?? 0) + inset || x > WORLD.width - inset || z > WORLD.depth - inset) return 'world boundary';
   for (const obstacle of obstacles) {
-    if (obstacle.radius !== undefined) {
+    if (typeof obstacle.blocks === 'function') {
+      if (obstacle.blocks(x, z, radius)) return obstacle.id;
+    } else if (obstacle.radius !== undefined) {
       if (Math.hypot(x - obstacle.x, z - obstacle.z) < radius + obstacle.radius) return obstacle.id;
     } else {
       const dx = Math.max(obstacle.x - x, 0, x - obstacle.x - obstacle.w);
@@ -142,7 +145,9 @@ test('the river cannot be bypassed on foot except through the three bridge corri
     assert.ok(obstruction(riverX(z),z),`Unprotected river crossing at z${z}`);
   }
   for(let x=5;x<WORLD.width-5;x+=2){
-    assert.ok(obstruction(x,MOUNTAINS.maxZ-1),`Mountain can be entered at x${x}`);
+    if (!isOnMountainRoute(x, MOUNTAINS.maxZ - 1, radius)) {
+      assert.ok(obstruction(x,MOUNTAINS.maxZ-1),`Mountain can be entered away from its trail at x${x}`);
+    }
     assert.ok(obstruction(x,COAST.seaStart+2),`Sea can be entered at x${x}`);
   }
 });

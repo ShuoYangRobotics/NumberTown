@@ -1,5 +1,6 @@
 /** Rendering and walking share the immutable geographic plan. */
 import { WORLD, HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, MOUNTAINS, riverX, riverWidth } from './geography.js';
+import { mountainWalkHeight, isOnMountainRoute, SUMMIT_OBSTACLES } from './mountain-route.js';
 export { HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, MOUNTAINS, riverX, riverWidth } from './geography.js';
 
 const smoothstep = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
@@ -14,6 +15,8 @@ export function bridgeHeight(bridge, x) {
   return bridge.height * smoothstep(distanceToEnd / 6);
 }
 export function groundHeight(x, z) {
+  const mountain = mountainWalkHeight(x, z);
+  if (mountain !== null) return mountain;
   let height = hillHeight(x, z);
   if (Math.abs(x - DECK.x) <= DECK.width / 2 && Math.abs(z - DECK.z) <= DECK.depth / 2) height = DECK.height;
   for (const bridge of BRIDGES) {
@@ -48,7 +51,9 @@ const west = DECK.x - DECK.width / 2, east = DECK.x + DECK.width / 2;
 const north = DECK.z - DECK.depth / 2, south = DECK.z + DECK.depth / 2;
 export const TERRAIN_OBSTACLES = Object.freeze([
   ...water,
-  { id: 'mountain-range', kind: 'mountain', x: -100, z: RIVER.startZ - 40, w: WORLD.width + 200, d: MOUNTAINS.maxZ - RIVER.startZ + 40 },
+  { id: 'mountain-range', kind: 'mountain', x: -100, z: RIVER.startZ - 40, w: WORLD.width + 200, d: MOUNTAINS.maxZ - RIVER.startZ + 40,
+    blocks: (x, z, radius) => z - radius < MOUNTAINS.maxZ && !isOnMountainRoute(x, z, radius) },
+  ...SUMMIT_OBSTACLES,
   { id: 'open-sea', kind: 'sea', x: -500, z: COAST.seaStart, w: WORLD.width + 1000, d: COAST.seaEnd - COAST.seaStart + 100 },
   { id: 'deck-west', kind: 'rail', x: west - .1, z: north - .1, w: .2, d: DECK.depth + .2 },
   { id: 'deck-east', kind: 'rail', x: east - .1, z: north - .1, w: .2, d: DECK.depth + .2 },

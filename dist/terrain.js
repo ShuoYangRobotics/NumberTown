@@ -1,6 +1,8 @@
 import * as THREE from './vendor/three.module.js';
 import { WORLD } from './geography.js';
 import { HILL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_TRAIL, HILL_TREES, BEACH_UMBRELLAS, hillHeight, bridgeHeight, riverX, riverWidth } from './terrain-data.js';
+import { SUMMIT, mountainHeight, nearestTrailPoint } from './mountain-route.js';
+import { createMountainSummit } from './mountain-summit.js';
 
 /** Complete geographic scenery. Static props share instanced draw calls. */
 export function createLandscape() {
@@ -230,28 +232,28 @@ export function createLandscape() {
   }
 
   // Tall faceted mountains are a closed, volumetric landform with a deep gorge.
-  const peaks=[[-75,4,64,90,76],[20,12,68,78,70],[104,1,74,76,79],[177,14,70,67,70],[304,5,74,76,79],[382,16,71,74,70],[478,0,74,94,83],[565,12,65,80,70]];
   const smooth=value=>{const t=Math.max(0,Math.min(1,value));return t*t*(3-2*t);};
-  function mountainY(x,z) {
-    let y=13+5*Math.sin(x*.027+.3)**2;
-    for(const [px,pz,h,rx,rz] of peaks) {
-      const r=Math.hypot((x-px)/rx,(z-pz)/rz);
-      if(r<1)y=Math.max(y,h*Math.pow(1-r,.69));
-    }
-    y*=.94+.06*Math.sin(x*.67+z*.19)*Math.cos(z*.47-x*.13);
-    y*=smooth((MOUNTAINS.maxZ-z)/22);
-    const gorge=smooth((Math.abs(x-riverX(z))-10)/14);
-    const backWall=smooth((-52-z)/13);
-    return Math.max(0,y*(gorge+(1-gorge)*backWall));
-  }
-  const mountainVertices=[],mountainIndices=[],mountainColors=[],columns=100,rows=38,minX=-130,maxX=WORLD.width+130;
+  // Fine terrain under the spiral supports its full width; distant peaks keep
+  // a coarser horizontal grid so the expanded mountain stays inexpensive.
+  const mountainXs=[];
+  for(let x=-130;x<40;x+=6)mountainXs.push(x);
+  for(let x=40;x<170;x+=.75)mountainXs.push(x);
+  for(let x=170;x<WORLD.width+130;x+=6)mountainXs.push(x);
+  mountainXs.push(WORLD.width+130);
+  const mountainVertices=[],mountainIndices=[],mountainColors=[],columns=mountainXs.length-1,rows=192,maxMountainZ=79;
   const rockLow=new THREE.Color('#879c86'),rockHigh=new THREE.Color('#aab3a9'),snow=new THREE.Color('#e8eade'),rockTint=new THREE.Color();
   for(let row=0;row<=rows;row++)for(let column=0;column<=columns;column++) {
-    const x=minX+(maxX-minX)*column/columns,z=MOUNTAINS.minZ+(MOUNTAINS.maxZ-MOUNTAINS.minZ)*row/rows,y=mountainY(x,z);
+    const x=mountainXs[column],z=MOUNTAINS.minZ+(maxMountainZ-MOUNTAINS.minZ)*row/rows,y=mountainHeight(x,z);
     mountainVertices.push(x,y,z);rockTint.copy(rockLow).lerp(rockHigh,Math.min(1,y/60));
     if(y>49)rockTint.lerp(snow,smooth((y-49)/17));
     mountainColors.push(rockTint.r,rockTint.g,rockTint.b);
-    if(row<rows&&column<columns){const i=row*(columns+1)+column;mountainIndices.push(i,i+columns+1,i+1,i+1,i+columns+1,i+columns+2);}
+  }
+  for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+    const i=row*(columns+1)+column;
+    for(const triangle of [[i,i+columns+1,i+1],[i+1,i+columns+1,i+columns+2]]){
+      if(mountainVertices[i*3+2]>=MOUNTAINS.maxZ&&triangle.every(index=>mountainVertices[index*3+1]<.0001))continue;
+      mountainIndices.push(...triangle);
+    }
   }
   const border=[];
   for(let column=0;column<=columns;column++)border.push(column);
@@ -266,8 +268,10 @@ export function createLandscape() {
   const mountains=surface(mountainVertices,mountainIndices,'#ffffff','Rugged northern mountain range',{vertexColors:true,flatShading:true,roughness:1});
   mountains.geometry.setAttribute('color',new THREE.Float32BufferAttribute(mountainColors,3)); mountains.castShadow=true;
   mountains.userData.nonClimbable=true; mountains.userData.gorgeX=riverX(MOUNTAINS.ridgeZ);
+  root.add(createMountainSummit());
   for(let x=4;x<WORLD.width;x+=22) {
     if(Math.abs(x-riverX(61))<24)continue;
+    if(nearestTrailPoint(x,63).distance<SUMMIT.pathWidth/2+4)continue;
     ball(x,1.2,63,3.1,2.3,3.7,'#91a18c');
   }
   label('MOUNTAIN VIEW',139,1.2,77,5.2,1.1);

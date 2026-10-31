@@ -5,6 +5,7 @@ import { WORLD } from '../dist/geography.js';
 import { HILL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_TRAIL, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, RIVER_LANDMARK, BEACH_LANDMARK, MOUNTAIN_LANDMARK, hillHeight, bridgeHeight, groundHeight, riverX, riverWidth, TERRAIN_OBSTACLES } from '../dist/terrain-data.js';
 import { collides, moveWithCollisions } from '../dist/navigation.js';
 import { createLandscape } from '../dist/terrain.js';
+import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
 
  test('the relocated hill rises continuously and has a level deck above the sea',()=>{
@@ -66,12 +67,18 @@ test('the river remains blocked along its full town length except the three cros
   assert.ok(riverWidth(COAST.seaStart)>30,'the river must widen into an estuary');
 });
 
-test('mountains including the gorge are inaccessible, while their viewing arrival is clear',()=>{
-  for(const x of [20,130,240,320,420])for(const z of [10,35,60,68])assert.equal(collides(x,z,TERRAIN_OBSTACLES,WORLD,.6),true);
+test('mountains and the gorge remain inaccessible away from the paved summit route',()=>{
+  for(const x of [20,130,240,320,420])for(const z of [10,35,60,68]){
+    if (!isOnMountainRoute(x, z, .6)) assert.equal(collides(x,z,TERRAIN_OBSTACLES,WORLD,.6),true,`unprotected mountainside at ${x},${z}`);
+  }
   const player={...MOUNTAIN_LANDMARK.arrival,radius:2.7};
   assert.equal(collides(player.x,player.z,TERRAIN_OBSTACLES,WORLD,player.radius),false);
-  moveWithCollisions(player,0,-50,TERRAIN_OBSTACLES,WORLD);
-  assert.ok(player.z>=MOUNTAINS.maxZ+player.radius-1e-7);
+  // A straight-line shortcut from the viewing area must either stop at the
+  // mountain boundary or remain wholly inside the dedicated walking route.
+  for (let step = 0; step < 250; step++) {
+    moveWithCollisions(player,0,-.2,TERRAIN_OBSTACLES,WORLD);
+    assert.ok(player.z>=MOUNTAINS.maxZ+player.radius-1e-7 || isOnMountainRoute(player.x,player.z,player.radius));
+  }
 });
 
 test('beach sand is walkable and the sea blocks travel beyond the shoreline',()=>{
@@ -84,7 +91,7 @@ test('beach sand is walkable and the sea blocks travel beyond the shoreline',()=
 });
 
 test('every geographic landmark has an open arrival for the widest supported footprint',()=>{
-  for(const place of [HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,MOUNTAIN_LANDMARK]){
+  for(const place of [HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK]){
     assert.equal(collides(place.arrival.x,place.arrival.z,TERRAIN_OBSTACLES,WORLD,2.7),false,`${place.name} arrival blocked`);
   }
 });

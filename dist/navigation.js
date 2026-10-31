@@ -8,8 +8,9 @@ export function movementVector(horizontal, vertical, yaw, speed = 6) {
 
 export function collides(x, z, obstacles, world, radius = .6) {
   const inset = (world.margin ?? 0) + radius;
-  if (x < inset || z < inset || x > world.width - inset || z > world.depth - inset) return true;
+  if (x < (world.minX ?? 0) + inset || z < (world.minZ ?? 0) + inset || x > world.width - inset || z > world.depth - inset) return true;
   return obstacles.some(o => {
+    if (typeof o.blocks === 'function') return o.blocks(x, z, radius);
     if (o.radius != null) return Math.hypot(x - o.x, z - o.z) < radius + o.radius;
     const px = Math.max(o.x, Math.min(o.x + o.w, x));
     const pz = Math.max(o.z, Math.min(o.z + o.d, z));

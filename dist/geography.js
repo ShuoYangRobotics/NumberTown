@@ -1,5 +1,5 @@
 /** Shared geographic plan. +x is east, +z is south; all lengths are block units. */
-export const WORLD = Object.freeze({width:440,depth:460,margin:2});
+export const WORLD = Object.freeze({width:440,depth:460,minZ:-90,margin:2});
 export const RIVER = Object.freeze({startZ:-80,endZ:440,width:14});
 export const riverX = z => 240 + 6*Math.sin((z-80)/60);
 export const riverWidth = z => 14 + 20*Math.max(0,Math.min(1,(z-354)/52));

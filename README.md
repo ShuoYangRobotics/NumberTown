@@ -1,18 +1,18 @@
 # NumberTown
 
-A cozy, fully 3D browser playground with fifteen Numberblock friends in a **440 × 460** world. NumberTown has exactly **70 houses—50 on the west bank and 20 on the east bank—plus 10 stores and 3 public buildings**: the library, school, and town hall. A continuous river flows from the northern mountain gorge through town to the southern beach and sea. Three bridges connect the two banks.
+A cozy, fully 3D browser playground with fifteen Numberblock friends in a world spanning **440 × 550** units, including the new northern mountain terrain. NumberTown has exactly **70 houses—50 on the west bank and 20 on the east bank—plus 10 stores and 3 public buildings**: the library, school, and town hall. A continuous river flows from the northern mountain gorge through town to the southern beach and sea. Three bridges connect the two banks.
 
-Connected streets lead to an enlarged town square with a colorful Rubik’s cube statue, a larger duck pond, the east-bank Ferris wheel park and football pitch, and a hilltop lookout over the beach and sea.
+Connected streets lead to an enlarged town square with a colorful Rubik’s cube statue, a larger duck pond, the east-bank Ferris wheel park and football pitch, and a hilltop lookout over the beach and sea. A winding paved route now climbs one northern mountain to a high summit viewing deck.
 
 The game runs locally with a vendored Three.js renderer; no build step, account, or external asset downloads are required.
 
 ## Run locally
 
 ```sh
-python3 -m http.server 5180 --bind 127.0.0.1 --directory dist
+python3 -m http.server 5181 --bind 127.0.0.1 --directory dist
 ```
 
-Open **http://127.0.0.1:5180** in a browser supporting WebGL 2. `npm start` runs the same server. Use a web server rather than opening the HTML file directly, since the game uses JavaScript modules.
+Run the command from this `numbertown-mountain-summit` worktree and open [http://127.0.0.1:5181](http://127.0.0.1:5181) in a browser supporting WebGL 2. `npm start` runs the same isolated preview. The original `numberblock-town` project and its preview on port **5180** remain unchanged. Use a web server rather than opening the HTML file directly, since the game uses JavaScript modules.
 
 ## Play
 
@@ -31,9 +31,10 @@ Open **http://127.0.0.1:5180** in a browser supporting WebGL 2. `npm start` runs
 | Shift + 1–5 | Choose Eleven through Fifteen |
 | Character cards, previous/next, or click a character | Choose any friend |
 | Place buttons | Travel to a town destination or activity |
+| Follow trail / Walk down | Walk the mountain route automatically; Pause walk stops the guide |
 | View sea button on the scenic deck | Turn the camera toward the beach and sea |
 
-Touch screens have a direction pad, hop button, and Kick control. Drag with one finger to orbit; pinch with two to zoom. Help pauses walking. Losing window focus clears held inputs.
+Touch screens have a direction pad, hop button, and Kick control. Drag with one finger to orbit; pinch with two to zoom. **WASD, arrow keys, or the direction pad take over from a guided walk immediately.** Opening Help or the map, choosing another friend, or losing window focus stops the guided walk and clears held inputs. Choose Follow trail or Walk down again to continue.
 
 ## Explore and play
 
@@ -42,7 +43,7 @@ Touch screens have a direction pad, hop button, and Kick control. Drag with one 
 - **Football:** the east-bank striped pitch has two goals, nets, bleachers, and a rolling black-and-white ball. Walk into the ball to dribble gently, or press **F** / tap **Kick** for a stronger kick. A whole ball crossing between the posts scores a goal. After a brief pause, the ball returns to the center and keeps the score. Shots outside the goal mouth bounce back into play.
 - **Sunny Hill and coast:** follow the winding trail up the climbable 12-metre hill to the viewing deck. Use **View sea** to frame the beach and sea, or orbit freely to explore the view.
 - **River and bridges:** follow one continuous river from the mountain gorge to its mouth at the sea. The North, Market, and Coast bridges connect the west and east neighborhoods. Walking follows the bridge and hillside elevations.
-- **Northern mountains:** the tall range forms a scenic boundary around the river gorge. These mountains cannot be climbed; Sunny Hill provides the walking route to an elevated viewpoint.
+- **Northern mountain summit:** choose the mountain trail destination, then follow the winding paved route with **WASD** or the direction pad, or choose **Follow trail** for a guided ascent. The progress bar tracks the climb to the high viewing deck, where you can orbit the camera to enjoy the town, river, and distant coast. **Walk down** guides the return, and **Pause walk** stops either direction. Movement keys or the direction pad take over whenever you like. This marked route opens one summit; the other mountain slopes remain blocked. The lower Sunny Hill trail is still available separately.
 - **Town map:** press **M** to find both neighborhoods, the three crossings, and the activity areas in the larger world.
 
 All bodies are made from **exactly the corresponding number of equal 1×1×1 cubes**. Every cube has real depth and is visible from any angle; the world has a perspective camera, volumetric buildings, and dynamic lighting and shadows. Characters keep their own locations. Collisions account for their different widths, using a conservative circular footprint to allow safe turns.
@@ -63,6 +64,8 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 - `dist/football.js`: pitch, goals, ball rendering, kicking, dribbling, scoring, and restarts.
 - `dist/terrain-data.js`: terrain landmarks, obstacles, and walking heights for the hill, deck, and three bridges.
 - `dist/terrain.js`: mountain gorge, continuous river, three bridges, hill trail, lookout, beach, and sea geometry.
+- `dist/mountain-route.js`: shared summit, paved route, walking heights, boundaries, and progress data.
+- `dist/mountain-summit.js`: mountain surfaces, paved spiral, summit deck, and summit scenery.
 - `dist/town-map.js`: town map and destination display.
 - `dist/navigation.js`: camera-relative motion and collision handling.
 - `dist/personalities.js`: six emotions and character-specific contextual dialogue.
@@ -70,4 +73,4 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 
 Run `npm test` or `node --test tests/*.test.js` for the geometry, building counts, movement, routes, terrain, park animation, football physics, and dialogue checks. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
 
-The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.0 expansion is developed and tested locally.
+The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.1 summit preview is developed and tested locally in an isolated worktree.
