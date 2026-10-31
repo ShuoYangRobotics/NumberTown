@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { SUMMIT, SUMMIT_DECK, MOUNTAIN_TRAIL, MOUNTAIN_PAVING_END, mountainWalkHeight, nearestTrailPoint } from './mountain-route.js';
+import { SUMMIT, SUMMIT_DECK, SUMMIT_RAILS, MOUNTAIN_TRAIL, MOUNTAIN_PAVING_END, mountainWalkHeight } from './mountain-route.js';
 
 /** Paved mountain walk, protective rails, and a furnished summit platform. */
 export function createMountainSummit(){
@@ -88,16 +88,11 @@ export function createMountainSummit(){
   const deck=new THREE.Mesh(new THREE.BoxGeometry(SUMMIT_DECK.width,.48,SUMMIT_DECK.depth),material('#b7a080'));
   deck.name='Mountain summit deck';deck.position.set(SUMMIT_DECK.x,SUMMIT_DECK.height-.24,SUMMIT_DECK.z);deck.receiveShadow=true;deck.castShadow=true;root.add(deck);
   for(let x=SUMMIT_DECK.x-7.7;x<SUMMIT_DECK.x+8;x+=.55)box('#e4d3b2',x,SUMMIT_DECK.height+.008,SUMMIT_DECK.z,.51,.016,13.7);
-  const west=SUMMIT_DECK.x-8,east=SUMMIT_DECK.x+8,north=SUMMIT_DECK.z-7,south=SUMMIT_DECK.z+7;
-  for(const [a,b] of [[[west,north],[east,north]],[[east,north],[east,south]],[[east,south],[west,south]],[[west,south],[west,north]]]){
-    const count=Math.ceil(Math.hypot(a[0]-b[0],a[1]-b[1]));
-    for(let i=0;i<count;i++){
-      const x=a[0]+(b[0]-a[0])*i/count,z=a[1]+(b[1]-a[1])*i/count,nx=a[0]+(b[0]-a[0])*(i+1)/count,nz=a[1]+(b[1]-a[1])*(i+1)/count;
-      const projection=nearestTrailPoint((x+nx)/2,(z+nz)/2);
-      if(projection.progress>.93&&projection.distance<half+.4)continue;
-      beam([x,72+1.22,z],[nx,72+1.22,nz],.09,'#718f89');beam([x,72+.58,z],[nx,72+.58,nz],.055,'#a8b9a0');
-      if(i%2===0)box('#718f89',x,72+.65,z,.16,1.3,.16);
-    }
+  for(const rail of SUMMIT_RAILS){
+    const {x1,z1,x2,z2}=rail,count=Math.ceil(Math.hypot(x2-x1,z2-z1)/2);
+    beam([x1,72+1.22,z1],[x2,72+1.22,z2],.09,'#718f89');
+    beam([x1,72+.58,z1],[x2,72+.58,z2],.055,'#a8b9a0');
+    for(let i=0;i<=count;i++)box('#718f89',x1+(x2-x1)*i/count,72+.65,z1+(z2-z1)*i/count,.16,1.3,.16);
   }
   for(const [x,z] of [[98.65,2.4],[109.35,-1]]){
     box('#b69064',x,72+.55,z,1.1,.18,3.2);box('#b69064',x+(x<104?-.42:.42),72+1.12,z,.18,1.05,3.2);

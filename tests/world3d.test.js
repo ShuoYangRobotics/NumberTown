@@ -23,8 +23,8 @@ function blocked(x, z) {
   });
 }
 
-test('all fifteen friends start clear of scenery and each other, including wide friends', () => {
-  assert.equal(FRIEND_STARTS.length, 15);
+test('all twenty friends start clear of scenery and each other, including wide friends', () => {
+  assert.equal(FRIEND_STARTS.length, 20);
   for (const [i, p] of FRIEND_STARTS.entries()) {
     assert.ok(!blocked(p.x, p.z), `Friend ${i + 1} starts inside scenery`);
     for (const q of FRIEND_STARTS.slice(i + 1)) {

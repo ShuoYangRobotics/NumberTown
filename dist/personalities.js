@@ -1,4 +1,6 @@
 /** Pure, local dialogue: no timers, browser APIs, or network services. */
+import { CHARACTERS } from './character-data.js';
+
 export const EMOTIONS = Object.freeze([
   { id: 'happy', label: 'Happy', icon: '😊' },
   { id: 'excited', label: 'Excited', icon: '🤩' },
@@ -82,7 +84,7 @@ const PERSONAL = {
     sad: ['My square feels quiet. A friend can sit with me.'],
   },
   10: {
-    happy: ['Count to ten, then explore again!', 'Ten blocks, two rows of five bright smiles!', 'Ten little stars for ten wonderful friends!'],
+    happy: ['Count to ten, then explore again!', 'Five rows of two blocks. That makes ten!', 'Ten little stars for ten wonderful friends!'],
     excited: ['Ten, nine, eight… let’s blast off into fun!'],
     curious: ['What shall we count all the way to ten?'],
     surprised: ['Wow! Ten out of ten for that surprise!'],
@@ -129,7 +131,107 @@ const PERSONAL = {
     sleepy: ['Fifteen sleepy blocks. Time for a staircase rest.'],
     sad: ['A small step is enough today. My squad is here.'],
   },
+  16: {
+    happy: ['Sixteen blocks, ready for a square dance!', 'A square party is my kind of celebration.', 'Four by four, let’s square-dance across the floor!'],
+    excited: ['Sixteen cheers! Time for a super square dance!'],
+    curious: ['What patterns can we make at our square party?'],
+    surprised: ['Oh! A surprise guest at my square dance!'],
+    sleepy: ['Sixteen sleepy blocks. The square dance can wait.'],
+    sad: ['Even a square dancer can take a quiet moment.'],
+  },
+  17: {
+    happy: ['Seventeen blocks, and a world of colors to paint!', 'My next painting starts with one bright idea.', 'A rainbow and a paintbrush make me smile!'],
+    excited: ['Seventeen cheers! Let’s paint a colorful adventure!'],
+    curious: ['Which colors could I mix for my next painting?'],
+    surprised: ['Oh! My paintbrush made a wonderful new color!'],
+    sleepy: ['My paintbrush can rest until tomorrow.'],
+    sad: ['I can paint my feelings, one gentle color at a time.'],
+  },
+  18: {
+    happy: ['Eighteen blocks, ready for a super rectangle rescue!', 'So many rectangles, so many ways to help!', 'Three by six or two by nine: rectangle time!'],
+    excited: ['Eighteen cheers! Super rectangles to the rescue!'],
+    curious: ['Which rectangle will help our friends today?'],
+    surprised: ['Wow! A new rectangle to try with eighteen blocks!'],
+    sleepy: ['This super rectangle is ready for a rest.'],
+    sad: ['Even a rectangle hero can ask a friend for help.'],
+  },
+  19: {
+    happy: ['Nineteen blocks, and so many shapes to imagine!', 'A surprising shape can be a work of art.', 'One less than twenty, full of creative ideas!'],
+    excited: ['Nineteen cheers! Let’s invent a brand new shape!'],
+    curious: ['What creative shape could my nineteen blocks make?'],
+    surprised: ['Oh! That unexpected shape gives me a new idea!'],
+    sleepy: ['My shape ideas can wait for a little rest.'],
+    sad: ['My shape is my own. A kind friend helps me remember.'],
+  },
+  20: {
+    happy: ['Twenty blocks, ready to dance through town!', 'Two tens make a wonderful dancing team!', 'A little dance puts a spring in my twenty blocks.'],
+    excited: ['Twenty cheers! Let’s dance into our next adventure!'],
+    curious: ['Can we invent a dance with two teams of ten?'],
+    surprised: ['Oh! That surprise deserves a little dance!'],
+    sleepy: ['Twenty dancing blocks need a quiet rest.'],
+    sad: ['A gentle dance with a friend might brighten my day.'],
+  },
 };
+
+const characterNumber = number => {
+  const value = Number(number);
+  return Number.isInteger(value) && value >= 1 && value <= 20 ? value : 1;
+};
+
+/** Derive short facts from arithmetic and the actual unit-cube layout. */
+function buildMathFacts(number) {
+  const facts = new Set([`I have ${number} ${number === 1 ? 'block' : 'equal blocks'}.`]);
+  const add = (a, b) => facts.add(`${a} + ${b} = ${number}.`);
+  add(Math.floor(number / 2), Math.ceil(number / 2));
+  if (number >= 10) add(10, number - 10);
+  if (number > 1) add(number - 1, 1);
+  if (number > 1 && Number.isInteger(Math.sqrt(number))) add(number - Math.sqrt(number), Math.sqrt(number));
+  facts.add(`${number + 1} - 1 = ${number}.`);
+  facts.add(`${number * 2} divided by 2 is ${number}.`);
+  facts.add(number % 2 === 0
+    ? `${number} is even: ${number / 2} pairs of blocks.`
+    : `${number} is odd: ${Math.floor(number / 2)} pairs and 1 left over.`);
+
+  const factors = [];
+  for (let a = 1; a * a <= number; a++) {
+    if (number % a === 0) factors.push([a, number / a]);
+  }
+  const definition = CHARACTERS.find(item => item.number === number);
+  const fullRectangle = definition && definition.cells.length === number
+    && definition.width * definition.height === number
+    && new Set(definition.cells.map(cell => `${cell.x},${cell.y}`)).size === number;
+  if (fullRectangle) {
+    const { width, height } = definition;
+    facts.add(`I am a ${width} by ${height} ${width === height ? 'square' : 'rectangle'}!`);
+  }
+  for (const [a, b] of factors) {
+    facts.add(`${a} × ${b} = ${number}.`);
+    facts.add(`I can arrange into a ${a} by ${b} ${a === b ? 'square' : 'rectangle'}!`);
+  }
+  if (number === 1) facts.add('1 is neither prime nor composite.');
+  else if (factors.length === 1) facts.add(`${number} is prime: its only factors are 1 and ${number}.`);
+  else {
+    const [a, b] = factors[1];
+    facts.add(`${number} is composite: ${a} × ${b} = ${number}.`);
+  }
+  const root = Math.sqrt(number);
+  if (Number.isInteger(root)) facts.add(`${number} is a square number: ${root} × ${root} = ${number}.`);
+
+  if (definition) {
+    const columns = Array.from({ length: definition.width }, (_, x) => definition.cells.filter(cell => cell.x === x).length);
+    if (columns.length > 1 && columns.every((height, index) => height === index + 1)) {
+      facts.add(`My ${columns.length} steps have ${columns.join(' + ')} = ${number} blocks.`);
+    }
+  }
+  return Object.freeze([...facts]);
+}
+
+const MATH_FACTS = Object.freeze(Array.from({ length: 20 }, (_, index) => buildMathFacts(index + 1)));
+
+/** Read-only facts for One through Twenty; unknown numbers fall back to One. */
+export function getMathFacts(number) {
+  return MATH_FACTS[characterNumber(number) - 1];
+}
 
 const PLACES = {
   library: {
@@ -270,16 +372,18 @@ const FRIEND_LINES = {
  * emotion always wins, including at landmarks. Unknown characters use One's
  * personality. A caller-owned lastText prevents immediate repetition without
  * sharing mutable state between characters; random is injectable for tests.
+ * math:true guarantees an arithmetic/shape fact and adds kind:'math', while
+ * retaining the requested emotion even when a place or walking context exists.
  */
 export function chooseRemark(number, context = {}, random = Math.random) {
   const mood = EMOTIONS.some(item => item.id === context.emotion) ? context.emotion : 'happy';
-  const personality = PERSONAL[number] || PERSONAL[1];
+  const personality = PERSONAL[characterNumber(number)];
   const place = PLACES[context.place];
-  const candidates = place
+  const candidates = context.math === true ? [...getMathFacts(number)] : place
     ? [...place[mood]]
     : [...personality[mood], ...(mood === 'happy' ? [] : MOOD_LINES[mood])];
 
-  if (!place) {
+  if (!place && context.math !== true) {
     if (context.moving) candidates.push(MOVING_LINES[mood]);
     if (typeof context.nearbyName === 'string' && context.nearbyName.trim()) {
       candidates.push(FRIEND_LINES[mood](context.nearbyName.trim().slice(0, 20)));
@@ -290,5 +394,5 @@ export function chooseRemark(number, context = {}, random = Math.random) {
   const pool = alternatives.length ? alternatives : candidates;
   const sample = Number(random());
   const unit = Number.isFinite(sample) ? Math.max(0, Math.min(sample, 1)) : 0;
-  return { text: pool[Math.min(pool.length - 1, Math.floor(unit * pool.length))], emotion: mood };
+  return { text: pool[Math.min(pool.length - 1, Math.floor(unit * pool.length))], emotion: mood, ...(context.math === true ? { kind: 'math' } : {}) };
 }

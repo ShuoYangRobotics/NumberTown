@@ -86,21 +86,34 @@ function outlineBody(body, data) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     const outline = new THREE.LineSegments(geometry, lines.get(color)); outline.name = 'unit cube seams'; body.add(outline);
   }
-  if (data.number >= 10) {
-    // A raised red outer frame makes the ten-part unmistakable from any angle.
-    const w = data.number === 12 ? 3 : data.number === 15 ? 4 : 2;
-    const h = data.number === 12 ? 4 : 5;
-    const offset = -data.width / 2;
-    const perimeter = data.number === 15
-      ? [[0, 0], [4, 0], [4, 4], [3, 4], [3, 3], [2, 3], [2, 2], [1, 2], [1, 1], [0, 1]]
-      : [[0, 0], [w, 0], [w, h], [0, h]];
+  const framed=data.cells.filter(cell=>cell.outline==='#d9384a');
+  if (framed.length) {
+    // Follow the actual ten-part outline, including offset rectangles and
+    // notches. Twenty's golden outline deliberately has no red ten-frame.
+    const occupied=new Set(framed.map(cell=>`${cell.x},${cell.y}`)),edges=[];
+    for(const {x,y} of framed){
+      if(!occupied.has(`${x},${y-1}`))edges.push([[x,y],[x+1,y]]);
+      if(!occupied.has(`${x+1},${y}`))edges.push([[x+1,y],[x+1,y+1]]);
+      if(!occupied.has(`${x},${y+1}`))edges.push([[x+1,y+1],[x,y+1]]);
+      if(!occupied.has(`${x-1},${y}`))edges.push([[x,y+1],[x,y]]);
+    }
+    const remaining=new Map(edges.map(edge=>[edge[0].join(','),edge]));
+    const contours=[];
+    while(remaining.size){
+      const first=remaining.values().next().value,contour=[];let edge=first;
+      while(edge){contour.push(edge[0]);remaining.delete(edge[0].join(','));edge=remaining.get(edge[1].join(','));}
+      contours.push(contour);
+    }
+    for(const perimeter of contours){
     for (const z of [-.508, .508]) {
       const curve = new THREE.CurvePath();
       perimeter.forEach(([x, y], i) => {
         const next = perimeter[(i + 1) % perimeter.length];
-        curve.add(new THREE.LineCurve3(new THREE.Vector3(offset + x, FEET + y, z), new THREE.Vector3(offset + next[0], FEET + next[1], z)));
+        curve.add(new THREE.LineCurve3(new THREE.Vector3(x-data.width/2, FEET+y, z),new THREE.Vector3(next[0]-data.width/2,FEET+next[1],z)));
       });
-      body.add(mesh(new THREE.TubeGeometry(curve, perimeter.length * 6, .022, 6, true), '#da3247', 'red ten frame'));
+      const frame=mesh(new THREE.TubeGeometry(curve,perimeter.length*6,.022,6,true),'#da3247','red ten frame');
+      frame.userData.outlineCells=framed.length;frame.userData.perimeter=perimeter.map(([x,y])=>({x,y}));body.add(frame);
+    }
     }
   }
 }
@@ -145,6 +158,57 @@ function skateboard(parent) {
   }
   return board;
 }
+function megaphone(parent){
+  const prop=new THREE.Group();prop.name='purple megaphone';prop.position.set(-.18,.07,.15);prop.rotation.z=-.18;parent.add(prop);
+  const cone=mesh(new THREE.CylinderGeometry(.29,.105,.5,24,1,true),'#fff9ef','megaphone horn');cone.rotation.z=Math.PI/2;prop.add(cone);
+  const rim=mesh(new THREE.TorusGeometry(.29,.045,8,24),'#7135b2','megaphone rim');rim.rotation.y=Math.PI/2;rim.position.x=-.25;prop.add(rim);
+  ball(prop,-.255,0,0,.025,.22,.22,'#c7b1df','megaphone inside');
+  box(prop,.17,-.16,0,.12,.3,.12,'#e24354','megaphone handle');
+}
+function paintTools(parent,side){
+  if(side<0){
+    const brush=new THREE.Group();brush.name='paintbrush';brush.rotation.z=.15;parent.add(brush);
+    tube(brush,[[0,-.12,.12],[0,.3,.12],[0,.6,.12]],.028,'#b17a3b');
+    box(brush,0,.52,.12,.09,.13,.08,'#d9d9c5');
+    ball(brush,0,.68,.12,.095,.16,.06,'#b75ab9','paintbrush bristles');
+  }else{
+    const palette=new THREE.Group();palette.name='paint palette';palette.position.set(.11,.08,.13);palette.rotation.z=-.28;parent.add(palette);
+    ball(palette,0,0,0,.36,.23,.055,'#f2cd8f','wooden palette');
+    for(const [i,color]of RAINBOW.entries()){
+      const angle=i/7*Math.PI*1.6-.5;ball(palette,Math.cos(angle)*.25,Math.sin(angle)*.15,.052,.052,.045,.021,color,'paint dab');
+    }
+    ball(palette,-.06,-.04,.056,.052,.06,.009,'#ab773c','palette thumb hole');
+  }
+}
+function splatter(parent,x,y,color,rotation=0){
+  const mark=new THREE.Group();mark.name='colorful paint splash';mark.position.set(x,y,.514);mark.rotation.z=rotation;parent.add(mark);
+  ball(mark,0,0,0,.085,.1,.013,color);
+  for(let i=0;i<5;i++){
+    const a=i*Math.PI*2/5+.3,r=.075+(i%2)*.025;
+    ball(mark,Math.cos(a)*r,Math.sin(a)*r,.004,.025+i%2*.009,.04,.012,color);
+  }
+  ball(mark,.14,.1,.001,.018,.02,.01,color);
+}
+function topHat(parent,top){
+  const hat=new THREE.Group();hat.name='purple top hat';hat.position.set(-.66,top+.09,0);hat.rotation.z=.26;parent.add(hat);
+  const brim=mesh(new THREE.CylinderGeometry(.52,.52,.09,28),'#734568','hat brim');hat.add(brim);
+  const crown=mesh(new THREE.CylinderGeometry(.35,.38,.8,28),'#845678','hat crown');crown.position.y=.43;hat.add(crown);
+  const ribbon=mesh(new THREE.CylinderGeometry(.382,.387,.14,28),'#efb437','gold hat band');ribbon.position.y=.14;hat.add(ribbon);
+}
+function bowTie(parent){
+  const bow=new THREE.Group();bow.name='white bow tie';bow.position.set(0,FEET+.37,.64);parent.add(bow);
+  for(const side of[-1,1]){
+    const outline=[[side*.04,.02],[side*.24,.19],[side*.37,.16],[side*.39,-.08],[side*.24,-.18],[side*.04,-.03]];
+    polygon(bow,outline,.07,'#fffbed',0,0,0);
+    tube(bow,outline.map(([x,y])=>[x,y,.08]),.018,'#514b55',true);
+  }
+  ball(bow,0,0,.09,.115,.14,.06,'#fffbed','bow knot');
+}
+function cane(parent){
+  const prop=new THREE.Group();prop.name='golden cane';prop.position.set(-.03,0,.08);parent.add(prop);
+  tube(prop,[[0,.19,0],[-.09,.3,0],[-.22,.25,0],[-.25,.09,0],[-.25,-.42,0]],.034,'#bb812d');
+  ball(prop,-.25,-.43,0,.045,.06,.045,'#343b39','cane tip');
+}
 
 function faceLayout(data) {
   const n = data.number, top = data.height + FEET;
@@ -160,8 +224,14 @@ function faceLayout(data) {
   if (n === 13) Object.assign(result, { x: -.5, eyeY: FEET + .72, mouthY: FEET + .2, gap: .35, size: .23, mouth: .62 });
   if (n === 14) Object.assign(result, { eyeY: FEET + 1.02, mouthY: FEET + .43, gap: .42, size: .265, mouth: .79 });
   if (n === 15) Object.assign(result, { x: 1.5, eyeY: FEET + .73, mouthY: FEET + .22, gap: .3, size: .225, mouth: .58 });
+  if (n === 16) Object.assign(result, { eyeY: FEET + 1.52, mouthY: FEET + .52, gap: .53, size: .31, mouth: .95 });
+  if (n === 17) Object.assign(result, { eyeY: FEET + 1.32, mouthY: FEET + .72, gap: .43, size: .27, mouth: .68 });
+  if (n === 18) Object.assign(result, { x: -.5, eyeY: FEET + 1.52, mouthY: FEET + .59, gap: .45, size: .29, mouth: .78 });
+  if (n === 19) Object.assign(result, { eyeY: FEET + 1.32, mouthY: FEET + .64, gap: .48, size: .3, mouth: .61 });
+  if (n === 20) Object.assign(result, { eyeY: FEET + 1.83, mouthY: FEET + 1.18, gap: .46, size: .29, mouth: .65 });
   return result;
 }
+export function getCharacterFaceLayout(number){return {...faceLayout(getCharacterDefinition(number))};}
 function eyeDecorations(parent, data, f) {
   const n = data.number;
   const positions = n === 1 ? [f.x] : [f.x - f.gap, f.x + f.gap];
@@ -179,6 +249,13 @@ function eyeDecorations(parent, data, f) {
     }
     if (n === 9 || n === 12) rectangleRing(parent, x, f.eyeY, Z + .02, f.size * 2.45, f.size * (n === 12 ? 2.9 : 2.5), n === 9 ? .075 : .055, n === 9 ? '#3d5461' : '#be394e');
     if (n === 10) star(parent, x, f.eyeY, .515, .48, .28, '#e7334b');
+    if (n === 16 || n === 18) rectangleRing(parent,x,f.eyeY,Z+.035,n===16?.88:.84,n===16?.83:.99,n===16?.075:.06,n===16?'#512483':'#713066');
+    if (n === 17 || n === 19 || n === 20) ring(parent,x,f.eyeY,Z+.03,f.size*1.2,f.size*(n===20?1.42:1.21),n===19?.064:.052,n===19?'#41494c':n===20?'#8f478e':'#6b3195');
+    if (n === 16) {
+      const side=index?1:-1;
+      box(parent,x+side*.34,f.eyeY+.12,.6,.10,.49,.09,'#242231','bold square eyelash');
+      box(parent,x+side*.27,f.eyeY+.35,.6,.24,.09,.09,'#242231','bold square eyelash');
+    }
     if ([6, 11, 12, 15].includes(n)) {
       const side = index ? 1 : -1;
       const color = n === 6 ? '#ee377d' : '#263342';
@@ -189,6 +266,8 @@ function eyeDecorations(parent, data, f) {
     }
   }
   if (n === 2 || n === 7 || n === 15) tube(parent, [[f.x - .07, f.eyeY, .59], [f.x, f.eyeY + .06, .6], [f.x + .07, f.eyeY, .59]], .027, n === 2 ? '#8c3a96' : n === 7 ? '#f4dd31' : '#213f79');
+  if([16,17,18,19,20].includes(n))tube(parent,[[f.x-.10,f.eyeY+.02,.61],[f.x,f.eyeY+.07,.64],[f.x+.10,f.eyeY+.02,.61]],.035,n===19?'#41494c':data.dark);
+  if(n===20)for(const side of[-1,1])box(parent,side*.95,f.eyeY,.04,.09,.18,1.18,'#8f478e','purple spectacle temple');
   if (n === 15) {
     for (const side of [-1, 1]) polygon(parent, [[0, 0], [side * .65, .05], [side * .65, .85], [side * .51, .85], [side * .51, .69], [side * .38, .69], [side * .38, .54], [side * .25, .54], [side * .25, .39], [side * .12, .39], [side * .12, .23]], .055, '#244583', f.x, f.eyeY + .04, .505, 'stepped superhero mask');
   }
@@ -213,7 +292,7 @@ function eye(parent, x, y, size, emotion, color) {
   }
 }
 function mouth(parent, x, y, width, emotion, number) {
-  const lip = number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : '#713549';
+  const lip = number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : number===16?'#46215f':number===17?'#7431a3':number===18?'#8b256f':number===19?'#4b5251':number===20?'#9b4b88':'#713549';
   if (emotion === 'surprised' || emotion === 'sleepy') {
     const scale = emotion === 'sleepy' ? .65 : 1;
     ball(parent, x, y, .585, width * .17 * scale, width * .22 * scale, .04, lip, 'round mouth rim');
@@ -242,8 +321,9 @@ function expression(data, f, emotion) {
   const positions = data.number === 1 ? [f.x] : [f.x - f.gap, f.x + f.gap];
   for (let i = 0; i < positions.length; i++) {
     const x = positions[i], side = positions.length === 1 ? 0 : i ? 1 : -1;
-    eye(group, x, f.eyeY, f.size, emotion, data.number === 8 ? '#955d41' : data.number >= 10 ? '#fffaf1' : data.color);
-    if (emotion === 'happy' && ![4, 9, 12, 13, 14].includes(data.number)) continue;
+    const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number>=10?'#fffaf1':data.color;
+    eye(group, x, f.eyeY, f.size, emotion, eyelidColor);
+    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20].includes(data.number)) continue;
     const y = f.eyeY + f.size * (emotion === 'surprised' ? 1.65 : 1.4);
     const tilt = emotion === 'sad' ? side * f.size * .45 : emotion === 'curious' ? f.size * .3 : 0;
     const lift = emotion === 'curious' && i === 1 ? f.size * .4 : 0;
@@ -254,7 +334,9 @@ function expression(data, f, emotion) {
         const interval = [j / 7, (j + .5) / 7, (j + 1) / 7].map(t => curve.getPoint(t).toArray());
         tube(group, interval, .065, RAINBOW[i ? 6 - j : j]);
       }
-    } else tube(group, points, [4, 9].includes(data.number) ? .055 : .034, data.number >= 11 ? data.dark : '#344d56');
+    } else if(data.number===19){
+      tube(group,[[x-f.size*.95,y+tilt,.64],[x-f.size*.48,y+.12+lift,.65],[x+f.size*.15,y+.015+lift,.65],[x+f.size*.8,y+.17-tilt,.64]],.049,'#485052',false,'zigzag eyebrow');
+    } else tube(group, points, [4,9,18,20].includes(data.number) ? .055 : .034, data.number >= 11 ? data.dark : '#344d56');
   }
   mouth(group, f.x + (data.number === 11 ? .24 : 0), f.mouthY, f.mouth, emotion, data.number);
   return group;
@@ -275,7 +357,7 @@ const DIGITS = {
 function numberPlaque(root, data) {
   const label = new THREE.Group(); label.name = `number ${data.number}`;
   const extra = data.number === 7 ? .6 : data.number === 3 || data.number === 14 ? .46 : 0;
-  label.position.set(0, data.height + FEET + .47 + extra, .03);
+  label.position.set(data.number===20?.55:0, data.height + FEET + (data.number===20?.54:.47) + extra, .03);
   const digits = String(data.number), width = digits.length === 2 ? .65 : .43;
   ball(label, 0, 0, 0, width, .43, .055, '#fffcf1', 'number plaque');
   for (let i = 0; i < digits.length; i++) {
@@ -310,6 +392,14 @@ function decorations(root, data) {
     }
     const prop = new THREE.Group(); prop.position.set(1.6, 1.15, .15); skateboard(prop); root.add(prop);
   }
+  if(n===17){
+    for(const [x,y,color,rotation]of[
+      [-.57,4.77,'#39c8d6',.3],[.52,4.44,'#f5d533',-.4],[.39,3.78,'#a24fe0',.5],
+      [.54,2.8,'#e94758',-.2],[.61,2.42,'#62c43b',.5],[-.58,2.45,'#b96ade',-.3],[-.55,.71,'#ef9b30',.4],
+    ])splatter(root,x,y,color,rotation);
+  }
+  if(n===18)for(const side of[-1,1])box(root,side*.55,.30,0,.29,.14,.29,'#c43883','magenta boot cuff');
+  if(n===20){topHat(root,top);bowTie(root);}
 }
 
 /** Build true unit-cube geometry. Front is +Z; root y=0 is the shoe sole.
@@ -321,7 +411,7 @@ export function createCharacter(number) {
   const metrics = getCharacterMetrics(data.number);
   const root = new THREE.Group(); root.name = `${data.name} character`;
   root.userData.number = data.number;
-  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number === 3 || data.number === 14 ? .46 : 0);
+  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
   const body = new THREE.Group(); body.name = 'unit block body'; root.add(body);
   for (const cell of data.cells) {
     const cube = mesh(CUBE, cell.color, `${data.name} block ${cell.x},${cell.y}`);
@@ -336,10 +426,11 @@ export function createCharacter(number) {
     const pivot = new THREE.Group();
     const fx = data.number === 15 ? 1.5 + side * .3 : side * Math.min(.65, data.width * .26);
     pivot.position.set(fx, .38, 0); root.add(pivot); feet.push(pivot);
-    const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.dark;
-    tube(pivot, [[0, .03, 0], [0, -.13, 0], [0, -.22, .04]], .075, data.dark);
+    const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.dark;
+    tube(pivot, [[0, .03, 0], [0, -.13, 0], [0, -.22, .04]], .075, data.number===20?'#d58a2f':data.dark);
     ball(pivot, side * .015, -.24, .1, data.number === 8 ? .32 : .205, .14, .3, footColor, 'walking shoe');
     if (data.number === 11 || data.number === 15) box(pivot, 0, -.2, .345, .26, .065, .025, data.number === 11 ? '#fffdf5' : side < 0 ? '#cc3548' : '#188ab0', 'shoe stripe');
+    if(data.number===20)box(pivot,0,-.12,.18,.27,.12,.27,'#fffbed','white spats');
   }
   const arms = [];
   const lowFace = data.number >= 11;
@@ -348,15 +439,16 @@ export function createCharacter(number) {
     const count = data.number === 8 ? 3 : 1;
     for (let i = 0; i < count; i++) {
       const pivot = new THREE.Group();
-      pivot.position.set(side * data.width / 2, data.number === 8 ? data.height + FEET - 1.28 - i : armY, 0);
+      pivot.position.set(side * (data.number===17?1:data.width/2), data.number === 8 ? data.height + FEET - 1.28 - i : armY, 0);
       root.add(pivot);
-      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0;
+      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || data.number===16;
+      const limbColor=data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.dark;
       const handY = lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
       const handX = side * (data.number === 8 ? .88 : .39);
       const points = data.number === 8
         ? [[0, 0, 0], [side * .44, -.25, .05], [side * .84, -.14, .07], [handX, handY, .06]]
         : [[0, 0, 0], [side * .3, lifted ? -.05 : -.18, .03], [handX, handY, .055]];
-      const arm = tube(pivot, points, data.number === 8 ? .09 : .085, data.dark, false, data.number === 8 ? 'tentacle' : 'arm');
+      const arm = tube(pivot, points, data.number === 8 ? .09 : .085, limbColor, false, data.number === 8 ? 'tentacle' : 'arm');
       if (data.number === 8) {
         const curve = arm.geometry.parameters.path;
         for (const t of [.26, .44, .62, .8, .97]) {
@@ -364,17 +456,22 @@ export function createCharacter(number) {
         }
       } else {
         const hand = new THREE.Group(); hand.position.set(handX, handY, .055); pivot.add(hand);
-        if (data.number === 5 && side > 0 || data.number === 10) {
-          hand.rotation.z = side * -.25; glove(hand, data.number === 10 ? '#fffaf1' : data.dark, data.number === 10);
-        } else ball(hand, 0, 0, 0, .105, .14, .1, data.dark, 'hand');
+        if (data.number === 5 && side > 0 || data.number === 10 || data.number===20) {
+          hand.rotation.z = side * -.25; glove(hand, data.number === 10 || data.number===20 ? '#fffaf1' : data.dark, data.number === 10);
+        } else ball(hand, 0, 0, 0, .105, .14, .1, limbColor, 'hand');
         if (data.number === 11 && side < 0) { const prop = new THREE.Group(); prop.position.set(-.04, .25, .2); soccerBall(prop); hand.add(prop); }
         if (data.number === 12 && side > 0) box(hand, -.07, -.035, .01, .065, .22, .2, '#fff6d9', 'wrist band');
+        if(data.number===16&&side<0)megaphone(hand);
+        if(data.number===17)paintTools(hand,side);
+        if(data.number===18&&side>0)box(hand,-.05,.06,0,.16,.12,.23,'#f8f3e6','white wrist band');
+        if(data.number===20&&side<0)cane(hand);
       }
       arms.push({ pivot, side, phase: i * .9, tentacle: data.number === 8 });
     }
   }
   decorations(root, data);
   const face = faceLayout(data);
+  root.userData.faceCenter={x:face.x,y:(face.eyeY+face.mouthY)/2,z:.65};
   eyeDecorations(root, data, face);
   const expressions = Object.fromEntries(MOODS.map(emotion => {
     const group = expression(data, face, emotion); group.visible = false; root.add(group); return [emotion, group];

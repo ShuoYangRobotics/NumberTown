@@ -30,7 +30,19 @@ const length=distances.at(-1);
 export const MOUNTAIN_TRAIL=Object.freeze(raw.map(p=>Object.freeze({...p})));
 export const MOUNTAIN_TRAIL_LANDMARK=Object.freeze({id:'mountain-trail',name:'Mountain trail',description:'Follow the paved spiral all the way to the high summit.',x:104,z:76,radius:16,arrival:Object.freeze({x:104,z:79})});
 export const SUMMIT_LANDMARK=Object.freeze({id:'summit',name:'Mountain summit',description:'Rest above the town and enjoy the mountain panorama.',x:SUMMIT.x,z:SUMMIT.z,radius:11,arrival:Object.freeze({x:SUMMIT.x,z:SUMMIT.z})});
+const deckWest=SUMMIT_DECK.x-SUMMIT_DECK.width/2,deckEast=SUMMIT_DECK.x+SUMMIT_DECK.width/2;
+const deckNorth=SUMMIT_DECK.z-SUMMIT_DECK.depth/2,deckSouth=SUMMIT_DECK.z+SUMMIT_DECK.depth/2;
+// Nearby lower turns must not become side entrances to the level platform.
+// The seven-unit north gate follows the actual final approach.
+export const SUMMIT_RAILS=Object.freeze([
+  {id:'summit-west-rail',x1:deckWest,z1:deckNorth,x2:deckWest,z2:deckSouth},
+  {id:'summit-east-rail',x1:deckEast,z1:deckNorth,x2:deckEast,z2:deckSouth},
+  {id:'summit-south-rail',x1:deckWest,z1:deckSouth,x2:deckEast,z2:deckSouth},
+  {id:'summit-north-west-rail',x1:deckWest,z1:deckNorth,x2:SUMMIT_DECK.x-7,z2:deckNorth},
+  {id:'summit-north-east-rail',x1:SUMMIT_DECK.x,z1:deckNorth,x2:deckEast,z2:deckNorth},
+].map(Object.freeze));
 export const SUMMIT_OBSTACLES=Object.freeze([
+  ...SUMMIT_RAILS.map(rail=>({id:rail.id,kind:'rail',x:Math.min(rail.x1,rail.x2)-.09,z:Math.min(rail.z1,rail.z2)-.09,w:Math.abs(rail.x2-rail.x1)+.18,d:Math.abs(rail.z2-rail.z1)+.18})),
   {id:'summit-west-bench',kind:'furniture',x:98.1,z:.8,w:1.1,d:3.2},
   {id:'summit-east-bench',kind:'furniture',x:108.8,z:-2.6,w:1.1,d:3.2},
   {id:'summit-telescope',kind:'furniture',x:109.3,z:5,radius:.75},

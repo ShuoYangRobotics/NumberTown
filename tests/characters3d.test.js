@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHARACTERS, getCharacterMetrics, createCharacter } from '../dist/characters3d.js';
+import { CHARACTERS, getCharacterMetrics, getCharacterFaceLayout, createCharacter } from '../dist/characters3d.js';
 import { getCharacterDefinition } from '../dist/character-data.js';
 
 const key = ({ x, y }) => `${x},${y}`;
 const shapes = [
   [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [1, 7], [2, 4], [3, 3], [2, 5],
-  [2, 6], [3, 4], [3, 6], [2, 7], [5, 5],
+  [2, 6], [3, 4], [3, 6], [2, 7], [5, 5], [4,4], [4,7], [3,6], [2,10], [2,10],
 ];
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 
@@ -16,9 +16,10 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('One to Fifteen have exactly counted, unique, connected unit-cell shapes', () => {
-  assert.equal(CHARACTERS.length, 15);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 15);
+test('One to Twenty have exactly counted, unique, connected unit-cell shapes totaling 210 cubes', () => {
+  assert.equal(CHARACTERS.length, 20);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 20);
+  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),210);
   for (const [index, friend] of CHARACTERS.entries()) {
     assert.equal(friend.number, index + 1);
     assert.equal(friend.cells.length, friend.number);
@@ -39,6 +40,56 @@ test('One to Fifteen have exactly counted, unique, connected unit-cell shapes', 
       }
     }
     assert.equal(seen.size, friend.number, `${friend.name} has detached cubes`);
+  }
+});
+
+test('Sixteen to Twenty match the supplied shapes, ten-parts, and color groups',()=>{
+  const sixteen=getCharacterDefinition(16),seventeen=getCharacterDefinition(17),eighteen=getCharacterDefinition(18),nineteen=getCharacterDefinition(19),twenty=getCharacterDefinition(20);
+  assert.deepEqual(sixteen.cells.filter(c=>c.color==='#7541c2').map(key).sort(),['0,0','1,0','1,1','2,0','2,1','3,0']);
+  const rainbow=seventeen.cells.filter(c=>c.color!=='#fffaf1');
+  assert.deepEqual(rainbow.map(key),['0,3','0,4','0,5','1,5','2,5','3,5','3,6']);
+  assert.equal(new Set(rainbow.map(c=>c.color)).size,7);
+  for(const cell of seventeen.cells.filter(c=>c.color==='#fffaf1'))assert.ok((cell.x===1||cell.x===2)&&cell.y<=4);
+  assert.deepEqual(eighteen.cells.filter(c=>c.color==='#f132c4').map(key).sort(),['0,0','1,0','2,0','2,1','2,2','2,3','2,4','2,5']);
+  assert.equal(nineteen.cells.filter(c=>c.x===0).length,10);assert.equal(nineteen.cells.filter(c=>c.x===1).length,9);
+  assert.ok(nineteen.cells.filter(c=>c.x===0).every(c=>c.color==='#fffaf1'));
+  assert.ok(nineteen.cells.filter(c=>c.x===1).every(c=>c.color!=='#fffaf1'));
+  assert.ok(twenty.cells.every(c=>c.outline==='#c58b35'&&c.color!=='#fffaf1'));
+  for(const data of[sixteen,seventeen,eighteen,nineteen]){
+    const white=data.cells.filter(c=>c.color==='#fffaf1');assert.equal(white.length,10);assert.ok(white.every(c=>c.outline==='#d9384a'));
+  }
+});
+
+test('definition lookup supports the whole roster and clamps safely',()=>{
+  assert.equal(getCharacterDefinition(20).name,'Twenty');
+  assert.equal(getCharacterDefinition(200).number,CHARACTERS.length);
+  assert.equal(getCharacterDefinition('19').number,19);
+  assert.equal(getCharacterDefinition(-3).number,1);
+  assert.equal(getCharacterDefinition(NaN).number,1);
+});
+
+test('red frames trace the declared outlined cells and never appear on Twenty',()=>{
+  for(const data of CHARACTERS){
+    const {body}=createCharacter(data.number),frames=body.children.filter(o=>o.name==='red ten frame');
+    const outlined=data.cells.filter(c=>c.outline==='#d9384a');
+    assert.equal(frames.length,outlined.length?2:0,`${data.name} has the wrong frame`);
+    for(const frame of frames){
+      assert.equal(frame.userData.outlineCells,outlined.length);
+      const p=frame.userData.perimeter;
+      let area=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];area+=a.x*b.y-b.x*a.y;}
+      assert.equal(Math.abs(area)/2,outlined.length,'raised outline must enclose exactly its declared cells');
+    }
+  }
+});
+
+test('the new characters have low readable faces and their reference accessories',()=>{
+  for(const number of[16,17,18,19,20]){
+    const model=createCharacter(number),face=getCharacterFaceLayout(number);
+    assert.ok(face.eyeY>face.mouthY&&face.eyeY<=2.2);
+    assert.equal(model.root.userData.faceCenter.x,face.x);
+    assert.equal(model.root.userData.faceCenter.y,(face.eyeY+face.mouthY)/2);
+    const names={16:['purple megaphone'],17:['paintbrush','paint palette','colorful paint splash'],18:['square glasses','white wrist band'],19:['eye rim','zigzag eyebrow'],20:['purple top hat','white bow tie','golden cane','purple spectacle temple','white spats']}[number];
+    for(const name of names)assert.ok(model.root.getObjectByName(name),`${number} is missing ${name}`);
   }
 });
 

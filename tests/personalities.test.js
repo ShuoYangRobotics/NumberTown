@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EMOTIONS, chooseRemark } from '../dist/personalities.js';
+import { EMOTIONS, chooseRemark, getMathFacts } from '../dist/personalities.js';
+import { CHARACTERS } from '../dist/character-data.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'mountain-trail', 'summit', 'lookout'];
@@ -14,18 +15,18 @@ test('all six moods have usable, unique display options', () => {
   }
 });
 
-test('all fifteen friends have at least three different personal happy remarks', () => {
+test('all twenty friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
-  for (let number = 1; number <= 15; number++) {
+  for (let number = 1; number <= 20; number++) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
     assert.ok(lines.size >= 3, `friend ${number} needs more personal dialogue`);
     signatures.add([...lines].sort().join('|'));
   }
-  assert.equal(signatures.size, 15, 'each friend should have a distinct personality');
+  assert.equal(signatures.size, 20, 'each friend should have a distinct personality');
 });
 
 test('every friend preserves each chosen emotion in every landmark and while walking', () => {
-  for (let number = 1; number <= 15; number++) {
+  for (let number = 1; number <= 20; number++) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -88,7 +89,7 @@ test('the scenic lookout has sea-view remarks in every emotion', () => {
 });
 
 test('lastText prevents an immediate repeat for every friend, emotion, and landmark', () => {
-  for (let number = 1; number <= 15; number++) {
+  for (let number = 1; number <= 20; number++) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -110,13 +111,18 @@ test('new friends retain dice, rainbow, helping, square, and counting personalit
   }
 });
 
-test('Eleven through Fifteen retain their own personality in every emotion', () => {
+test('Eleven through Twenty retain their own personality in every emotion', () => {
   const patterns = {
     11: /eleven|football|ball|team|goal/i,
     12: /twelve|rectangle/i,
     13: /thirteen|try|trying|wobble|tumble/i,
     14: /fourteen|rainbow|skateboard/i,
     15: /fifteen|step|squad|staircase/i,
+    16: /sixteen|square/i,
+    17: /seventeen|paint|color|rainbow/i,
+    18: /eighteen|rectangle/i,
+    19: /nineteen|shape|creative/i,
+    20: /twenty|dance|dancing|two.*ten/i,
   };
   for (const [number, pattern] of Object.entries(patterns)) {
     const personalLines = new Set();
@@ -133,8 +139,8 @@ test('Eleven through Fifteen retain their own personality in every emotion', () 
 });
 
 test('new friends can greet each other and retain location-specific dialogue', () => {
-  const names = ['Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen'];
-  for (let number = 11; number <= 15; number++) {
+  const names = ['Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
+  for (let number = 11; number <= 20; number++) {
     for (const emotion of moods) {
       const name = names[(number - 10) % names.length];
       const greeting = chooseRemark(number, { emotion, nearbyName: name }, () => 1);
@@ -165,6 +171,149 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
   assert.deepEqual(chooseRemark(7, context, () => 2), chooseRemark(7, context, () => 1));
   assert.deepEqual(chooseRemark(7, context, () => NaN), chooseRemark(7, context, () => 0));
   assert.deepEqual(chooseRemark(99, { emotion: 'unknown' }, () => 0), chooseRemark(1, {}, () => 0));
-  assert.deepEqual(chooseRemark(16, {}, () => 0), chooseRemark(1, {}, () => 0));
-  assert.notDeepEqual(chooseRemark(15, {}, () => 0), chooseRemark(1, {}, () => 0));
+  assert.deepEqual(chooseRemark(21, {}, () => 0), chooseRemark(1, {}, () => 0));
+  assert.notDeepEqual(chooseRemark(20, {}, () => 0), chooseRemark(1, {}, () => 0));
+});
+
+// Independently interpret every public sentence rather than checking only that
+// the generator emits its own templates. Unknown formats must add a validator.
+function checkMathFact(text, number) {
+  let match;
+  const definition = CHARACTERS.find(item => item.number === number);
+  if ((match = text.match(/^I have (\d+) (?:equal blocks|block)\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(definition.cells.length, number);
+  } else if ((match = text.match(/^(\d+) ([+−×-]) (\d+) = (\d+)\.$/))) {
+    const a = +match[1], b = +match[3], result = +match[4];
+    const actual = match[2] === '+' ? a + b : match[2] === '×' ? a * b : a - b;
+    assert.equal(actual, result, text);
+    assert.equal(result, number);
+  } else if ((match = text.match(/^(\d+) divided by (\d+) is (\d+)\.$/))) {
+    assert.ok(+match[2] > 0);
+    assert.equal(+match[1] / +match[2], +match[3], text);
+    assert.equal(+match[3], number);
+  } else if ((match = text.match(/^(\d+) is even: (\d+) pairs of blocks\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(number % 2, 0);
+    assert.equal(+match[2] * 2, number);
+  } else if ((match = text.match(/^(\d+) is odd: (\d+) pairs and 1 left over\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(number % 2, 1);
+    assert.equal(+match[2] * 2 + 1, number);
+  } else if ((match = text.match(/^I (am a|can arrange into a) (\d+) by (\d+) (square|rectangle)!$/))) {
+    const width = +match[2], height = +match[3];
+    assert.equal(width * height, number, text);
+    assert.equal(match[4], width === height ? 'square' : 'rectangle');
+    if (match[1] === 'am a') {
+      assert.equal(definition.width, width);
+      assert.equal(definition.height, height);
+      for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) {
+        assert.ok(definition.cells.some(cell => cell.x === x && cell.y === y), `${text} has a missing cell at ${x},${y}`);
+      }
+    }
+  } else if ((match = text.match(/^(\d+) is prime: its only factors are 1 and (\d+)\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(+match[2], number);
+    const divisors = Array.from({ length: number }, (_, i) => i + 1).filter(divisor => number % divisor === 0);
+    assert.deepEqual(divisors, [1, number]);
+  } else if ((match = text.match(/^(\d+) is composite: (\d+) × (\d+) = (\d+)\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(+match[4], number);
+    assert.ok(+match[2] > 1 && +match[3] > 1);
+    assert.equal(+match[2] * +match[3], number);
+  } else if ((match = text.match(/^(\d+) is a square number: (\d+) × (\d+) = (\d+)\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(+match[2], +match[3]);
+    assert.equal((+match[2]) ** 2, number);
+    assert.equal(+match[4], number);
+  } else if ((match = text.match(/^My (\d+) steps have ([\d +]+) = (\d+) blocks\.$/))) {
+    const steps = match[2].split(' + ').map(Number);
+    assert.equal(steps.length, +match[1]);
+    assert.deepEqual(steps, Array.from({ length: steps.length }, (_, i) => i + 1));
+    assert.equal(steps.reduce((sum, value) => sum + value, 0), number);
+    assert.equal(+match[3], number);
+    assert.deepEqual(steps, Array.from({ length: definition.width }, (_, x) => definition.cells.filter(cell => cell.x === x).length));
+  } else if (text === '1 is neither prime nor composite.') {
+    assert.equal(number, 1);
+  } else {
+    assert.fail(`Unverified mathematical claim: ${text}`);
+  }
+}
+
+test('all facts for One through Twenty are short, unique, and mathematically true', () => {
+  assert.equal(CHARACTERS.length, 20, 'math descriptions should match all twenty rendered friends');
+  for (let number = 1; number <= 20; number++) {
+    const facts = getMathFacts(number);
+    assert.ok(Object.isFrozen(facts));
+    assert.ok(facts.length >= 8);
+    assert.equal(new Set(facts).size, facts.length);
+    for (const text of facts) {
+      assert.ok(text.length > 0 && text.length <= 70, text);
+      checkMathFact(text, number);
+    }
+  }
+});
+
+test('every friend teaches operations, parity, factors, and accurate number categories', () => {
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19];
+  const squares = [1, 4, 9, 16];
+  for (let number = 1; number <= 20; number++) {
+    const facts = getMathFacts(number);
+    assert.ok(facts.some(text => /^\d+ \+ \d+ = /.test(text)));
+    assert.ok(facts.some(text => /^\d+ - \d+ = /.test(text)));
+    assert.ok(facts.includes(`${number * 2} divided by 2 is ${number}.`));
+    assert.ok(facts.some(text => text.includes(number % 2 ? 'is odd:' : 'is even:')));
+    assert.ok(facts.some(text => /^\d+ × \d+ = /.test(text)));
+    assert.equal(facts.some(text => text.includes('is prime:')), primes.includes(number));
+    assert.equal(facts.some(text => text.includes('is composite:')), number > 1 && !primes.includes(number));
+    assert.equal(facts.some(text => text.includes('is a square number:')), squares.includes(number));
+  }
+});
+
+test('shape statements distinguish current bodies from possible rearrangements', () => {
+  assert.ok(getMathFacts(4).includes('I can arrange into a 2 by 2 square!'));
+  assert.ok(!getMathFacts(4).includes('I am a 2 by 2 square!'), 'Four currently has a tall body');
+  assert.ok(getMathFacts(9).includes('I am a 3 by 3 square!'));
+  assert.ok(getMathFacts(15).includes('My 5 steps have 1 + 2 + 3 + 4 + 5 = 15 blocks.'));
+  assert.ok(getMathFacts(16).includes('I am a 4 by 4 square!'));
+  assert.ok(getMathFacts(16).includes('32 divided by 2 is 16.'));
+  assert.ok(getMathFacts(16).includes('12 + 4 = 16.'));
+  for (const definition of CHARACTERS) {
+    if (definition.width * definition.height !== definition.number) {
+      assert.ok(getMathFacts(definition.number).every(text => !text.startsWith('I am a ')), `${definition.name} has an incomplete bounding rectangle`);
+    }
+  }
+});
+
+test('math mode guarantees a fact, preserves every emotion, and avoids repetition', () => {
+  for (let number = 1; number <= 20; number++) {
+    const facts = getMathFacts(number);
+    for (const emotion of moods) for (const place of [undefined, ...places]) {
+      for (let index = 0; index < facts.length; index++) {
+        const sample = (index + .5) / facts.length;
+        const context = { math: true, emotion, place, moving: true, nearbyName: 'Twenty' };
+        const first = chooseRemark(number, context, () => sample);
+        assert.equal(first.kind, 'math');
+        assert.equal(first.emotion, emotion);
+        assert.equal(first.text, facts[index]);
+        const second = chooseRemark(number, { ...context, lastText: first.text }, () => sample);
+        assert.equal(second.kind, 'math');
+        assert.equal(second.emotion, emotion);
+        assert.ok(facts.includes(second.text));
+        assert.notEqual(first.text, second.text);
+      }
+    }
+  }
+});
+
+test('math mode is opt-in, deterministic, and has a safe unknown-number fallback', () => {
+  const context = Object.freeze({ math: true, emotion: 'curious', place: 'summit', lastText: 'old fact' });
+  assert.deepEqual(chooseRemark(20, context, () => .6), chooseRemark(20, context, () => .6));
+  assert.deepEqual(chooseRemark(20, context, () => NaN), chooseRemark(20, context, () => 0));
+  assert.deepEqual(getMathFacts(99), getMathFacts(1));
+  assert.deepEqual(chooseRemark(99, { math: true }, () => 0), chooseRemark(1, { math: true }, () => 0));
+  const ordinary = chooseRemark(20, { emotion: 'curious', place: 'summit' }, () => 0);
+  assert.equal(ordinary.kind, undefined);
+  assert.match(ordinary.text, /summit|deck/i);
+  assert.deepEqual(ordinary, chooseRemark(20, { math: false, emotion: 'curious', place: 'summit' }, () => 0));
 });

@@ -29,3 +29,7 @@
 /* Summit route controls leave the world visible while walking. */
 #trail-actions{display:flex;gap:5px;flex-shrink:0}#follow-trail{background:#6b8c67;color:#fff;border-color:#6b8c67}#trail-progress{position:absolute;left:16px;bottom:5px;width:calc(100% - 32px);height:3px;border:0;accent-color:#789c75;border-radius:3px;overflow:hidden}#trail-progress::-webkit-progress-bar{background:#e2e9d7}#trail-progress::-webkit-progress-value{background:#789c75}.activity:has(#trail-actions:not([hidden])){padding-bottom:17px;max-width:min(750px,calc(100% - 300px))}.activity:has(#trail-actions:not([hidden])) #lookout-actions{flex-direction:column}
 @media(max-width:700px){#trail-actions{flex-direction:column}.activity:has(#trail-actions:not([hidden])){max-width:calc(100% - 36px);gap:6px}.activity:has(#trail-actions:not([hidden])) p{font-size:8px}.activity:has(#trail-actions:not([hidden])) button{padding:7px;font-size:8px}}
+
+/* A little invitation to discover each friend’s number. */
+#math-fact{pointer-events:auto;display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 10px;border:1px solid #dcc9a6;border-radius:10px;background:#faf0d9;color:#826c43;font-size:10px;font-weight:650;width:100%;justify-content:center}#math-fact:hover{background:#f4e5bf}#math-fact span{color:#b49a55;font-size:14px}
+@media(max-width:700px),(max-height:520px){#math-fact{font-size:8px;padding:6px 4px;gap:4px;margin-top:6px}}

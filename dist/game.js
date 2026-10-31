@@ -1,10 +1,11 @@
 import * as THREE from './vendor/three.module.js';
 import { CHARACTERS, getCharacterMetrics } from './character-data.js';
-import { createCharacter } from './characters3d.js';
+import { createCharacter, getCharacterFaceLayout } from './characters3d.js';
 import { createTown } from './world3d.js';
 import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from './world-data.js';
 import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp, collides } from './navigation.js';
 import { EMOTIONS, chooseRemark } from './personalities.js';
+import { createRoamingController } from './roaming.js';
 
 import { createLandscape } from './terrain.js';
 import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
@@ -16,6 +17,7 @@ import { SUMMIT, SUMMIT_DECK, MOUNTAIN_TRAIL, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LA
 
 const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TERRAIN_OBSTACLES];
 const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK];
+const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains'].includes(p.id))});
 const BRIDGE_IDS=new Set(BRIDGE_LANDMARKS.map(p=>p.id));
 const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
@@ -64,13 +66,13 @@ const players = CHARACTERS.map((definition,index) => {
   const metrics = getCharacterMetrics(definition.number);
   const radius = metrics.radius ?? Math.hypot(metrics.width / 2, .5) + .12;
   const start = nearestOpenPosition(FRIEND_STARTS[index], ALL_OBSTACLES, WORLD, radius);
-  const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', yaw:0};
+  const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', lastRemarkKind:'', nextChat:8+index*.8+Math.random()*6, yaw:0};
   model.root.position.set(player.x,groundHeight(player.x,player.z),player.z);
   model.root.userData.playerNumber = definition.number;
   scene.add(model.root);
   return player;
 });
-let active = players[10];
+let active = players[15];
 const camera = new THREE.PerspectiveCamera(42, 1, .3, 1300);
 const orbit = {yaw:.26, elevation:.64, distance:76, targetDistance:76};
 const target = new THREE.Vector3(active.x, 2.1, active.z);
@@ -82,7 +84,7 @@ selectedRing.rotation.x = -Math.PI/2; selectedRing.position.y = .16; scene.add(s
 const selectionShadow = new THREE.Mesh(new THREE.CircleGeometry(1,40),new THREE.MeshBasicMaterial({color:'#54734e',transparent:true,opacity:.12,depthWrite:false}));
 selectionShadow.rotation.x=-Math.PI/2;selectionShadow.position.y=.13;scene.add(selectionShadow);
 
-let time=0, lastTime=0, muted=true, nextRemark=9, nextNeighbor=15, currentPlace=null, audioContext;
+let time=0, lastTime=0, muted=true, nextRemark=9, currentPlace=null, audioContext;
 let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, activityUntil=0, activityMessage='';
 let guidedWalk=null,trailNoticeUntil=0;
 const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
@@ -91,22 +93,22 @@ const bubbles = [{element:$('#speech'),player:active,until:0},{element:$('#neigh
 
 function miniSVG(definition) {
   const w=definition.width, h=definition.height;
-  const cubes=definition.cells.map(cell=>`<rect x="${cell.x}" y="${h-1-cell.y}" width="1" height="1" rx=".035" fill="${cell.color}" stroke="${definition.number>=10?'#dd6d70':definition.dark}" stroke-width=".04"/>`).join('');
-  const cx = definition.number===15?3.95:w/2;
-  const eyeY = definition.number>=11?h-1.0:Math.min(1,h*.44);
-  const eyeSize = w>1?.24:.22;
-  const face=definition.number===1?`<circle cx="${cx}" cy="${eyeY-.12}" r=".29" fill="white"/><circle cx="${cx}" cy="${eyeY-.12}" r=".15" fill="#283b36"/>`:[-.31,.31].map(offset=>`<circle cx="${cx+offset}" cy="${eyeY}" r="${eyeSize}" fill="white"/><circle cx="${cx+offset+.035}" cy="${eyeY+.02}" r="${eyeSize*.52}" fill="#283b36"/>`).join('');
-  return `<svg viewBox="-.2 -.1 ${w+.4} ${h+.4}" aria-hidden="true">${cubes}${face}<path d="M ${cx-.22} ${eyeY+.4} q .22 .2 .44 0" fill="none" stroke="#854352" stroke-width=".07" stroke-linecap="round"/></svg>`;
+  const cubes=definition.cells.map(cell=>`<rect x="${cell.x}" y="${h-1-cell.y}" width="1" height="1" rx=".035" fill="${cell.color}" stroke="${cell.outline||definition.dark}" stroke-width=".04"/>`).join('');
+  const faceLayout=getCharacterFaceLayout(definition.number),cx=w/2+faceLayout.x;
+  const eyeY=h+.35-faceLayout.eyeY,mouthY=h+.35-faceLayout.mouthY,eyeSize=faceLayout.size*1.1;
+  const eyes=definition.number===1?[0]:[-faceLayout.gap,faceLayout.gap];
+  const face=eyes.map(offset=>`<circle cx="${cx+offset}" cy="${eyeY}" r="${eyeSize}" fill="white" stroke="${definition.dark}" stroke-width=".05"/><circle cx="${cx+offset+.035}" cy="${eyeY+.02}" r="${eyeSize*.52}" fill="#283b36"/>`).join('');
+  return `<svg viewBox="-.2 -.1 ${w+.4} ${h+.4}" aria-hidden="true">${cubes}${face}<path d="M ${cx-.22} ${mouthY} q .22 .2 .44 0" fill="none" stroke="#854352" stroke-width=".07" stroke-linecap="round"/></svg>`;
 }
 for(const definition of CHARACTERS){
   const button=document.createElement('button');button.type='button';button.className='friend-card';button.dataset.number=definition.number;
   button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
-  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>10?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
+  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>15?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
   button.addEventListener('click',()=>selectFriend(definition.number));$('#friends').append(button);
 }
 function focusGame(){canvas.focus({preventScroll:true});}
 function selectFriend(number, initial=false){
-  active=players.find(p=>p.number===number)||players[0];clearInput();
+  active=players.find(p=>p.number===number)||players[0];clearInput();roaming.pause(active,time);active.yaw=orbit.yaw;
   document.querySelectorAll('.friend-card').forEach(button=>button.setAttribute('aria-pressed',String(+button.dataset.number===active.number)));
   $('#friend-name').textContent=active.name;$('#friend-description').textContent=active.description;
   $('#block-count').textContent=`${active.number} ${active.number===1?'cube':'cubes'}`;
@@ -115,16 +117,16 @@ function selectFriend(number, initial=false){
   orbit.targetDistance=Math.max(orbit.targetDistance,active.width>3?30:26);zoom(0);
   updateMood();currentPlace=null;updateLocation();
   bubbles[0].until=0;bubbles[1].until=0;
-  if(!initial){remark(active);focusGame();}
+  if(!initial){remark(active,{math:true});focusGame();}
   keepSelectedCardVisible();
 }
 function keepSelectedCardVisible(){
   const card=$(`.friend-card[data-number="${active.number}"]`),strip=$('#friends');if(!card)return;
   const item=card.getBoundingClientRect(),row=strip.getBoundingClientRect();
-  if(item.left<row.left||item.right>row.right)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
+  if(item.left<row.left||item.right>row.right||active.number>15)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
 }
-$('#previous-friend').addEventListener('click',()=>selectFriend(active.number===1?15:active.number-1));
-$('#next-friend').addEventListener('click',()=>selectFriend(active.number===15?1:active.number+1));
+$('#previous-friend').addEventListener('click',()=>selectFriend(active.number===1?players.length:active.number-1));
+$('#next-friend').addEventListener('click',()=>selectFriend(active.number===players.length?1:active.number+1));
 
 for(const emotion of EMOTIONS){
   const button=document.createElement('button');button.type='button';button.dataset.emotion=emotion.id;
@@ -152,7 +154,7 @@ function visit(place){
   const obstacles=walkingObstacles(active);
   const arrival=place.id==='mountain-trail'?(MOUNTAIN_TRAIL.find(p=>!collides(p.x,p.z,obstacles,WORLD,active.radius))||place.arrival):place.arrival;
   Object.assign(active,nearestOpenPosition({x:arrival.x,z:arrival.z},obstacles,WORLD,active.radius));
-  active.jump=0;active.jumpVelocity=0;currentPlace=place;
+  roaming.pause(active,time);active.jump=0;active.jumpVelocity=0;currentPlace=place;
   const presets={
     'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
     hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],mountains:[0,.43,180],
@@ -183,11 +185,12 @@ function updateLocation(){
 }
 function remark(player,context={}){
   const place=findPlace(player);
-  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:BRIDGE_IDS.has(place?.id)?'river':place?.id,lastText:player.lastText,...context});player.lastText=next.text;
+  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:BRIDGE_IDS.has(place?.id)?'river':place?.id,lastText:player.lastText,...context});player.lastText=next.text;player.lastRemarkKind=next.kind||'conversation';player.nextChat=time+15+Math.random()*16;
   const bubble=bubbles[player===active?0:1];bubble.player=player;bubble.until=time+5.7;
-  bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=player.name;bubble.element.append(name,document.createTextNode(next.text));
-  if(player===active){nextRemark=time+11+Math.random()*6;speak(next.text,player);}
+  bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=next.kind==='math'?`${player.name} · number facts`:player.name;bubble.element.append(name,document.createTextNode(next.text));
+  if(player===active){nextRemark=time+11+Math.random()*6;speak(next.text,player);}else if(time>bubbles[0].until&&!window.speechSynthesis?.speaking)speak(next.text,player);
 }
+$('#math-fact').addEventListener('click',()=>{remark(active,{math:true});focusGame();});
 function speak(text,player){if(muted||!('speechSynthesis'in window))return;speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;speechSynthesis.speak(utterance);}
 function tone(){if(muted)return;try{audioContext ||= new(window.AudioContext||window.webkitAudioContext)();audioContext.resume();const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();oscillator.frequency.setValueAtTime(490,audioContext.currentTime);oscillator.frequency.exponentialRampToValueAtTime(780,audioContext.currentTime+.13);gain.gain.setValueAtTime(.025,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+.2);oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start();oscillator.stop(audioContext.currentTime+.2);}catch{}}
 function jump(){if(modalOpen()||active.jump>.01||time-lastJumpAt<.4)return;active.jumpVelocity=7.4;hopCount++;lastJumpAt=time;setEmotion(active,'excited',6);tone();}
@@ -205,16 +208,17 @@ addEventListener('keydown',event=>{
   if(key==='shift')keys.add('shift');
   if(event.code==='Space'&&event.target.tagName!=='BUTTON'){event.preventDefault();if(!event.repeat)jump();}
   if(!event.repeat&&/^Digit[0-9]$/.test(event.code)){
-    const digit=+event.code.slice(-1);const number=event.shiftKey&&digit>=1&&digit<=5?digit+10:digit===0?10:digit;selectFriend(number);
+    const digit=+event.code.slice(-1);const number=event.shiftKey?(digit===0?20:digit+10):(digit===0?10:digit);selectFriend(number);
   }
+  if(!event.repeat&&key==='k'){remark(active,{math:true});}
   if(!event.repeat&&key==='e'){const index=EMOTIONS.findIndex(m=>m.id===active.emotion);setEmotion(active,EMOTIONS[(index+1)%EMOTIONS.length].id,25);remark(active);}
   if(key==='q'||key==='r'){event.preventDefault();if(guidedWalk)guidedWalk.autoCamera=false;keys.add(key);if(!event.repeat)orbit.yaw+=(key==='q'?-.12:.12);}
   if(!event.repeat&&key==='c')resetCamera();
   if(!event.repeat&&key==='f'){event.preventDefault();kick();}
   if(!event.repeat&&(key==='+'||key==='='))zoom(-3);
   if(!event.repeat&&(key==='-'||key==='_'))zoom(3);
-  if(!event.repeat&&key==='[')selectFriend(active.number===1?15:active.number-1);
-  if(!event.repeat&&key===']')selectFriend(active.number===15?1:active.number+1);
+  if(!event.repeat&&key==='[')selectFriend(active.number===1?players.length:active.number-1);
+  if(!event.repeat&&key===']')selectFriend(active.number===players.length?1:active.number+1);
   if(key==='escape')closeMood();
 });
 addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
@@ -306,14 +310,14 @@ function updateActivity(place){
   if(id==='mountains'){title='The northern mountains';detail='A paved path winds around one peak. Visit Mountain trail to begin the climb.';}
   if(id==='mountain-trail'){title=`Summit Walk · ${Math.round(groundHeight(active.x,active.z))} / ${SUMMIT_DECK.height} m`;detail=time<trailNoticeUntil?'A friend is on the path. Use WASD to walk around them.':guidedWalk?'Enjoy the climb. WASD takes over whenever you like.':'Follow the paved bends with WASD, or take a guided walk to the top.';}
   if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Look across NumberTown, the river, and the sea. Drag to enjoy the panorama.';}
-  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all fifteen friends.';}
+  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all twenty friends.';}
   if(id==='pond'){title='The big duck pond';detail='Follow the shore and say hello to the ducks.';}
 
   $('#activity-title').textContent=title;$('#activity-detail').textContent=detail;
 }
 
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();requestAnimationFrame(keepSelectedCardVisible);}
-addEventListener('resize',resize);resize();selectFriend(11,true);
+addEventListener('resize',resize);resize();selectFriend(16,true);
 function updateCamera(dt){
   if(keys.has('q'))orbit.yaw-=dt*1.25;if(keys.has('r'))orbit.yaw+=dt*1.25;
   const desired=new THREE.Vector3(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
@@ -344,7 +348,10 @@ function updateBubbles(){
       const inView=projection.z<1&&projection.z>-1&&x>90&&x<innerWidth-90&&y>120&&y<innerHeight-155;
       const minTop=innerHeight<520?118:innerWidth<700?285:145;
       const bubbleY=Math.max(y,minTop+bubble.element.offsetHeight);
-      bubble.element.classList.toggle('hidden',!inView||bubbleY>innerHeight-145);bubble.element.style.left=`${x}px`;bubble.element.style.top=`${bubbleY}px`;
+      // Tall friends need their top cubes visible beneath the destination bar.
+      const sideOffset=innerWidth>700&&bubbleY>y+8?Math.min(150,bubble.element.offsetWidth*.65):0;
+      const bubbleX=THREE.MathUtils.clamp(x+sideOffset,120,innerWidth-120);
+      bubble.element.classList.toggle('hidden',!inView||bubbleY>innerHeight-145);bubble.element.style.left=`${bubbleX}px`;bubble.element.style.top=`${bubbleY}px`;
     }else bubble.element.classList.add('hidden');
   }
 }
@@ -366,14 +373,18 @@ function animate(timestamp){
     if(guidedWalk){guidedWalk.stalled=travelled<.001?guidedWalk.stalled+dt:0;if(guidedWalk.stalled>1.5){guidedWalk=null;trailNoticeUntil=time+6;updateLocation();}}
     active.moving=travelled>.001;
     if(active.moving)active.yaw=angleLerp(active.yaw,Math.atan2(velocity.x,velocity.z),1-Math.exp(-dt*13));
+    roaming.update(players,active,dt,time);
     for(const player of players){
       if(player.jump>0||player.jumpVelocity>0){player.jumpVelocity-=18*dt;player.jump=Math.max(0,player.jump+player.jumpVelocity*dt);if(!player.jump)player.jumpVelocity=0;}
       player.model.root.position.set(player.x,groundHeight(player.x,player.z)+player.jump,player.z);player.model.root.rotation.y=player.yaw;
       player.model.update(dt,{time:reducedMotion?0:time,moving:player.moving,emotion:player.emotion});
       if(player.moodUntil<time){setEmotion(player,['happy','happy','curious','excited','surprised','sleepy'][Math.floor(Math.random()*6)],18+Math.random()*19);}
     }
-    if(time>nextRemark)remark(active);
-    if(time>nextNeighbor){const nearby=players.filter(p=>p!==active&&Math.hypot(p.x-active.x,p.z-active.z)<22);if(nearby.length)remark(nearby[Math.floor(Math.random()*nearby.length)]);nextNeighbor=time+16+Math.random()*9;}
+    if(time>nextRemark)remark(active,{math:Math.random()<.8});
+    if(time>bubbles[1].until+2){
+      const nearby=players.filter(p=>p!==active&&time>p.nextChat&&Math.hypot(p.x-active.x,p.z-active.z)<45).sort((a,b)=>a.nextChat-b.nextChat);
+      if(nearby.length)remark(nearby[0],{math:true});
+    }
     town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);
     if(active.jump<.3)updateBallContact(ballState,active,dt);
     const goal=stepBall(ballState,dt);football.update(ballState,time);
@@ -389,9 +400,9 @@ function animate(timestamp){
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},speech:{text:active.lastText,kind:active.lastRemarkKind},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;
 requestAnimationFrame(animate);
-setTimeout(()=>{remark(active,{place:undefined});focusGame();},900);
+setTimeout(()=>{remark(active,{place:undefined,math:true});focusGame();},900);

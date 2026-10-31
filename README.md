@@ -1,6 +1,6 @@
 # NumberTown
 
-A cozy, fully 3D browser playground with fifteen Numberblock friends in a world spanning **440 × 550** units, including the new northern mountain terrain. NumberTown has exactly **70 houses—50 on the west bank and 20 on the east bank—plus 10 stores and 3 public buildings**: the library, school, and town hall. A continuous river flows from the northern mountain gorge through town to the southern beach and sea. Three bridges connect the two banks.
+A cozy, fully 3D browser playground with twenty Numberblock friends in a world spanning **440 × 550** units, including the new northern mountain terrain. NumberTown has exactly **70 houses—50 on the west bank and 20 on the east bank—plus 10 stores and 3 public buildings**: the library, school, and town hall. A continuous river flows from the northern mountain gorge through town to the southern beach and sea. Three bridges connect the two banks.
 
 Connected streets lead to an enlarged town square with a colorful Rubik’s cube statue, a larger duck pond, the east-bank Ferris wheel park and football pitch, and a hilltop lookout over the beach and sea. A winding paved route now climbs one northern mountain to a high summit viewing deck.
 
@@ -12,7 +12,7 @@ The game runs locally with a vendored Three.js renderer; no build step, account,
 python3 -m http.server 5181 --bind 127.0.0.1 --directory dist
 ```
 
-Run the command from this `numbertown-mountain-summit` worktree and open [http://127.0.0.1:5181](http://127.0.0.1:5181) in a browser supporting WebGL 2. `npm start` runs the same isolated preview. The original `numberblock-town` project and its preview on port **5180** remain unchanged. Use a web server rather than opening the HTML file directly, since the game uses JavaScript modules.
+Run the command from this `numbertown-mountain-summit` worktree and open [http://127.0.0.1:5181](http://127.0.0.1:5181) in a browser supporting WebGL 2. `npm start` runs the same isolated preview. The previous server on port **5180** has been stopped. Use a web server rather than opening the HTML file directly, since the game uses JavaScript modules.
 
 ## Play
 
@@ -26,9 +26,10 @@ Run the command from this `numbertown-mountain-summit` worktree and open [http:/
 | Space | Hop |
 | F / Kick button | Kick the nearby football in the direction your character faces |
 | E / feeling menu | Change expression |
+| K / Tell me a math fact | Hear a number fact from the selected friend |
 | M / map button | Open or close the town map |
 | 1–9 and 0 | Choose One through Ten |
-| Shift + 1–5 | Choose Eleven through Fifteen |
+| Shift + 1–9 and 0 | Choose Eleven through Twenty |
 | Character cards, previous/next, or click a character | Choose any friend |
 | Place buttons | Travel to a town destination or activity |
 | Follow trail / Walk down | Walk the mountain route automatically; Pause walk stops the guide |
@@ -46,16 +47,16 @@ Touch screens have a direction pad, hop button, and Kick control. Drag with one 
 - **Northern mountain summit:** choose the mountain trail destination, then follow the winding paved route with **WASD** or the direction pad, or choose **Follow trail** for a guided ascent. The progress bar tracks the climb to the high viewing deck, where you can orbit the camera to enjoy the town, river, and distant coast. **Walk down** guides the return, and **Pause walk** stops either direction. Movement keys or the direction pad take over whenever you like. This marked route opens one summit; the other mountain slopes remain blocked. The lower Sunny Hill trail is still available separately.
 - **Town map:** press **M** to find both neighborhoods, the three crossings, and the activity areas in the larger world.
 
-All bodies are made from **exactly the corresponding number of equal 1×1×1 cubes**. Every cube has real depth and is visible from any angle; the world has a perspective camera, volumetric buildings, and dynamic lighting and shadows. Characters keep their own locations. Collisions account for their different widths, using a conservative circular footprint to allow safe turns.
+All bodies are made from **exactly the corresponding number of equal 1×1×1 cubes**. Every cube has real depth and is visible from any angle; the world has a perspective camera, volumetric buildings, and dynamic lighting and shadows. Unselected friends stroll between randomly chosen destinations, pause to look around, and continue on another trip. Their routes avoid scenery and cross the river on bridges. Selecting a friend immediately gives you control at their current location. Collisions account for their different widths, using a conservative circular footprint to allow safe turns.
 
-Eleven has a two-by-five body plus one red cube. Twelve is three by four. Thirteen has three yellow cubes extending above and beside a ten-block body. Fourteen has four green blocks above ten white ones. Fifteen is a 1+2+3+4+5 staircase, with a cyan last column. These layouts follow the supplied references.
+Eleven has a two-by-five body plus one red cube. Twelve is three by four. Thirteen has three yellow cubes extending above and beside a ten-block body. Fourteen has four green blocks above ten white ones. Fifteen is a 1+2+3+4+5 staircase, with a cyan last column. Sixteen is a 4×4 square with six purple cubes. Seventeen has ten white cubes and seven rainbow cubes around its top. Eighteen is a 3×6 rectangle with eight magenta cubes. Nineteen has a white column of ten and a gray column of nine. Twenty is a golden 2×10 rectangle with purple glasses, a top hat, and a bow tie. These layouts follow the supplied references.
 
-Happy, excited, curious, surprised, sleepy, and sad expressions are available for every friend. Speech bubbles appear periodically and respond to locations and feelings. Voices are optional, initially muted, and use the browser's speech synthesis when available.
+Happy, excited, curious, surprised, sleepy, and sad expressions are available for every friend. Speech bubbles appear periodically and respond to locations and feelings. Every number also shares correct facts about addition, subtraction, multiplication, division, parity, and its possible shapes. Sixteen, for example, describes its 4×4 square and 12 + 4 = 16. Nearby wandering friends share their own facts too. Use **K** or **Tell me a math fact** to hear another. Voices are optional, initially muted, and use the browser's speech synthesis when available.
 
 ## Source
 
 - `dist/game.js`: Three.js scene, perspective camera, input, selection, dialogue, and interface.
-- `dist/character-data.js`: exact unit-cube layouts and dimensions for all fifteen characters.
+- `dist/character-data.js`: exact unit-cube layouts and dimensions for all twenty characters.
 - `dist/characters3d.js`: mesh bodies, faces, accessories, and animation.
 - `dist/geography.js`: shared world dimensions, river course, bridges, coast, mountain range, hill, and activity locations.
 - `dist/world-data.js`: town layout, obstacles, destinations, and safe spawn positions.
@@ -68,9 +69,10 @@ Happy, excited, curious, surprised, sleepy, and sad expressions are available fo
 - `dist/mountain-summit.js`: mountain surfaces, paved spiral, summit deck, and summit scenery.
 - `dist/town-map.js`: town map and destination display.
 - `dist/navigation.js`: camera-relative motion and collision handling.
+- `dist/roaming.js`: destination choice, route planning, and movement for unselected friends.
 - `dist/personalities.js`: six emotions and character-specific contextual dialogue.
 - `dist/vendor/`: pinned Three.js r180 and its MIT license.
 
-Run `npm test` or `node --test tests/*.test.js` for the geometry, building counts, movement, routes, terrain, park animation, football physics, and dialogue checks. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
+Run `npm test` or `node --test --test-concurrency=1 tests/*.test.js` for the geometry, building counts, movement, routes, roaming, terrain, park animation, football physics, and dialogue checks. The suites run sequentially so the roaming timing checks do not compete with other CPU-heavy test files. Append `?debug=1` to the local URL to show live coordinates, camera angles, cube counts, rendering statistics, and errors for browser debugging.
 
-The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.1 summit preview is developed and tested locally in an isolated worktree.
+The public source repository is [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/NumberTown). This 4.2 preview is developed and tested locally in an isolated worktree.

@@ -35,11 +35,22 @@ export const CHARACTERS = Object.freeze([
   character(13, 'Thirteen', '#f6d649', '#803b7e', 'Ten and three, full of happy surprises.', [...ten(), { x: 1, y: 5, color: '#f6d649' }, { x: 2, y: 5, color: '#f6d649' }, { x: 2, y: 4, color: '#f6d649' }]),
   character(14, 'Fourteen', '#61c981', '#278b52', 'Ten and four, ready for an adventure.', [...ten(), ...grid(2, 2, '#61c981').map(cell => ({ ...cell, y: cell.y + 5 }))]),
   character(15, 'Fifteen', '#4dc5df', '#233f80', 'A staircase of friends, step by step.', Array.from({ length: 5 }, (_, x) => Array.from({ length: x + 1 }, (_, y) => ({ x, y, color: x === 4 ? '#4dc5df' : WHITE, ...(x === 4 ? {} : { outline: RED_EDGE }) }))).flat()),
+  character(16, 'Sixteen', '#7541c2', '#532989', 'A square sixteen with a purple smile and a cheer to share.', grid(4, 4, (x, y) => y === 0 || y === 1 && (x === 1 || x === 2) ? '#7541c2' : WHITE).map(cell => ({...cell,...(cell.color===WHITE?{outline:RED_EDGE}:{})}))),
+  character(17, 'Seventeen', '#ad52d0', '#81369d', 'A rainbow artist who finds inspiration everywhere.', [
+    ...ten().map(cell=>({...cell,x:cell.x+1})),
+    ...[[0,3],[0,4],[0,5],[1,5],[2,5],[3,5],[3,6]].map(([x,y],index)=>({x,y,color:index===6?'#bc79df':index===5?'#8038d2':RAINBOW[index]})),
+  ]),
+  character(18, 'Eighteen', '#f132c4', '#832276', 'A bright rectangular friend, ready to try something new.', grid(3,6,(x,y)=>y===0||x===2?'#f132c4':WHITE).map(cell=>({...cell,...(cell.color===WHITE?{outline:RED_EDGE}:{})}))),
+  character(19, 'Nineteen', '#a6adab', '#3e494c', 'Ten and nine, with a thoughtful face and a tall perspective.', [
+    ...grid(1,10,WHITE,RED_EDGE),
+    ...grid(1,9,(_,y)=>['#b4bcba','#a7afad','#969f9d'][Math.floor(y/3)]).map(cell=>({...cell,x:1})),
+  ]),
+  character(20, 'Twenty', '#f7c96b', '#805070', 'Twenty golden blocks, a top hat, and a little showtime sparkle.', grid(2,10,(x,y)=>x===0?(y%2?'#ffd080':'#ffc56b'):'#ffe09a','#c58b35')),
 ]);
 
 export function getCharacterDefinition(number) {
   const value = Number(number);
-  const index = Number.isFinite(value) ? Math.max(1, Math.min(15, Math.round(value))) - 1 : 0;
+  const index = Number.isFinite(value) ? Math.max(1, Math.min(CHARACTERS.length, Math.round(value))) - 1 : 0;
   return CHARACTERS[index];
 }
 
