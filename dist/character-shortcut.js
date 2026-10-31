@@ -1,10 +1,11 @@
 /** The number field owns typed digits; gameplay keeps its normal key bindings. */
 export function mountCharacterShortcut({
-  canvas, input, button, status, maxNumber, onSelect, onBegin = () => {},
+  canvas, input, button, status, minNumber = 1, maxNumber, onSelect, onBegin = () => {},
   isBlocked = () => false, focusGame = () => canvas.focus({ preventScroll: true }),
   windowTarget = globalThis.window, documentTarget = globalThis.document,
 }) {
   if (!Number.isSafeInteger(maxNumber) || maxNumber < 1) throw new TypeError('maxNumber must be a positive integer');
+  if (!Number.isSafeInteger(minNumber) || minNumber < 0 || minNumber > maxNumber) throw new TypeError('minNumber must be between zero and maxNumber');
   let tabHeld = false, focusingFromTab = false, disposed = false;
   const listeners = [];
   const modified = event => event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
@@ -25,8 +26,8 @@ export function mountCharacterShortcut({
     tabHeld = false;
     if (blocked()) return;
     const value = input.value.trim(), number = Number(value);
-    if (!/^\d+$/.test(value) || !Number.isSafeInteger(number) || number < 1 || number > maxNumber) {
-      status.textContent = `Choose 1–${maxNumber}`; status.dataset.error = 'true';
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(number) || number < minNumber || number > maxNumber) {
+      status.textContent = `Choose ${minNumber}–${maxNumber}`; status.dataset.error = 'true';
       input.setAttribute('aria-invalid', 'true'); input.focus({ preventScroll: true });
       return;
     }

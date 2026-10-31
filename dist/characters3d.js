@@ -389,6 +389,7 @@ function faceTransform(data) {
   return{source,scale,x:-source.x*scale,y:center-(upper+lower)/2*scale,z:bodyDepth(data)/2-.5*scale+.015};
 }
 export function getCharacterFaceLayout(number,definition){
+  if((definition??getCharacterDefinition(number)).number===0)return{x:0,eyeY:.44,mouthY:.44,gap:0,size:0,mouth:.76};
   const data=definition??getCharacterDefinition(number),t=faceTransform(data),f=t.source;
   return{...f,x:f.x*t.scale+t.x,eyeY:f.eyeY*t.scale+t.y,mouthY:f.mouthY*t.scale+t.y,gap:f.gap*t.scale,size:f.size*t.scale,mouth:f.mouth*t.scale};
 }
@@ -647,12 +648,97 @@ function transformedDecorations(root,data) {
   }
 }
 
+function zeroExpression(emotion) {
+  const group=new THREE.Group();group.name=`expression ${emotion}`;
+  const coral='#f27880',crease='#a83e51';
+  if(emotion==='curious'||emotion==='sad'){
+    const points=emotion==='curious'?[[-.3,.015,0],[-.14,-.035,.01],[.08,-.012,.01],[.28,.085,0]]:[[-.31,-.13,0],[-.15,.055,.01],[.11,.065,.01],[.31,-.11,0]];
+    tube(group,points,.067,coral,false,'coral floating lip');
+    tube(group,points.map(([x,y,z])=>[x,y,z+.063]),.014,crease,false,'mouth crease');
+    return group;
+  }
+  const shape=new THREE.Shape(),hole=new THREE.Path();
+  if(emotion==='surprised'||emotion==='sleepy'){
+    const rx=emotion==='surprised'?.235:.15,ry=emotion==='surprised'?.29:.19;
+    shape.absellipse(0,-.025,rx,ry,0,Math.PI*2,false,0);
+    hole.absellipse(0,-.025,rx-.065,ry-.065,0,Math.PI*2,true,0);
+  }else{
+    const extra=emotion==='excited'?.105:0;
+    shape.moveTo(-.34,.055);shape.bezierCurveTo(-.12,.06,.1,.11,.27,.19);
+    shape.bezierCurveTo(.39,.25,.43,.1,.36,-.04);
+    shape.bezierCurveTo(.23,-.25-extra,-.14,-.31-extra,-.33,-.18);
+    shape.bezierCurveTo(-.43,-.1,-.43,.05,-.34,.055);shape.closePath();
+    hole.moveTo(-.29,-.018);hole.bezierCurveTo(-.12,-.025,.13,.055,.29,.13);
+    hole.bezierCurveTo(.28,-.0-extra,.12,-.13-extra,-.07,-.135-extra);
+    hole.bezierCurveTo(-.2,-.14-extra,-.27,-.1,-.29,-.018);hole.closePath();
+  }
+  shape.holes.push(hole);
+  const rim=mesh(new THREE.ExtrudeGeometry(shape,{depth:.07,bevelEnabled:true,bevelSize:.018,bevelThickness:.023,bevelSegments:3,curveSegments:20}),coral,'coral floating lip');group.add(rim);
+  const cavityShape=new THREE.Shape(hole.getPoints(40));
+  const cavity=mesh(new THREE.ExtrudeGeometry(cavityShape,{depth:.018,bevelEnabled:false}),'#3c242c','zero mouth cavity');cavity.position.z=-.024;group.add(cavity);
+  if(emotion==='happy'||emotion==='excited'){
+    const teeth=new THREE.Shape();
+    teeth.moveTo(-.267,-.028);teeth.bezierCurveTo(-.075,-.03,.13,.06,.27,.12);
+    teeth.bezierCurveTo(.19,.002,-.015,-.086,-.215,-.092);
+    teeth.quadraticCurveTo(-.26,-.065,-.267,-.028);teeth.closePath();
+    const ivory=mesh(new THREE.ExtrudeGeometry(teeth,{depth:.025,bevelEnabled:true,bevelSize:.004,bevelThickness:.004,bevelSegments:1}),'#fff6d9','zero smiling teeth');
+    // Keep the ivory just behind the lip's front edge so an elevated camera
+    // sees the smile, and the small recessed surface does not turn dark.
+    ivory.position.z=.056;ivory.receiveShadow=false;group.add(ivory);
+    if(emotion==='excited')ball(group,.025,-.19,.005,.115,.045,.025,'#f5a1a6','zero tongue');
+  }
+  return group;
+}
+function zeroNumeral() {
+  const shape=new THREE.Shape(),hole=new THREE.Path();
+  const capsule=(path,r,straight)=>{
+    path.moveTo(-r,-straight);path.lineTo(-r,straight);path.absarc(0,straight,r,Math.PI,0,true);
+    path.lineTo(r,-straight);path.absarc(0,-straight,r,0,-Math.PI,true);path.closePath();
+  };
+  capsule(shape,.17,.145);capsule(hole,.079,.139);shape.holes.push(hole);
+  const numeral=mesh(new THREE.ExtrudeGeometry(shape,{depth:.045,bevelEnabled:true,bevelSize:.006,bevelThickness:.006,bevelSegments:2,curveSegments:20}),'#080c0c','black zero numeral');
+  const label=new THREE.Group();label.name='number 0';label.position.set(0,1.01,0);label.add(numeral);return label;
+}
+function modelDisposer(root) {
+  let disposed=false;
+  return()=>{
+    if(disposed)return;disposed=true;
+    const geometries=new Set();root.traverse(object=>{if(object.geometry&&object.geometry!==CUBE&&object.geometry!==SPHERE)geometries.add(object.geometry);});
+    for(const geometry of geometries)geometry.dispose();
+    root.removeFromParent();
+  };
+}
+function createZero() {
+  const metrics=getCharacterMetrics(0),root=new THREE.Group();root.name='Zero character';
+  Object.assign(root.userData,{number:0,formId:'original',visualHeight:1.36,faceCenter:{x:0,y:.44,z:.06},armAttachments:[]});
+  const body=new THREE.Group();body.name='unit block body';root.add(body);
+  const floating=new THREE.Group();floating.name='floating zero';root.add(floating);
+  const face=new THREE.Group();face.name='character face';face.position.y=.44;floating.add(face);
+  const expressions=Object.fromEntries(MOODS.map(emotion=>{const group=zeroExpression(emotion);group.visible=false;face.add(group);return[emotion,group];}));
+  floating.add(zeroNumeral());
+  let elapsed=0,currentEmotion;
+  function setEmotion(emotion='happy'){
+    const next=MOODS.includes(emotion)?emotion:'happy';
+    if(currentEmotion)expressions[currentEmotion].visible=false;
+    expressions[next].visible=true;currentEmotion=next;root.userData.emotion=next;return next;
+  }
+  function update(dt=0,state={}){
+    elapsed=Number.isFinite(state.time)?state.time:elapsed+(Number.isFinite(dt)?dt:0);
+    if(state.emotion!==undefined)setEmotion(state.emotion);
+    floating.position.y=state.moving?Math.abs(Math.sin(elapsed*7))*.035:Math.sin(elapsed*2.3)*.018;
+    floating.rotation.z=Math.sin(elapsed*(state.moving?3:1.4))*.025;
+  }
+  setEmotion('happy');
+  return{root,body,face,setEmotion,update,dispose:modelDisposer(root),...metrics};
+}
+
 /** Build true unit-cube geometry. Front is +Z; root y=0 is the shoe sole.
  * Calling update never changes root position/rotation: the game owns movement.
  * Expressions and labels use prebuilt meshes, with no DOM or canvas dependency.
  */
 export function createCharacter(number, {definition} = {}) {
   const data = definition ?? getCharacterDefinition(number), original=getCharacterDefinition(data.number), transformed=isTransformed(data);
+  if(data.number===0)return createZero();
   const metrics = getCharacterMetrics(data), depth=bodyDepth(data);
   const root = new THREE.Group(); root.name = `${data.name} character`;
   root.userData.number = data.number;
@@ -771,12 +857,5 @@ export function createCharacter(number, {definition} = {}) {
     }
   }
   setEmotion('happy');
-  let disposed=false;
-  function dispose(){
-    if(disposed)return;disposed=true;
-    const geometries=new Set();root.traverse(object=>{if(object.geometry&&object.geometry!==CUBE&&object.geometry!==SPHERE)geometries.add(object.geometry);});
-    for(const geometry of geometries)geometry.dispose();
-    root.removeFromParent();
-  }
-  return { root, body, face:faceRoot, setEmotion, update, dispose, height: metrics.height, width: metrics.width, depth:metrics.depth, radius: metrics.radius };
+  return { root, body, face:faceRoot, setEmotion, update, dispose:modelDisposer(root), height: metrics.height, width: metrics.width, depth:metrics.depth, radius: metrics.radius };
 }

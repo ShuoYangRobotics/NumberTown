@@ -27,7 +27,7 @@ function makeEvent(type, target, options = {}) {
   return { type, target, key: '', defaultPrevented: false, ...options,
     preventDefault() { this.defaultPrevented = true; } };
 }
-function setup(maxNumber = 25) {
+function setup(maxNumber = 25, minNumber = 1) {
   const windowTarget = new FakeTarget(), documentTarget = new FakeTarget();
   documentTarget.hidden = false; documentTarget.visibilityState = 'visible';
   documentTarget.body = new FakeElement(documentTarget, 'BODY');
@@ -35,7 +35,7 @@ function setup(maxNumber = 25) {
   const canvas = new FakeElement(documentTarget, 'CANVAS'), input = new FakeElement(documentTarget, 'INPUT');
   const button = new FakeElement(documentTarget, 'BUTTON'), status = new FakeElement(documentTarget, 'SPAN');
   const state = { blocked: false, begins: 0, focusCalls: 0, movement: true, selected: [] };
-  const controller = mountCharacterShortcut({ canvas, input, button, status, maxNumber,
+  const controller = mountCharacterShortcut({ canvas, input, button, status, minNumber, maxNumber,
     windowTarget, documentTarget, onSelect: number => state.selected.push(number),
     onBegin: () => { state.begins++; state.movement = false; }, isBlocked: () => state.blocked,
     focusGame: () => { state.focusCalls++; canvas.focus(); },
@@ -91,6 +91,21 @@ test('Enter while Tab is still held submits once and a later Tab release cannot 
   const f = setup(); f.key('keydown', 'Tab'); f.type('12'); f.key('keydown', 'Enter');
   f.key('keyup', 'Tab'); f.key('keydown', 'Enter', { repeat: true });
   assert.deepEqual(f.state.selected, [12]);
+});
+
+test('Zero works through a held Tab chord and the number field without accepting empty or out-of-range values', () => {
+  const f = setup(30, 0);
+  f.canvas.focus(); f.key('keydown', 'Tab'); f.type('0'); f.key('keyup', 'Tab');
+  assert.deepEqual(f.state.selected, [0]);
+  f.input.focus(); f.type('0'); f.clickGo();
+  assert.deepEqual(f.state.selected, [0, 0]);
+  for (const value of ['', '-1', '31']) {
+    f.input.focus(); f.input.value = value; f.clickGo();
+    assert.deepEqual(f.state.selected, [0, 0]);
+    assert.equal(f.status.textContent, 'Choose 0–30');
+  }
+  f.input.value = '30'; f.clickGo();
+  assert.deepEqual(f.state.selected, [0, 0, 30]);
 });
 
 test('invalid and empty submissions show the configured inline error and never fall back to another friend', () => {

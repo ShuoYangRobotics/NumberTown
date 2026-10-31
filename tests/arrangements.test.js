@@ -13,8 +13,8 @@ const world = { width: 60, depth: 60, margin: 1 };
 const rectangle = (number, width) => getCharacterArrangements(number).find(form => form.width === width && form.depth === 1);
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-8, message ?? `${actual} != ${expected}`);
 
-test('all thirty identities have immutable, complete factor arrangements without duplicate shapes', () => {
-  assert.equal(CHARACTERS.length, 30);
+test('all thirty-one identities have immutable, complete factor arrangements without duplicate shapes', () => {
+  assert.equal(CHARACTERS.length, 31);
   for (const original of CHARACTERS) {
     const forms = getCharacterArrangements(original.number), first = forms[0];
     assert.equal(getCharacterArrangements(original.number), forms, 'definitions are cached');
@@ -58,7 +58,7 @@ test('all thirty identities have immutable, complete factor arrangements without
 });
 
 test('stable cycling restores the exact cube, windowed, and original shapes', () => {
-  for (let number = 1; number <= 30; number++) {
+  for (let number = 0; number <= 30; number++) {
     const forms = getCharacterArrangements(number);
     let form = forms[0];
     for (let index = 1; index < forms.length; index++) {
@@ -68,6 +68,9 @@ test('stable cycling restores the exact cube, windowed, and original shapes', ()
     assert.equal(getNextArrangement(number, form.formId), forms[0]);
     assert.equal(getNextArrangement(number, 'missing'), forms[0]);
   }
+  assert.equal(getCharacterArrangements(0).length, 1);
+  assert.equal(getCharacterArrangements(0)[0].cells.length, 0);
+  assert.equal(getNextArrangement(0).number, 0);
   assert.equal(getCharacterArrangements(1).length, 1);
   const cube = getCharacterArrangements(27)[0], windows = getCharacterArrangements(28)[0];
   assert.deepEqual([cube.width, cube.height, cube.depth], [3, 3, 3]);

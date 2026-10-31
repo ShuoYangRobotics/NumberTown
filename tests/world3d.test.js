@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS, SQUARE, STATUE, POND } from '../dist/world-data.js';
 import { BRIDGES, riverX, riverWidth } from '../dist/geography.js';
 import { createTown } from '../dist/world3d.js';
+import { CHARACTERS } from '../dist/character-data.js';
+import { Matrix4, Vector3 } from '../dist/vendor/three.module.js';
 
 // The widest friend needs a 5.4-unit corridor. The route check uses a separate
 // occupancy grid, so a safe-looking destination cannot conceal a sealed route.
@@ -23,10 +25,10 @@ function blocked(x, z) {
   });
 }
 
-test('all thirty friends start clear of scenery and each other, including wide friends', () => {
-  assert.equal(FRIEND_STARTS.length, 30);
+test('all selectable friends start clear of scenery and each other, including wide friends', () => {
+  assert.equal(FRIEND_STARTS.length, CHARACTERS.length);
   for (const [i, p] of FRIEND_STARTS.entries()) {
-    assert.ok(!blocked(p.x, p.z), `Friend ${i + 1} starts inside scenery`);
+    assert.ok(!blocked(p.x, p.z), `Friend ${CHARACTERS[i].number} starts inside scenery`);
     for (const q of FRIEND_STARTS.slice(i + 1)) {
       assert.ok(Math.hypot(p.x - q.x, p.z - q.z) >= radius * 2, `Friends overlap near ${p.x},${p.z}`);
     }
@@ -104,11 +106,74 @@ test('the centerpiece is a real 27-cubie statue with six tiled faces and a solid
   assert.deepEqual([town.statue.position.x, town.statue.position.z], [SQUARE.x, SQUARE.z]);
   const core = town.statue.getObjectByName('27 black cubies');
   assert.ok(core?.isInstancedMesh); assert.equal(core.count, 27);
-  const faces = town.statue.children.filter(part => part !== core);
+  const faces = core.parent.children.filter(part => part !== core);
   assert.equal(faces.length, 6);
   assert.ok(faces.every(face => face.isInstancedMesh && face.count === 9));
   assert.equal(new Set(faces.map(face => face.material.color.getHex())).size, 6);
   assert.ok(blocked(STATUE.x, STATUE.z), 'The pedestal must stop characters walking through the statue');
+});
+
+function statueVertices(statue) {
+  const vertices = [], instance = new Matrix4(), worldMatrix = new Matrix4();
+  statue.updateWorldMatrix(true, true);
+  statue.traverse(mesh => {
+    if (!mesh.isInstancedMesh) return;
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getMatrixAt(index, instance); worldMatrix.multiplyMatrices(mesh.matrixWorld, instance);
+      // Every statue instance is an actual box. These eight transformed
+      // corners determine its lowest point, including the raised face tiles.
+      for (const x of [-.5, .5]) for (const y of [-.5, .5]) for (const z of [-.5, .5]) {
+        vertices.push({ part: mesh.name, point: new Vector3(x, y, z).applyMatrix4(worldMatrix) });
+      }
+    }
+  });
+  return vertices;
+}
+
+test('the entire rigid statue balances on exactly one fixed vertex without clipping the pedestal', () => {
+  const town = createTown(), instance = new Matrix4(), pedestalTops = [];
+  for (const mesh of town.root.children) {
+    if (!mesh.isInstancedMesh || mesh.geometry.type !== 'BoxGeometry') continue;
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getMatrixAt(index, instance);
+      const center = new Vector3().setFromMatrixPosition(instance), scale = new Vector3().setFromMatrixScale(instance);
+      if (center.x === STATUE.x && center.z === STATUE.z && center.y < 2 && scale.x >= 10 && scale.z >= 10) pedestalTops.push(center.y + scale.y / 2);
+    }
+  }
+  assert.equal(pedestalTops.length, 3, 'the existing three-level pedestal stays in place');
+  const pedestalTop = Math.max(...pedestalTops), contact = new Vector3(STATUE.x, pedestalTop, STATUE.z);
+  assert.ok(Math.abs(pedestalTop - STATUE.baseHeight) < 1e-5, 'the contact height must match the rendered pedestal');
+  for (const time of [0, .25, 1, 3.6, 7.2, 19.37, 1000]) {
+    town.update(time);
+    const vertices = statueVertices(town.statue), touching = vertices.filter(({ point }) => Math.abs(point.y - pedestalTop) < 1e-5);
+    assert.equal(vertices.length, (27 + 54) * 8);
+    assert.equal(touching.length, 1, 'contact must be a vertex, not an edge or face');
+    assert.equal(touching[0].part, '27 black cubies', 'the black cube corner carries the statue');
+    assert.ok(touching[0].point.distanceTo(contact) < 1e-5, 'the corner must remain centered on the pedestal');
+    for (const { point } of vertices) {
+      assert.ok(point.y >= pedestalTop - 1e-5, 'no cubie or colored tile may pierce the pedestal');
+      assert.ok(Math.hypot(point.x - STATUE.x, point.z - STATUE.z) < STATUE.pedestalWidth / 2, 'the sculpture stays inside the pedestal collision footprint');
+    }
+  }
+});
+
+test('elapsed-time animation rotates every cubie and face tile about world vertical at exactly fifty degrees per second', () => {
+  const town = createTown(), vertical = new Vector3(0, 1, 0), pivot = new Vector3(STATUE.x, STATUE.baseHeight, STATUE.z);
+  town.update(0);
+  const initial = statueVertices(town.statue).map(({ point }) => point);
+  for (const time of [1 / 60, 1, 3.6, 7.2, 123.45]) {
+    town.update(time);
+    const actual = statueVertices(town.statue);
+    for (let index = 0; index < actual.length; index++) {
+      const expected = initial[index].clone().sub(pivot).applyAxisAngle(vertical, time * 50 * Math.PI / 180).add(pivot);
+      assert.ok(expected.distanceTo(actual[index].point) < 1e-8, 'spin must use world Y and preserve the rigid cube');
+      assert.ok(Math.abs(initial[index].y - actual[index].point.y) < 1e-8, 'spinning cannot rock the corner off the base');
+    }
+  }
+  // Elapsed time, rather than accumulated frame deltas, makes pausing and
+  // different frame rates deterministic and prevents drift after a full turn.
+  town.update(0);
+  assert.deepEqual(statueVertices(town.statue).map(({ point }) => point.toArray()), initial.map(point => point.toArray()));
 });
 
 test('bridge approach paving stops at each bridge edge and broad exits allow a turn onto both promenades', () => {

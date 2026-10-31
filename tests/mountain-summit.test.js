@@ -127,8 +127,8 @@ test('ascent is continuous with a walkable grade and meets both ground and deck 
   close(previousHeight, SUMMIT_DECK.height, .08, 'Trail to deck transition');
 });
 
-test('all thirty character footprints can walk the complete route and the widest can return', () => {
-  assert.equal(CHARACTERS.length, 30);
+test('all thirty-one character footprints can walk the complete route and the widest can return', () => {
+  assert.equal(CHARACTERS.length, 31);
   const route = samples(.16);
   const footprints = CHARACTERS.map(character => ({ name: character.name, radius: getCharacterMetrics(character.number).radius }));
   footprints.push({ name: 'Conservative widest footprint', radius: widest });

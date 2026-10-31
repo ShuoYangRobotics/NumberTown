@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { toSpokenMath } from '../dist/speech.js';
 import { getMathFacts } from '../dist/personalities.js';
+import { CHARACTERS } from '../dist/character-data.js';
 
 test('multiplication symbols and numeric x variants are spoken as times', () => {
   for (const written of ['2x10=20', '2×10=20', '2 X 10 =20', '2*10=20', '2 x 10 = 20']) {
@@ -23,6 +24,26 @@ test('subtraction, addition, division, and chained equations use natural operato
   assert.equal(toSpokenMath('12/3=4; 4*2=8!'), '12 divided by 3 equals 4; 4 times 2 equals 8!');
   assert.equal(toSpokenMath('2.5×4=10; .5+1.5=2.'), '2.5 times 4 equals 10; .5 plus 1.5 equals 2.');
   assert.equal(toSpokenMath('1,000-200=800'), '1,000 minus 200 equals 800');
+});
+
+test('Zero facts speak identities and nonzero divisors clearly', () => {
+  const cases = new Map([
+    ['I have 0 blocks.', 'I have 0 blocks.'],
+    ['5 + 0 = 5.', '5 plus 0 equals 5.'],
+    ['0 + 5 = 5.', '0 plus 5 equals 5.'],
+    ['5 - 0 = 5.', '5 minus 0 equals 5.'],
+    ['5 - 5 = 0.', '5 minus 5 equals 0.'],
+    ['5 × 0 = 0.', '5 times 0 equals 0.'],
+    ['0 × 5 = 0.', '0 times 5 equals 0.'],
+    ['0 divided by 5 is 0.', '0 divided by 5 is 0.'],
+  ]);
+  for (const [written, spoken] of cases) {
+    assert.ok(getMathFacts(0).includes(written));
+    assert.equal(toSpokenMath(written), spoken);
+  }
+  for (const text of getMathFacts(0)) {
+    assert.doesNotMatch(toSpokenMath(text), /divided by 0\b/);
+  }
 });
 
 test('unary negatives are distinguished from subtraction, including bracketed expressions', () => {
@@ -54,9 +75,9 @@ test('ordinary words, labels, hyphenated names, punctuation, and existing spoken
   assert.equal(toSpokenMath('Twenty-One: 22-1=21. Excited?'), 'Twenty-One: 22 minus 1 equals 21. Excited?');
 });
 
-test('every existing math fact for One through Thirty has speakable operators and unchanged display text', () => {
+test('every existing math fact for Zero through Thirty has speakable operators and unchanged display text', () => {
   let arithmetic = 0, prose = 0;
-  for (let number = 1; number <= 30; number++) {
+  for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number), original = [...facts];
     for (const fact of facts) {
       const spoken = toSpokenMath(fact);

@@ -16,9 +16,25 @@ test('all six moods have usable, unique display options', () => {
   }
 });
 
-test('all thirty friends have at least three different personal happy remarks', () => {
+test('Zero has no blocks and a distinct, gentle voice in all six emotions', () => {
+  const zero = CHARACTERS.find(character => character.number === 0);
+  assert.ok(zero, 'Zero must be present in the rendered cast');
+  assert.deepEqual(zero.cells, []);
+  const lines = new Set();
+  for (const emotion of moods) {
+    const remark = chooseRemark(0, { emotion }, () => 0);
+    assert.match(remark.text, /zero/i);
+    assert.equal(remark.emotion, emotion);
+    assert.notEqual(remark.text, chooseRemark(1, { emotion }, () => 0).text);
+    assert.deepEqual(remark, chooseRemark('0', { emotion }, () => 0));
+    lines.add(remark.text);
+  }
+  assert.equal(lines.size, moods.length);
+});
+
+test('all thirty-one friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+  for (const { number } of CHARACTERS) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
     assert.ok(lines.size >= 3, `friend ${number} needs more personal dialogue`);
     signatures.add([...lines].sort().join('|'));
@@ -27,7 +43,7 @@ test('all thirty friends have at least three different personal happy remarks', 
 });
 
 test('every friend preserves each chosen emotion in every landmark and while walking', () => {
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+  for (const { number } of CHARACTERS) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -90,7 +106,7 @@ test('the scenic lookout has sea-view remarks in every emotion', () => {
 });
 
 test('lastText prevents an immediate repeat for every friend, emotion, and landmark', () => {
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+  for (const { number } of CHARACTERS) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -151,7 +167,7 @@ test('Eleven through Thirty retain their own personality in every emotion', () =
 
 test('new friends can greet each other and retain location-specific dialogue', () => {
   const names = CHARACTERS.filter(character => character.number >= 11).map(character => character.name);
-  for (let number = 11; number <= CHARACTERS.length; number++) {
+  for (const { number } of CHARACTERS.filter(character => character.number >= 11)) {
     for (const emotion of moods) {
       const name = names[(number - 10) % names.length];
       const greeting = chooseRemark(number, { emotion, nearbyName: name }, () => 1);
@@ -182,7 +198,7 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
   assert.deepEqual(chooseRemark(7, context, () => 2), chooseRemark(7, context, () => 1));
   assert.deepEqual(chooseRemark(7, context, () => NaN), chooseRemark(7, context, () => 0));
   assert.deepEqual(chooseRemark(99, { emotion: 'unknown' }, () => 0), chooseRemark(1, {}, () => 0));
-  assert.deepEqual(chooseRemark(CHARACTERS.length + 1, {}, () => 0), chooseRemark(1, {}, () => 0));
+  assert.deepEqual(chooseRemark(Math.max(...CHARACTERS.map(character => character.number)) + 1, {}, () => 0), chooseRemark(1, {}, () => 0));
   assert.notDeepEqual(chooseRemark(20, {}, () => 0), chooseRemark(1, {}, () => 0));
 });
 
@@ -190,14 +206,15 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
 // the generator emits its own templates. Unknown formats must add a validator.
 function checkMathFact(text, number, definition = CHARACTERS.find(item => item.number === number)) {
   let match;
-  if ((match = text.match(/^I have (\d+) (?:equal blocks|block)\.$/))) {
+  if ((match = text.match(/^I have (\d+) (?:equal blocks|blocks|block)\.$/))) {
     assert.equal(+match[1], number);
     assert.equal(definition.cells.length, number);
   } else if ((match = text.match(/^(\d+) ([+−×-]) (\d+) = (\d+)\.$/))) {
     const a = +match[1], b = +match[3], result = +match[4];
     const actual = match[2] === '+' ? a + b : match[2] === '×' ? a * b : a - b;
     assert.equal(actual, result, text);
-    assert.equal(result, number);
+    if (number === 0) assert.ok(result === 0 || a === 0 || b === 0, text);
+    else assert.equal(result, number);
   } else if ((match = text.match(/^(\d+) divided by (\d+) is (\d+)\.$/))) {
     assert.ok(+match[2] > 0);
     assert.equal(+match[1] / +match[2], +match[3], text);
@@ -268,16 +285,16 @@ function checkMathFact(text, number, definition = CHARACTERS.find(item => item.n
     assert.equal(steps.reduce((sum, value) => sum + value, 0), number);
     assert.equal(+match[3], number);
     assert.deepEqual(steps, Array.from({ length: definition.width }, (_, x) => definition.cells.filter(cell => cell.x === x).length));
-  } else if (text === '1 is neither prime nor composite.') {
-    assert.equal(number, 1);
+  } else if ((match = text.match(/^([01]) is neither prime nor composite\.$/))) {
+    assert.equal(number, +match[1]);
   } else {
     assert.fail(`Unverified mathematical claim: ${text}`);
   }
 }
 
-test('all facts for One through Thirty are short, unique, and mathematically true', () => {
-  assert.equal(CHARACTERS.length, 30, 'math descriptions should match all thirty rendered friends');
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+test('all facts for Zero through Thirty are short, unique, and mathematically true', () => {
+  assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 31 }, (_, number) => number));
+  for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
     assert.ok(Object.isFrozen(facts));
     assert.ok(facts.length >= 8);
@@ -289,11 +306,31 @@ test('all facts for One through Thirty are short, unique, and mathematically tru
   }
 });
 
+test('Zero teaches identities and valid division without claiming a block shape', () => {
+  const facts = getMathFacts(0), zero = CHARACTERS.find(character => character.number === 0);
+  for (const required of ['I have 0 blocks.', '5 + 0 = 5.', '0 + 5 = 5.', '5 - 0 = 5.',
+    '5 - 5 = 0.', '5 × 0 = 0.', '0 × 5 = 0.', '0 divided by 2 is 0.',
+    '0 divided by 5 is 0.', '0 is even: 0 pairs of blocks.', '0 is neither prime nor composite.']) {
+    assert.ok(facts.includes(required), `Missing Zero fact: ${required}`);
+  }
+  for (const text of facts) {
+    checkMathFact(text, 0);
+    assert.doesNotMatch(text, /(?:divided by|[÷/])\s*0\b/);
+    assert.doesNotMatch(text, /^(?:I am a|I can arrange|My )/);
+    assert.doesNotMatch(text, /Infinity|NaN|undefined/);
+  }
+  for (const arrangement of [zero, null, {}, { number: 0, cells: [] }, CHARACTERS.find(character => character.number === 1)]) {
+    assert.deepEqual(getMathFacts(0, arrangement), facts, 'no supplied arrangement may invent blocks for Zero');
+  }
+  assert.deepEqual(getMathFacts('0'), facts);
+  assert.notDeepEqual(getMathFacts(1), facts, 'prepending Zero must not shift the cached facts for One');
+});
+
 test('every friend teaches operations, parity, factors, and accurate number categories', () => {
   const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
-  const squares = [1, 4, 9, 16, 25];
-  const cubes = [1, 8, 27];
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+  const squares = [0, 1, 4, 9, 16, 25];
+  const cubes = [0, 1, 8, 27];
+  for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
     assert.ok(facts.some(text => /^\d+ \+ \d+ = /.test(text)));
     assert.ok(facts.some(text => /^\d+ - \d+ = /.test(text)));
@@ -423,10 +460,12 @@ test('malformed current arrangements omit shape claims instead of reverting to t
 test('the character range follows the data and invalid inputs safely fall back to One', () => {
   const highest = CHARACTERS.at(-1).number;
   assert.equal(highest, 30);
+  assert.equal(CHARACTERS.length, 31);
+  assert.deepEqual(getMathFacts(CHARACTERS.length), getMathFacts(1), 'cast length is not the highest number');
   assert.ok(getMathFacts(highest).includes(`I have ${highest} equal blocks.`));
   assert.deepEqual(getMathFacts(String(highest)), getMathFacts(highest));
   assert.notEqual(chooseRemark(highest, {}, () => 0).text, chooseRemark(1, {}, () => 0).text);
-  for (const invalid of [0, -1, highest + 1, 1.5, NaN, Infinity, -Infinity, undefined, null, '', 'not a number', true, {}, [], Symbol('invalid')]) {
+  for (const invalid of [-1, highest + 1, 1.5, NaN, Infinity, -Infinity, undefined, null, '', '   ', '\n\t', 'not a number', true, {}, [], Symbol('invalid')]) {
     assert.deepEqual(getMathFacts(invalid), getMathFacts(1));
     assert.deepEqual(chooseRemark(invalid, {}, () => 0), chooseRemark(1, {}, () => 0));
     assert.deepEqual(chooseRemark(invalid, { math: true }, () => .5), chooseRemark(1, { math: true }, () => .5));
@@ -434,7 +473,7 @@ test('the character range follows the data and invalid inputs safely fall back t
 });
 
 test('math mode guarantees a fact, preserves every emotion, and avoids repetition', () => {
-  for (let number = 1; number <= CHARACTERS.length; number++) {
+  for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
     for (const emotion of moods) for (const place of [undefined, ...places]) {
       for (let index = 0; index < facts.length; index++) {

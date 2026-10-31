@@ -80,10 +80,10 @@ test('friends yield around one another without overlapping or becoming permanent
   for (const player of players) assert.ok(controller.stateFor(player).visits >= 1, 'A friend remained trapped behind another visitor');
 });
 
-test('all twenty-nine unselected friends keep exploring the assembled town within a frame budget', () => {
-  assert.equal(CHARACTERS.length, 30);
-  const players = FRIEND_STARTS.map((point, index) => friend(index + 1, point.x, point.z, getCharacterMetrics(index + 1).radius));
-  const active = players[10], original = { ...active }, times = [], choices = players.map(() => new Set());
+test('all thirty unselected friends keep exploring the assembled town within a frame budget', () => {
+  assert.equal(CHARACTERS.length, 31);
+  const players = CHARACTERS.map((character, index) => friend(character.number, FRIEND_STARTS[index].x, FRIEND_STARTS[index].z, getCharacterMetrics(character.number).radius));
+  const active = players.find(p=>p.number===11), original = { ...active }, times = [], choices = players.map(() => new Set());
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
     destinations: [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK], random: seeded(19) });
   // Two cross-town trips can exceed five simulated minutes at walking speed.
@@ -103,8 +103,8 @@ test('all twenty-nine unselected friends keep exploring the assembled town withi
   assert.deepEqual(active, original);
   for (let index = 0; index < players.length; index++) {
     if (players[index] === active) continue;
-    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${index + 1} did not keep exploring`);
-    assert.ok(choices[index].size >= 3, `Friend ${index + 1} repeated only one destination`);
+    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${players[index].number} did not keep exploring`);
+    assert.ok(choices[index].size >= 3, `Friend ${players[index].number} repeated only one destination`);
   }
   times.sort((a, b) => a - b);
   assert.ok(times[Math.floor(times.length * .99)] < 20, 'Planning consumed the browser frame budget on more than 1% of frames');

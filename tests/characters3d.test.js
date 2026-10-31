@@ -19,14 +19,15 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('One to Thirty have exactly counted, unique, connected unit-cell shapes totaling 465 cubes', () => {
-  assert.equal(CHARACTERS.length, 30);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 30);
+test('Zero to Thirty preserve 31 identities and 465 counted, connected unit cubes', () => {
+  assert.equal(CHARACTERS.length, 31);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 31);
   assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),465);
   for (const [index, friend] of CHARACTERS.entries()) {
-    assert.equal(friend.number, index + 1);
+    assert.equal(friend.number, index);
     assert.equal(friend.cells.length, friend.number);
-    assert.deepEqual([friend.width, friend.height], shapes[index]);
+    if(friend.number===0){assert.deepEqual(friend.cells,[]);continue;}
+    assert.deepEqual([friend.width, friend.height], shapes[friend.number-1]);
     const cells = new Set(friend.cells.map(key3));
     assert.equal(cells.size, friend.number, `${friend.name} has overlapping cubes`);
     for (const cell of friend.cells) {
@@ -64,11 +65,71 @@ test('Sixteen to Twenty match the supplied shapes, ten-parts, and color groups',
 });
 
 test('definition lookup supports the whole roster and clamps safely',()=>{
+  assert.equal(getCharacterDefinition(0).name,'Zero');
+  assert.equal(getCharacterDefinition('0').number,0);
   assert.equal(getCharacterDefinition(30).name,'Thirty');
-  assert.equal(getCharacterDefinition(200).number,CHARACTERS.length);
+  assert.equal(getCharacterDefinition(200).number,30);
   assert.equal(getCharacterDefinition('19').number,19);
   assert.equal(getCharacterDefinition(-3).number,1);
   assert.equal(getCharacterDefinition(NaN).number,1);
+  for(const input of[undefined,null,'',false,'not a number',Infinity,-.2])assert.equal(getCharacterDefinition(input).number,1);
+  for(const data of CHARACTERS)assert.equal(getCharacterDefinition(data.number),data,'identity lookup must not assume index equals number minus one');
+});
+
+test('Zero is only a floating coral mouth and one black numeral, with no cubes, eyes, or limbs',()=>{
+  const definition=getCharacterDefinition(0),zero=createCharacter(0),one=createCharacter(1);
+  assert.equal(CHARACTERS[0],definition);assert.deepEqual(definition.cells,[]);
+  assert.equal(unitBlocks(zero.root).length,0);assert.equal(zero.body.children.length,0);
+  assert.deepEqual(zero.root.userData.armAttachments,[]);
+  assert.ok(zero.root.getObjectByName('coral floating lip'));
+  assert.ok(zero.root.getObjectByName('zero smiling teeth'));
+  const numeral=zero.root.getObjectByName('black zero numeral');
+  assert.ok(numeral.isMesh);assert.equal(numeral.material.color.getHexString(),'080c0c');
+  let labels=0;
+  zero.root.traverse(object=>{
+    if(object.name==='number 0')labels++;
+    assert.ok(!['eye white','pupil','arm','tentacle','hand','walking shoe','number plaque'].includes(object.name));
+    if(object.geometry)assert.ok(Array.from(object.geometry.getAttribute('position').array).every(Number.isFinite));
+  });
+  assert.equal(labels,1,'Zero must not receive a second generic numeral plaque');
+  const zeroSize=new Box3().setFromObject(zero.root).getSize(new Vector3()),oneSize=new Box3().setFromObject(one.root).getSize(new Vector3());
+  assert.ok(zeroSize.x<oneSize.x&&zeroSize.y<oneSize.y,'Zero is visibly smaller than One');
+  const metrics=getCharacterMetrics(0);
+  for(const key of['width','height','depth','radius'])assert.ok(Number.isFinite(metrics[key])&&metrics[key]>0);
+  assert.deepEqual(getCharacterMetrics(definition),metrics);
+  assert.equal(zero.radius,metrics.radius);assert.ok(metrics.radius<getCharacterMetrics(1).radius);
+  assert.deepEqual(getCharacterFaceLayout(0),{x:0,eyeY:.44,mouthY:.44,gap:0,size:0,mouth:.76});
+  zero.dispose();one.dispose();
+});
+
+test('Zero preserves its model interface, floats without moving the root, and disposes its owned geometry once',()=>{
+  const zero=createCharacter(0,{definition:{...getCharacterDefinition(0),formId:'original'}});
+  zero.root.position.set(3,2,-4);zero.root.rotation.y=.75;
+  zero.update(.016,{time:1.2,moving:true,emotion:'curious'});
+  assert.deepEqual(zero.root.position.toArray(),[3,2,-4]);assert.equal(zero.root.rotation.y,.75);
+  assert.equal(zero.root.userData.emotion,'curious');assert.notEqual(zero.root.getObjectByName('floating zero').position.y,0);
+  const geometries=new Map();
+  zero.root.traverse(object=>{if(object.geometry&&object.geometry.type!=='SphereGeometry')geometries.set(object.geometry,0);});
+  for(const geometry of geometries.keys())geometry.addEventListener('dispose',()=>geometries.set(geometry,geometries.get(geometry)+1));
+  zero.dispose();zero.dispose();
+  assert.ok(geometries.size>10);assert.ok([...geometries.values()].every(count=>count===1));
+});
+
+test('Zero keeps a clearly visible ivory smile inside the lip from the normal elevated camera',()=>{
+  const model=createCharacter(0),happy=model.face.getObjectByName('expression happy');
+  const teeth=happy.getObjectByName('zero smiling teeth'),lip=happy.getObjectByName('coral floating lip');
+  model.root.updateMatrixWorld(true);
+  assert.ok(new Box3().setFromObject(teeth).max.z<new Box3().setFromObject(lip).max.z,'teeth must stay inside the lip front');
+  const direction=new Vector3(0,Math.sin(.32),Math.cos(.32)),visible={teeth:0,cavity:0};
+  for(let x=-.4;x<=.4;x+=.025)for(let y=.12;y<=.72;y+=.025){
+    const ray=new Raycaster(new Vector3(x,y,0).addScaledVector(direction,3),direction.clone().negate());
+    const hit=ray.intersectObject(happy,true)[0];
+    if(hit?.object.name==='zero smiling teeth')visible.teeth++;
+    if(hit?.object.name==='zero mouth cavity')visible.cavity++;
+  }
+  assert.ok(visible.teeth>0&&visible.teeth/(visible.teeth+visible.cavity)>.6,'the lip must not hide most of the ivory smile');
+  assert.equal(teeth.receiveShadow,false,'tiny lip shadows must not blacken the teeth');
+  model.dispose();
 });
 
 test('Twenty-One to Twenty-Five match their reference cube layouts and twenty-plus color groups',()=>{
@@ -278,6 +339,7 @@ test('3D bodies contain exact unscaled 1×1×1 cubes, flush on the declared grid
       return key3({ x, y, z });
     });
     assert.deepEqual(actual.sort(), data.cells.map(key3).sort());
+    if(data.number===0)continue;
     const left = Math.min(...blocks.map(block => block.position.x - .5));
     const right = Math.max(...blocks.map(block => block.position.x + .5));
     const bottom = Math.min(...blocks.map(block => block.position.y - .5));
@@ -376,7 +438,8 @@ test('walking animates limbs while preserving externally owned position, heading
     character.root.children.forEach(object => {
       if (object.children.some(child => child.name === 'arm' || child.name === 'tentacle' || child.name === 'walking shoe') && Math.abs(object.rotation.x) > .01) movingLimbs++;
     });
-    assert.ok(movingLimbs >= 4, `${data.name} must animate both feet and arms`);
+    if(data.number===0){assert.equal(movingLimbs,0);assert.notEqual(character.root.getObjectByName('floating zero').position.y,0);}
+    else assert.ok(movingLimbs >= 4, `${data.name} must animate both feet and arms`);
     for (let i = 0; i < 10; i++) character.update(.016, { moving: i % 2 === 0 });
     character.root.traverse(object => {
       assert.ok([...object.position.toArray(), ...object.scale.toArray(), ...object.quaternion.toArray()].every(Number.isFinite));

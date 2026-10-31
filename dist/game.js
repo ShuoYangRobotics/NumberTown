@@ -75,7 +75,7 @@ const players = CHARACTERS.map((definition,index) => {
   scene.add(model.root);
   return player;
 });
-let active = players[26];
+let active = players.find(player=>player.number===27);
 const camera = new THREE.PerspectiveCamera(42, 1, .3, 1300);
 const orbit = {yaw:.26, elevation:.64, distance:76, targetDistance:76};
 const target = new THREE.Vector3(active.x, 2.1, active.z);
@@ -97,6 +97,7 @@ let voiceUtterance=null;
 const voiceState={text:'',number:null,playing:false};
 
 function miniSVG(definition) {
+  if(definition.number===0)return `<svg viewBox="-.5 0 1 1.6" aria-hidden="true"><text x="0" y=".94" text-anchor="middle" fill="#141b18" font-family="Arial,sans-serif" font-weight="700" font-size="1.2">0</text><path d="M-.35 1.18q.35 .15 .7-.04q.02 .42-.35 .36q-.35-.02-.35-.32Z" fill="#a43346" stroke="#f17b85" stroke-width=".12" stroke-linejoin="round"/><path d="M-.27 1.23q.25 .07 .53-.03" fill="none" stroke="#fff5da" stroke-width=".075"/></svg>`;
   const w=definition.width, h=definition.height;
   const depth=definition.depth||1;
   const frontCells=definition.cells.filter(cell=>(cell.z||0)===depth-1);
@@ -117,12 +118,12 @@ for(const definition of CHARACTERS){
   const button=document.createElement('button');button.type='button';button.className=definition.number>20?'friend-card long-name':'friend-card';button.dataset.number=definition.number;
   button.title=`${definition.name} · ${definition.number} blocks`;
   button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
-  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>25?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
+  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number===0?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
   button.addEventListener('click',()=>selectFriend(definition.number));$('#friends').append(button);
 }
 function focusGame(){canvas.focus({preventScroll:true});}
 function selectFriend(number, initial=false){
-  cancelVoice();active=players.find(p=>p.number===number)||players[0];clearInput();roaming.pause(active,time);active.yaw=orbit.yaw-(active.number===27&&active.formId==='original'?.45:0);
+  cancelVoice();active=players.find(p=>p.number===number)||players.find(p=>p.number===1);clearInput();roaming.pause(active,time);active.yaw=orbit.yaw-(active.number===27&&active.formId==='original'?.45:0);
   document.querySelectorAll('.friend-card').forEach(button=>button.setAttribute('aria-pressed',String(+button.dataset.number===active.number)));
   $('#friend-name').textContent=active.name;$('#friend-description').textContent=active.description;
   $('#block-count').textContent=`${active.number} ${active.number===1?'cube':'cubes'}`;
@@ -139,16 +140,17 @@ function keepSelectedCardVisible(){
   const item=card.getBoundingClientRect(),row=strip.getBoundingClientRect();
   if(item.left<row.left||item.right>row.right||active.number>20)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
 }
-$('#previous-friend').addEventListener('click',()=>selectFriend(active.number===1?players.length:active.number-1));
-$('#next-friend').addEventListener('click',()=>selectFriend(active.number===players.length?1:active.number+1));
+function adjacentFriend(step){const index=players.indexOf(active);selectFriend(players[(index+step+players.length)%players.length].number);}
+$('#previous-friend').addEventListener('click',()=>adjacentFriend(-1));
+$('#next-friend').addEventListener('click',()=>adjacentFriend(1));
 
 function updateShapeInfo(message=''){
   $('#friend-description').textContent=active.definition.transformed?`Still ${active.number} cubes, now in a ${active.width} by ${active.height} arrangement.`:active.description;
-  $('#shape-size').textContent=`${active.width} wide · ${active.height} tall${active.definition.depth>1?` · ${active.definition.depth} deep`:''}`;
+  $('#shape-size').textContent=active.number===0?'A floating smile':`${active.width} wide · ${active.height} tall${active.definition.depth>1?` · ${active.definition.depth} deep`:''}`;
   const shapes=getCharacterArrangements(active.number);
   $('#transform-shape').disabled=shapes.length<2;
-  $('#transform-shape').title=shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Keep pressing to return to the original shape.';
-  $('#shape-status').textContent=message||(active.formId==='original'?'Original shape':`${active.width} × ${active.height} = ${active.number}`);
+  $('#transform-shape').title=active.number===0?'Zero has no blocks to rearrange.':shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Keep pressing to return to the original shape.';
+  $('#shape-status').textContent=message||(active.number===0?'No blocks to rearrange':active.formId==='original'?'Original shape':`${active.width} × ${active.height} = ${active.number}`);
 }
 function fitCharacterView(preserve=false){
   if(active.number===28&&active.formId==='original')orbit.elevation=Math.min(orbit.elevation,.32);
@@ -159,7 +161,7 @@ function fitCharacterView(preserve=false){
 function transformFriend(){
   if(modalOpen())return;
   const definition=getNextArrangement(active.number,active.formCursor);
-  if(definition.formId===active.formId&&getCharacterArrangements(active.number).length===1){updateShapeInfo('One makes a 1 × 1 square.');return;}
+  if(definition.formId===active.formId&&getCharacterArrangements(active.number).length===1){updateShapeInfo(active.number===0?'Zero has no blocks to rearrange.':'One makes a 1 × 1 square.');return;}
   // Advance the attempted shape even when it does not fit, so another press
   // can reach a narrow rectangle or restore the original body on a small path.
   active.formCursor=definition.formId;
@@ -295,13 +297,13 @@ addEventListener('keydown',event=>{
   if(!event.repeat&&key==='f'){event.preventDefault();kick();}
   if(!event.repeat&&(key==='+'||key==='='))zoom(-3);
   if(!event.repeat&&(key==='-'||key==='_'))zoom(3);
-  if(!event.repeat&&key==='[')selectFriend(active.number===1?players.length:active.number-1);
-  if(!event.repeat&&key===']')selectFriend(active.number===players.length?1:active.number+1);
+  if(!event.repeat&&key==='[')adjacentFriend(-1);
+  if(!event.repeat&&key===']')adjacentFriend(1);
   if(key==='escape')closeMood();
 });
 mountCharacterShortcut({
   canvas,input:$('#jump-number'),button:$('#jump-to-friend'),status:$('#jump-status'),
-  maxNumber:players.length,onSelect:selectFriend,
+  minNumber:players[0].number,maxNumber:players.at(-1).number,onSelect:selectFriend,
   onBegin:()=>{clearInput();closeMood();},isBlocked:modalOpen,focusGame,
 });
 addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
@@ -339,7 +341,7 @@ function pointerEnd(event){
   if(event.type==='pointerup'&&!suppressClick&&drag){
     const rect=canvas.getBoundingClientRect();ndc.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(ndc,camera);
     const hits=raycaster.intersectObjects(players.map(p=>p.model.root),true);
-    if(hits.length){let object=hits[0].object;while(object&&!object.userData.playerNumber)object=object.parent;if(object)selectFriend(object.userData.playerNumber);}
+    if(hits.length){let object=hits[0].object;while(object&&object.userData.playerNumber===undefined)object=object.parent;if(object)selectFriend(object.userData.playerNumber);}
   }
   pointerPositions.delete(event.pointerId);drag=null;
 }
@@ -392,7 +394,7 @@ function updateActivity(place){
   if(id==='mountains'){title='The northern mountains';detail='A paved path winds around one peak. Visit Mountain trail to begin the climb.';}
   if(id==='mountain-trail'){title=`Summit Walk · ${Math.round(groundHeight(active.x,active.z))} / ${SUMMIT_DECK.height} m`;detail=time<trailNoticeUntil?'A friend is on the path. Use WASD to walk around them.':guidedWalk?'Enjoy the climb. WASD takes over whenever you like.':'Follow the paved bends with WASD, or take a guided walk to the top.';}
   if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Look across NumberTown, the river, and the sea. Drag to enjoy the panorama.';}
-  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all thirty friends.';}
+  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A colorful cube balances on one corner, spinning at 50° per second.';}
   if(id==='pond'){title='The big duck pond';detail='Follow the shore and say hello to the ducks.';}
 
   $('#activity-title').textContent=title;$('#activity-detail').textContent=detail;

@@ -262,8 +262,16 @@ export function createTown() {
   // nine raised colored tiles on every one of its six faces, including below.
   const statue = new THREE.Group();
   statue.name = "Rubik's Cube statue";
-  statue.position.set(STATUE.x, 0, STATUE.z); statue.rotation.y = Math.PI / 10;
+  statue.position.set(STATUE.x, STATUE.baseHeight, STATUE.z);
+  const statueYaw = Math.PI / 10, statueSpeed = THREE.MathUtils.degToRad(50);
+  statue.rotation.y = statueYaw;
   const pitch = STATUE.cubieSize + STATUE.gap, size = STATUE.cubieSize;
+  const cube = new THREE.Group(); cube.name = 'Corner-balanced cube';
+  // Align the body diagonal with world up, then lift the opposite corner to
+  // the pivot. Yaw belongs to the parent, so the contact point never wobbles.
+  cube.quaternion.setFromUnitVectors(new THREE.Vector3(1, 1, 1).normalize(), new THREE.Vector3(0, 1, 0));
+  cube.position.y = (pitch + size / 2) * Math.sqrt(3);
+  statue.add(cube);
   function statueInstances(name, color, transforms) {
     const mesh = new THREE.InstancedMesh(geometry.box, material(color, { roughness: .52 }), transforms.length);
     mesh.name = name;
@@ -272,11 +280,11 @@ export function createTown() {
       mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true; mesh.castShadow = true; mesh.receiveShadow = true;
-    mesh.computeBoundingSphere(); statue.add(mesh);
+    mesh.computeBoundingSphere(); cube.add(mesh);
   }
   const cores = [];
-  for (let i = -1; i <= 1; i++) for (let j = 0; j < 3; j++) for (let k = -1; k <= 1; k++) {
-    cores.push({ position: [i * pitch, STATUE.baseHeight + size / 2 + j * pitch, k * pitch], scale: [size, size, size] });
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+    cores.push({ position: [i * pitch, j * pitch, k * pitch], scale: [size, size, size] });
   }
   statueInstances('27 black cubies', '#252b31', cores);
   const outer = pitch + size / 2 + .04, tile = size * .85;
@@ -287,10 +295,9 @@ export function createTown() {
   ]) {
     const tiles = [];
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-      const middleY = STATUE.baseHeight + size / 2 + pitch;
-      if (axis === 'x') tiles.push({ position: [side * outer, middleY + a * pitch, b * pitch], scale: [.08, tile, tile] });
-      else if (axis === 'y') tiles.push({ position: [a * pitch, middleY + side * outer, b * pitch], scale: [tile, .08, tile] });
-      else tiles.push({ position: [a * pitch, middleY + b * pitch, side * outer], scale: [tile, tile, .08] });
+      if (axis === 'x') tiles.push({ position: [side * outer, a * pitch, b * pitch], scale: [.08, tile, tile] });
+      else if (axis === 'y') tiles.push({ position: [a * pitch, side * outer, b * pitch], scale: [tile, .08, tile] });
+      else tiles.push({ position: [a * pitch, b * pitch, side * outer], scale: [tile, tile, .08] });
     }
     statueInstances(`${name} face — 9 tiles`, color, tiles);
   }
@@ -407,6 +414,7 @@ export function createTown() {
   return {
     root, statue,
     update(time) {
+      statue.rotation.y = statueYaw + time * statueSpeed;
       for (const { duck, x, z, phase } of animated.ducks) {
         duck.position.set(x + Math.sin(time * .18 + phase) * 1.2, .12 + Math.sin(time * 1.8 + phase) * .035, z + Math.cos(time * .15 + phase) * .9);
         duck.rotation.y = phase + Math.sin(time * .22 + phase) * .3;

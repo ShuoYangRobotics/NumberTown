@@ -11,6 +11,14 @@ export const EMOTIONS = Object.freeze([
 ].map(Object.freeze));
 
 const PERSONAL = {
+  0: {
+    happy: ['Zero blocks, and a big hello!', 'Zero has no blocks, but plenty of smiles.', 'Nothing to count? That is my cue!'],
+    excited: ['Zero blocks! I’m still ready for an adventure!'],
+    curious: ['What happens when we add zero to a number?'],
+    surprised: ['Oh! Zero blocks, and one big surprise!'],
+    sleepy: ['Zero blocks to tuck in. Time for a little rest.'],
+    sad: ['Zero blocks or many, everyone belongs here.'],
+  },
   1: {
     happy: ['One little block, one big adventure!', 'Every adventure starts with one step.', 'I may be small, but I can explore!'],
     excited: ['One, two, whee! Let’s go exploring!'],
@@ -253,14 +261,15 @@ const PERSONAL = {
   },
 };
 
+const CHARACTER_NUMBERS = new Set(CHARACTERS.map(character => character.number));
 const characterNumber = number => {
-  const value = typeof number === 'number' || typeof number === 'string' ? Number(number) : NaN;
-  return Number.isInteger(value) && value >= 1 && value <= CHARACTERS.length ? value : 1;
+  const value = typeof number === 'number' || typeof number === 'string' && number.trim() !== '' ? Number(number) : NaN;
+  return Number.isInteger(value) && CHARACTER_NUMBERS.has(value) ? value : 1;
 };
 
 /** Validate and measure unit-cube positions, including genuine depth. */
 function measureArrangement(number, definition) {
-  if (!definition || !Array.isArray(definition.cells) || definition.cells.length !== number
+  if (number === 0 || !definition || !Array.isArray(definition.cells) || definition.cells.length !== number
     || (definition.number !== undefined && definition.number !== number)) return null;
   if (definition.cells.some(cell => !cell || typeof cell !== 'object')) return null;
   const cells = definition.cells.map(cell => ({ x: cell.x, y: cell.y, z: cell.z ?? 0 }));
@@ -279,7 +288,27 @@ function measureArrangement(number, definition) {
 
 /** Derive short facts from arithmetic and the CURRENT unit-cube layout. */
 function buildMathFacts(number, definition) {
-  const facts = new Set([`I have ${number} ${number === 1 ? 'block' : 'equal blocks'}.`]);
+  const facts = new Set([`I have ${number} ${number === 0 ? 'blocks' : number === 1 ? 'block' : 'equal blocks'}.`]);
+  if (number === 0) {
+    facts.add('0 + 0 = 0.');
+    facts.add('0 - 0 = 0.');
+    // Zero has no occupied cubes or positive-sized factor rectangles. Its
+    // identities can have a nonzero result, and every divisor must be nonzero.
+    for (const value of [2, 5]) {
+      facts.add(`${value} + 0 = ${value}.`);
+      facts.add(`0 + ${value} = ${value}.`);
+      facts.add(`${value} - 0 = ${value}.`);
+      facts.add(`${value} - ${value} = 0.`);
+      facts.add(`${value} × 0 = 0.`);
+      facts.add(`0 × ${value} = 0.`);
+      facts.add(`0 divided by ${value} is 0.`);
+    }
+    facts.add('0 is even: 0 pairs of blocks.');
+    facts.add('0 is neither prime nor composite.');
+    facts.add('0 is a square number: 0 × 0 = 0.');
+    facts.add('0 is a cube number: 0 × 0 × 0 = 0.');
+    return Object.freeze([...facts]);
+  }
   const add = (a, b) => facts.add(`${a} + ${b} = ${number}.`);
   add(Math.floor(number / 2), Math.ceil(number / 2));
   if (number >= 10) add(10, number - 10);
@@ -342,7 +371,7 @@ function buildMathFacts(number, definition) {
   return Object.freeze([...facts]);
 }
 
-const MATH_FACTS = Object.freeze(CHARACTERS.map(character => buildMathFacts(character.number, character)));
+const MATH_FACTS = new Map(CHARACTERS.map(character => [character.number, buildMathFacts(character.number, character)]));
 
 /**
  * Read-only facts for the original shape by default. Pass the current character
@@ -351,7 +380,7 @@ const MATH_FACTS = Object.freeze(CHARACTERS.map(character => buildMathFacts(char
  */
 export function getMathFacts(number, arrangement) {
   const normalized = characterNumber(number);
-  return arrangement === undefined ? MATH_FACTS[normalized - 1] : buildMathFacts(normalized, arrangement);
+  return arrangement === undefined ? MATH_FACTS.get(normalized) : buildMathFacts(normalized, arrangement);
 }
 
 const PLACES = {

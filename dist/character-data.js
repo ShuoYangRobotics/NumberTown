@@ -23,6 +23,7 @@ function character(number, name, color, dark, description, cells) {
 }
 
 export const CHARACTERS = Object.freeze([
+  Object.freeze({number:0,name:'Zero',color:'#f27880',dark:'#d75062',description:'No blocks at all, just a little smile and a big imagination.',cells:Object.freeze([]),width:.82,height:.9,depth:.24}),
   character(1, 'One', '#ef5352', '#ae292f', 'Small, brave, and ready to explore.', grid(1, 1, '#ef5352')),
   character(2, 'Two', '#ffb349', '#a13786', 'Two blocks, twice the adventure.', grid(1, 2, '#ffb349')),
   character(3, 'Three', '#f6d649', '#d5433a', 'A little crown and a big imagination.', grid(1, 3, '#f6d649')),
@@ -74,11 +75,14 @@ export const CHARACTERS = Object.freeze([
   ]),
   character(30, 'Thirty', '#f7e548', '#b6a326', 'Three golden tens and a crown full of cheerful ideas.', grid(3,10,'#f7e548','#c8af28')),
 ]);
+const CHARACTERS_BY_NUMBER = new Map(CHARACTERS.map(character => [character.number, character]));
 
 export function getCharacterDefinition(number) {
+  if (typeof number !== 'number' && (typeof number !== 'string' || !number.trim())) return CHARACTERS_BY_NUMBER.get(1);
   const value = Number(number);
-  const index = Number.isFinite(value) ? Math.max(1, Math.min(CHARACTERS.length, Math.round(value))) - 1 : 0;
-  return CHARACTERS[index];
+  if (!Number.isFinite(value) || value < 0) return CHARACTERS_BY_NUMBER.get(1);
+  const resolved = Math.min(CHARACTERS.at(-1).number, Math.round(value));
+  return CHARACTERS_BY_NUMBER.get(resolved) ?? CHARACTERS_BY_NUMBER.get(1);
 }
 
 /** Body width/height; depth and radius include Twenty-One's substantial backpack.
@@ -87,6 +91,7 @@ export function getCharacterDefinition(number) {
  */
 export function getCharacterMetrics(numberOrDefinition) {
   const data = typeof numberOrDefinition === 'object' && numberOrDefinition?.cells ? numberOrDefinition : getCharacterDefinition(numberOrDefinition);
+  if(data.number===0)return{width:.82,height:.9,depth:.24,radius:Math.hypot(.41,.12)};
   const { number: id, width, height } = data, bodyDepth = data.depth ?? Math.max(...data.cells.map(c=>c.z??0))+1;
   const transformed=data.transformed===true||data.formId&&data.formId!=='original';
   const packScale=id===21&&transformed?Math.min(1,width/3,height/7):1;

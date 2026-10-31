@@ -156,6 +156,7 @@ export const LANDMARKS = [
   { id: 'eastbank', name: 'Eastbank Village', description: 'Twenty more colorful homes across the river.', x: 294, z: 218, radius: 24, arrival: { x: 294, z: 218 } },
 ];
 export const FRIEND_STARTS = [
+  [79, 118],
   [72, 112], [81, 110], [90, 108], [99, 110], [108, 112], [70, 124], [110, 124],
   [72, 136], [87, 151], [99, 140], [90, 145], [108, 136], [78, 150], [60, 125], [102, 150],
   [79, 125], [66, 141], [114, 137], [66, 112], [114, 112],
