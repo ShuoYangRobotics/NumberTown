@@ -80,13 +80,14 @@ test('friends yield around one another without overlapping or becoming permanent
   for (const player of players) assert.ok(controller.stateFor(player).visits >= 1, 'A friend remained trapped behind another visitor');
 });
 
-test('all twenty-four unselected friends keep exploring the assembled town within a frame budget', () => {
-  assert.equal(CHARACTERS.length, 25);
+test('all twenty-nine unselected friends keep exploring the assembled town within a frame budget', () => {
+  assert.equal(CHARACTERS.length, 30);
   const players = FRIEND_STARTS.map((point, index) => friend(index + 1, point.x, point.z, getCharacterMetrics(index + 1).radius));
   const active = players[10], original = { ...active }, times = [], choices = players.map(() => new Set());
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
     destinations: [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK], random: seeded(19) });
-  for (let frame = 0; frame < 3000; frame++) {
+  // Two cross-town trips can exceed five simulated minutes at walking speed.
+  for (let frame = 0; frame < 6000; frame++) {
     const started = performance.now();
     controller.update(players, active, .1, frame / 10);
     times.push(performance.now() - started);
@@ -165,4 +166,35 @@ test('a friend left at the mountain summit can walk down to town without telepor
     previousHeight = height; descended ||= height < 1;
   }
   assert.ok(descended && controller.stateFor(player).visits >= 1, 'The unselected summit visitor never returned to town');
+});
+
+test('a transformed wide friend routes around obstacles using its new footprint', () => {
+  const world={width:110,depth:110,margin:1},player=friend(30,20,20,8);
+  const obstacles=[{x:49,z:0,w:2,d:72}];
+  const controller=createRoamingController({obstacles,world,destinations:[place('far-side',85,20)],random:seeded(17)});
+  let crossed=false;
+  for(let frame=0;frame<2400&&!controller.stateFor(player).visits;frame++){
+    controller.update([player],null,.1,frame/10);
+    assert.equal(collides(player.x,player.z,obstacles,world,player.radius),false,'A wide rectangle clipped a wall outside the normal spatial bucket');
+    if(player.x>51)crossed=true;
+  }
+  assert.ok(crossed&&controller.stateFor(player).visits>0,'The larger shape needs a route with enough clearance');
+});
+
+test('roaming friends avoid a long selected rectangle before entering its footprint', () => {
+  const world={width:100,depth:100,margin:1},player=friend(2,12,50,.8),selected=friend(30,45,50,15.1);
+  const controller=createRoamingController({obstacles:[],world,destinations:[place('across-square',80,50)],random:seeded(8)});
+  for(let frame=0;frame<1000;frame++){
+    controller.update([player,selected],selected,.1,frame/10);
+    assert.ok(Math.hypot(player.x-selected.x,player.z-selected.z)>=player.radius+selected.radius,'The two transformed footprints overlap');
+  }
+  assert.ok(Math.hypot(player.x-12,player.z-50)>8,'The unselected friend must keep exploring');
+});
+
+
+test('a long rectangle keeps strolling when only one roomy destination fits', () => {
+  const world={width:100,depth:100,margin:1},player=friend(30,50,50,15.01);
+  const controller=createRoamingController({obstacles:[],world,destinations:[place('open-field',50,50)],random:seeded(27)});
+  for(let frame=0;frame<1800;frame++)controller.update([player],null,.1,frame/10);
+  assert.ok(controller.stateFor(player).visits>=4,'A single accessible destination must not stop further walking');
 });

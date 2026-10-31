@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EMOTIONS, chooseRemark, getMathFacts } from '../dist/personalities.js';
 import { CHARACTERS } from '../dist/character-data.js';
+import { getCharacterArrangements } from '../dist/arrangements.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'mountain-trail', 'summit', 'lookout'];
@@ -15,7 +16,7 @@ test('all six moods have usable, unique display options', () => {
   }
 });
 
-test('all twenty-five friends have at least three different personal happy remarks', () => {
+test('all thirty friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
   for (let number = 1; number <= CHARACTERS.length; number++) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
@@ -111,7 +112,7 @@ test('new friends retain dice, rainbow, helping, square, and counting personalit
   }
 });
 
-test('Eleven through Twenty-Five retain their own personality in every emotion', () => {
+test('Eleven through Thirty retain their own personality in every emotion', () => {
   const patterns = {
     11: /eleven|football|ball|team|goal/i,
     12: /twelve|rectangle/i,
@@ -128,6 +129,11 @@ test('Eleven through Twenty-Five retain their own personality in every emotion',
     23: /twenty|three|yellow/i,
     24: /twenty-four|rectangle/i,
     25: /twenty-five|five|square/i,
+    26: /twenty-six|agent|mission|hat|shades/i,
+    27: /twenty-seven|cube/i,
+    28: /twenty-eight|twenty and eight|frame/i,
+    29: /twenty-nine|gray/i,
+    30: /thirty|crown|royal/i,
   };
   for (const [number, pattern] of Object.entries(patterns)) {
     const personalLines = new Set();
@@ -182,9 +188,8 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
 
 // Independently interpret every public sentence rather than checking only that
 // the generator emits its own templates. Unknown formats must add a validator.
-function checkMathFact(text, number) {
+function checkMathFact(text, number, definition = CHARACTERS.find(item => item.number === number)) {
   let match;
-  const definition = CHARACTERS.find(item => item.number === number);
   if ((match = text.match(/^I have (\d+) (?:equal blocks|block)\.$/))) {
     assert.equal(+match[1], number);
     assert.equal(definition.cells.length, number);
@@ -212,9 +217,19 @@ function checkMathFact(text, number) {
     if (match[1] === 'am a') {
       assert.equal(definition.width, width);
       assert.equal(definition.height, height);
+      assert.ok(definition.cells.every(cell => (cell.z ?? 0) === (definition.cells[0].z ?? 0)), 'a flat rectangle cannot hide extra depth');
       for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) {
         assert.ok(definition.cells.some(cell => cell.x === x && cell.y === y), `${text} has a missing cell at ${x},${y}`);
       }
+    }
+  } else if ((match = text.match(/^I am a (\d+) by (\d+) by (\d+) cube!$/))) {
+    const width = +match[1], height = +match[2], depth = +match[3];
+    assert.equal(width, height); assert.equal(height, depth);
+    assert.equal(width * height * depth, number);
+    assert.equal(definition.width, width); assert.equal(definition.height, height);
+    assert.equal(definition.depth, depth);
+    for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) for (let z = 0; z < depth; z++) {
+      assert.ok(definition.cells.some(cell => cell.x === x && cell.y === y && (cell.z ?? 0) === z), `${text} has a missing cube at ${x},${y},${z}`);
     }
   } else if ((match = text.match(/^(\d+) is prime: its only factors are 1 and (\d+)\.$/))) {
     assert.equal(+match[1], number);
@@ -231,6 +246,21 @@ function checkMathFact(text, number) {
     assert.equal(+match[2], +match[3]);
     assert.equal((+match[2]) ** 2, number);
     assert.equal(+match[4], number);
+  } else if ((match = text.match(/^(\d+) is a cube number: (\d+) × (\d+) × (\d+) = (\d+)\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(+match[2], +match[3]); assert.equal(+match[3], +match[4]);
+    assert.equal((+match[2]) ** 3, number);
+    assert.equal(+match[5], number);
+  } else if ((match = text.match(/^My (\d+) by (\d+) frame has (\d+) holes\.$/))) {
+    const width = +match[1], height = +match[2], holes = [];
+    assert.equal(definition.width, width); assert.equal(definition.height, height);
+    assert.ok(definition.cells.every(cell => (cell.z ?? 0) === 0));
+    const occupied = (x, y) => definition.cells.some(cell => cell.x === x && cell.y === y);
+    for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) if (!occupied(x, y)) holes.push({ x, y });
+    assert.equal(holes.length, +match[3]);
+    assert.equal(width * height - holes.length, number);
+    assert.ok(holes.every(({ x, y }) => x > 0 && x < width - 1 && y > 0 && y < height - 1));
+    for (const { x, y } of holes) assert.ok([[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].every(([a, b]) => occupied(a, b)), 'holes must be separate empty cells');
   } else if ((match = text.match(/^My (\d+) steps have ([\d +]+) = (\d+) blocks\.$/))) {
     const steps = match[2].split(' + ').map(Number);
     assert.equal(steps.length, +match[1]);
@@ -245,8 +275,8 @@ function checkMathFact(text, number) {
   }
 }
 
-test('all facts for One through Twenty-Five are short, unique, and mathematically true', () => {
-  assert.equal(CHARACTERS.length, 25, 'math descriptions should match all twenty-five rendered friends');
+test('all facts for One through Thirty are short, unique, and mathematically true', () => {
+  assert.equal(CHARACTERS.length, 30, 'math descriptions should match all thirty rendered friends');
   for (let number = 1; number <= CHARACTERS.length; number++) {
     const facts = getMathFacts(number);
     assert.ok(Object.isFrozen(facts));
@@ -260,8 +290,9 @@ test('all facts for One through Twenty-Five are short, unique, and mathematicall
 });
 
 test('every friend teaches operations, parity, factors, and accurate number categories', () => {
-  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
   const squares = [1, 4, 9, 16, 25];
+  const cubes = [1, 8, 27];
   for (let number = 1; number <= CHARACTERS.length; number++) {
     const facts = getMathFacts(number);
     assert.ok(facts.some(text => /^\d+ \+ \d+ = /.test(text)));
@@ -272,6 +303,7 @@ test('every friend teaches operations, parity, factors, and accurate number cate
     assert.equal(facts.some(text => text.includes('is prime:')), primes.includes(number));
     assert.equal(facts.some(text => text.includes('is composite:')), number > 1 && !primes.includes(number));
     assert.equal(facts.some(text => text.includes('is a square number:')), squares.includes(number));
+    assert.equal(facts.some(text => text.includes('is a cube number:')), cubes.includes(number));
   }
 });
 
@@ -285,7 +317,7 @@ test('shape statements distinguish current bodies from possible rearrangements',
   assert.ok(getMathFacts(16).includes('12 + 4 = 16.'));
   for (const definition of CHARACTERS) {
     if (definition.width * definition.height !== definition.number) {
-      assert.ok(getMathFacts(definition.number).every(text => !text.startsWith('I am a ')), `${definition.name} has an incomplete bounding rectangle`);
+      assert.ok(getMathFacts(definition.number).every(text => !/^I am a \d+ by \d+ (square|rectangle)!$/.test(text)), `${definition.name} has an incomplete or nonflat bounding rectangle`);
     }
   }
 });
@@ -310,9 +342,87 @@ test('Twenty-One through Twenty-Five describe their twenty-plus parts and actual
   assert.ok(getMathFacts(25).includes('25 is a square number: 5 × 5 = 25.'));
 });
 
+test('Twenty-Six through Thirty describe their numbers, cube, and five-hole frame accurately', () => {
+  for (let number = 26; number <= 30; number++) {
+    assert.ok(getMathFacts(number).includes(`20 + ${number - 20} = ${number}.`));
+    assert.ok(getMathFacts(number).includes(`${number * 2} divided by 2 is ${number}.`));
+  }
+  assert.ok(getMathFacts(26).includes('2 × 13 = 26.'));
+  assert.ok(getMathFacts(27).includes('I am a 3 by 3 by 3 cube!'));
+  assert.ok(getMathFacts(27).includes('27 is a cube number: 3 × 3 × 3 = 27.'));
+  assert.ok(!getMathFacts(27).includes('I am a 3 by 3 square!'));
+  assert.ok(getMathFacts(28).includes('My 3 by 11 frame has 5 holes.'));
+  assert.ok(getMathFacts(28).includes('33 - 5 = 28.'));
+  assert.ok(getMathFacts(28).every(text => !text.startsWith('I am a ')));
+  assert.ok(getMathFacts(29).includes('29 is prime: its only factors are 1 and 29.'));
+  assert.ok(getMathFacts(30).includes('I am a 3 by 10 rectangle!'));
+  assert.ok(getMathFacts(30).includes('3 × 10 = 30.'));
+  assert.ok(getMathFacts(30).includes('5 × 6 = 30.'));
+});
+
+test('every real arrangement teaches its current orientation without stale original-shape claims', () => {
+  let formsChecked = 0;
+  for (const character of CHARACTERS) {
+    for (const arrangement of getCharacterArrangements(character.number)) {
+      const facts = getMathFacts(character.number, arrangement);
+      assert.ok(Object.isFrozen(facts));
+      for (const text of facts) {
+        assert.ok(text.length <= 70, text);
+        checkMathFact(text, character.number, arrangement);
+      }
+      if (arrangement.formId === 'original') {
+        assert.deepEqual(facts, getMathFacts(character.number), 'the default API must keep original-shape compatibility');
+      } else {
+        const { width, height } = arrangement;
+        assert.deepEqual(facts.filter(text => text.startsWith('I am a ')), [`I am a ${width} by ${height} ${width === height ? 'square' : 'rectangle'}!`]);
+        assert.ok(facts.every(text => !text.startsWith('My ')), 'a rectangle must not describe original steps or holes');
+        assert.ok(facts.every(text => !/^I am .* cube!$/.test(text)), 'a flattened 27 must not call its current body a cube');
+      }
+      for (const emotion of moods) for (let index = 0; index < facts.length; index++) {
+        const sample = (index + .5) / facts.length;
+        const context = { math: true, arrangement, emotion, place: 'summit' };
+        const first = chooseRemark(character.number, context, () => sample);
+        assert.equal(first.text, facts[index]);
+        assert.equal(first.emotion, emotion); assert.equal(first.kind, 'math');
+        const second = chooseRemark(character.number, { ...context, lastText: first.text }, () => sample);
+        assert.notEqual(second.text, first.text);
+        assert.ok(facts.includes(second.text));
+      }
+      formsChecked++;
+    }
+  }
+  assert.ok(formsChecked > 100, 'cover every original and both rectangle orientations');
+});
+
+test('rotated rectangles, flattened cubes, and changed stairs/frame keep only truthful shape facts', () => {
+  const form = (number, width, height) => getCharacterArrangements(number).find(shape => shape.width === width && shape.height === height && shape.depth === 1);
+  assert.ok(getMathFacts(12, form(12, 4, 3)).includes('I am a 4 by 3 rectangle!'));
+  assert.ok(!getMathFacts(12, form(12, 4, 3)).includes('I am a 3 by 4 rectangle!'));
+  assert.ok(getMathFacts(15, form(15, 3, 5)).every(text => !text.includes('steps have')));
+  assert.ok(getMathFacts(27, form(27, 9, 3)).includes('I am a 9 by 3 rectangle!'));
+  assert.ok(!getMathFacts(27, form(27, 9, 3)).includes('I am a 3 by 3 by 3 cube!'));
+  assert.ok(getMathFacts(27, form(27, 9, 3)).includes('27 is a cube number: 3 × 3 × 3 = 27.'), 'being a cube number does not depend on the current shape');
+  assert.ok(getMathFacts(28, form(28, 4, 7)).every(text => !/frame|holes/.test(text)));
+  assert.ok(!getMathFacts(28, form(28, 4, 7)).includes('33 - 5 = 28.'));
+});
+
+test('malformed current arrangements omit shape claims instead of reverting to the original body', () => {
+  const original = CHARACTERS.find(character => character.number === 27);
+  const malformed = [null, {}, { cells: [] }, { ...original, number: 26 },
+    { ...original, cells: original.cells.map(() => original.cells[0]) },
+    { ...original, cells: original.cells.map((cell, index) => index ? cell : null) },
+    { ...original, cells: original.cells.map((cell, index) => index ? cell : { ...cell, z: NaN }) },
+    { ...original, cells: original.cells.map((cell, index) => index ? cell : { ...cell, x: 1e15 }) }];
+  for (const arrangement of malformed) {
+    const facts = getMathFacts(27, arrangement);
+    assert.ok(facts.includes('54 divided by 2 is 27.'));
+    assert.ok(facts.every(text => !text.startsWith('I am a ') && !text.startsWith('My ')));
+  }
+});
+
 test('the character range follows the data and invalid inputs safely fall back to One', () => {
   const highest = CHARACTERS.at(-1).number;
-  assert.equal(highest, 25);
+  assert.equal(highest, 30);
   assert.ok(getMathFacts(highest).includes(`I have ${highest} equal blocks.`));
   assert.deepEqual(getMathFacts(String(highest)), getMathFacts(highest));
   assert.notEqual(chooseRemark(highest, {}, () => 0).text, chooseRemark(1, {}, () => 0).text);

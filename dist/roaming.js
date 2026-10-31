@@ -36,7 +36,14 @@ export function createRoamingController({ obstacles, world, destinations, random
   const states = new Map(), queue = [], cells = new Map(), globalObstacles = [];
   const bucketSize = 12, originX = Math.floor(world.minX ?? 0), originZ = Math.floor(world.minZ ?? 0);
   const columns = Math.ceil(world.width - originX) + 1, rows = Math.ceil(world.depth - originZ) + 1;
-  const occupancy = new Uint8Array(columns * rows), edges = new Map();
+  // Each footprint needs its own routing grid: a long rectangle cannot use
+  // the narrow routes that fit a friend's original shape.
+  const grids = new Map();
+  function gridFor(radius = CLEARANCE) {
+    const clearance = radius <= CLEARANCE ? CLEARANCE : Math.ceil(radius * 4) / 4;
+    if (!grids.has(clearance)) grids.set(clearance, { clearance, occupancy: new Uint8Array(columns * rows), edges: new Map() });
+    return grids.get(clearance);
+  }
   let job = null, logicalTime = 0;
   const roll = () => Math.max(0, Math.min(.999999, Number(random()) || 0));
   const cellKey = (x, z) => `${Math.floor(x / bucketSize)},${Math.floor(z / bucketSize)}`;
@@ -58,8 +65,9 @@ export function createRoamingController({ obstacles, world, destinations, random
       }
     }
   }
-  const blocked = (x, z, radius = CLEARANCE) =>
-    collides(x, z, globalObstacles, world, radius) || collides(x, z, cells.get(cellKey(x, z)) ?? [], world, radius);
+  const blocked = (x, z, radius = CLEARANCE) => radius > CLEARANCE
+    ? collides(x, z, obstacles, world, radius)
+    : collides(x, z, globalObstacles, world, radius) || collides(x, z, cells.get(cellKey(x, z)) ?? [], world, radius);
   const staticCollider = { blocks: blocked };
   function clearSegment(a, b, radius = CLEARANCE) {
     const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / .3));
@@ -71,12 +79,13 @@ export function createRoamingController({ obstacles, world, destinations, random
   }
   const idAt = (x, z) => (z - originZ) * columns + x - originX;
   const pointAt = id => ({ x: id % columns + originX, z: Math.floor(id / columns) + originZ });
-  function open(id) {
+  function open(id, grid) {
+    const { occupancy, clearance } = grid;
     if (id < 0 || id >= occupancy.length) return false;
-    if (!occupancy[id]) { const p = pointAt(id); occupancy[id] = blocked(p.x, p.z) ? 2 : 1; }
+    if (!occupancy[id]) { const p = pointAt(id); occupancy[id] = blocked(p.x, p.z, clearance) ? 2 : 1; }
     return occupancy[id] === 1;
   }
-  function gridJoin(point, radius = CLEARANCE) {
+  function gridJoin(point, radius, grid) {
     const candidates = [];
     for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
       const x = Math.round(point.x) + dx, z = Math.round(point.z) + dz;
@@ -86,14 +95,15 @@ export function createRoamingController({ obstacles, world, destinations, random
     candidates.sort((a, b) => a.distance - b.distance);
     for (const candidate of candidates) {
       const id = idAt(candidate.x, candidate.z);
-      if (open(id) && clearSegment(point, candidate, radius)) return id;
+      if (open(id, grid) && clearSegment(point, candidate, radius)) return id;
     }
     return null;
   }
-  function edgeOpen(id, direction, next) {
+  function edgeOpen(id, direction, next, grid) {
+    const { edges, clearance } = grid;
     const key = id * 8 + direction;
     if (!edges.has(key)) {
-      const value = open(next) && clearSegment(pointAt(id), pointAt(next));
+      const value = open(next, grid) && clearSegment(pointAt(id), pointAt(next), clearance);
       edges.set(key, value); edges.set(next * 8 + (direction + 4) % 8, value);
     }
     return edges.get(key);
@@ -118,8 +128,13 @@ export function createRoamingController({ obstacles, world, destinations, random
     wait(s, time, .25 + roll() * .6);
   }
   function choose(player, s, time) {
-    let choices = places.filter(place => place.id !== s.lastId && (s.failures.get(place.id) ?? 0) <= time && Math.hypot(place.x - player.x, place.z - player.z) > 6);
-    if (!choices.length) choices = places.filter(place => place.id !== s.lastId && (s.failures.get(place.id) ?? 0) <= time);
+    const clearance = gridFor(player.radius).clearance;
+    const accessible = places.filter(place => !blocked(place.x, place.z, clearance));
+    let choices = accessible.filter(place => place.id !== s.lastId && (s.failures.get(place.id) ?? 0) <= time && Math.hypot(place.x - player.x, place.z - player.z) > 6);
+    if (!choices.length) choices = accessible.filter(place => place.id !== s.lastId && (s.failures.get(place.id) ?? 0) <= time);
+    // Very wide rectangles may fit only one open landmark. Keep strolling
+    // between its safe arrival offsets instead of stopping after one visit.
+    if (!choices.length) choices = accessible.filter(place => (s.failures.get(place.id) ?? 0) <= time);
     if (!choices.length) { s.until = time + 2; return; }
     const fresh = choices.filter(place => !s.recent.includes(place.id));
     if (fresh.length) choices = fresh;
@@ -132,7 +147,7 @@ export function createRoamingController({ obstacles, world, destinations, random
     for (let i = 0; i < 8; i++) {
       const angle = roll() * Math.PI * 2, distance = 1.8 + roll() * 3.8;
       const point = { x: place.x + Math.cos(angle) * distance, z: place.z + Math.sin(angle) * distance };
-      if (clearSegment(place, point)) { target = point; break; }
+      if (clearSegment(place, point, clearance)) { target = point; break; }
     }
     s.destination = Object.freeze({ ...place, ...target }); s.status = 'planning'; s.version++;
     queue.push({ player, s, version: s.version, target });
@@ -152,13 +167,14 @@ export function createRoamingController({ obstacles, world, destinations, random
   function begin(request, time) {
     if (request.s.version !== request.version || request.s.selected) return null;
     const start = { x: request.player.x, z: request.player.z }, radius = request.player.radius ?? .6;
-    if (clearSegment(start, request.target, Math.max(radius, CLEARANCE))) { finish(request, [request.target]); return null; }
-    const from = gridJoin(start, radius), to = gridJoin(request.target);
+    const grid = gridFor(radius);
+    if (clearSegment(start, request.target, grid.clearance)) { finish(request, [request.target]); return null; }
+    const from = gridJoin(start, radius, grid), to = gridJoin(request.target, grid.clearance, grid);
     if (from === null || to === null) { fail(request.s, time); return null; }
     const heap = new MinHeap(), records = new Map();
     records.set(from, { cost: 0, parent: -1, closed: false });
     heap.push({ id: from, cost: 0, priority: 0 });
-    return { ...request, from, to, start, heap, records, expanded: 0 };
+    return { ...request, from, to, start, heap, records, grid, expanded: 0 };
   }
   function plan(time) {
     const deadline = clock() + 3.5;
@@ -186,14 +202,14 @@ export function createRoamingController({ obstacles, world, destinations, random
         const [dx, dz] = DIRECTIONS[direction], x = point.x + dx, z = point.z + dz;
         if (x < originX || z < originZ || x > world.width || z > world.depth) continue;
         const next = idAt(x, z), cost = record.cost + (dx && dz ? Math.SQRT2 : 1), known = job.records.get(next);
-        if (known?.closed || (known && known.cost <= cost) || !edgeOpen(item.id, direction, next)) continue;
+        if (known?.closed || (known && known.cost <= cost) || !edgeOpen(item.id, direction, next, job.grid)) continue;
         job.records.set(next, { cost, parent: item.id, closed: false });
         job.heap.push({ id: next, cost, priority: cost + Math.hypot(goal.x - x, goal.z - z) * 1.12 });
       }
     }
   }
   function nearby(player, players) {
-    return players.filter(other => other !== player && Math.hypot(other.x - player.x, other.z - player.z) < 12)
+    return players.filter(other => other !== player && Math.hypot(other.x - player.x, other.z - player.z) < Math.max(12, (player.radius ?? .6) + (other.radius ?? .6) + 2))
       .map(other => ({ x: other.x, z: other.z, radius: (other.radius ?? .6) + .08 }));
   }
   function walk(player, s, players, dt, time) {

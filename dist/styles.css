@@ -51,3 +51,7 @@
 @media(pointer:coarse){.zoom-controls{width:128px;height:44px}.zoom-controls button{width:36px;height:36px}.picker-arrow{flex-basis:36px;width:36px;height:56px}.jump-controls{height:34px}}
 @media(max-height:620px){.zoom-controls{top:139px}.friends-panel{bottom:calc(8px + env(safe-area-inset-bottom))}}
 @media(max-height:520px){.zoom-controls{top:116px;right:20px}}
+
+/* Shape changes share the existing character card. */
+#transform-shape{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:7px;padding:6px;background:#e5eedb;border:1px solid #c9d8bd;border-radius:9px;color:#557343;font-size:10px;font-weight:700}#transform-shape kbd{height:18px;min-width:18px;font-size:9px;border-bottom-width:1px}#transform-shape:hover{background:#d9e8cb}.friend-info #shape-status{margin:5px 0 0;font-size:9px;line-height:1.5;color:#6f805f;max-width:none}
+@media(max-width:700px),(max-height:520px){#transform-shape{font-size:8px;padding:4px;margin-top:5px}.friend-info #shape-status{display:block;font-size:8px}}

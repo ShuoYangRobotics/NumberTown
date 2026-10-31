@@ -211,6 +211,46 @@ const PERSONAL = {
     sleepy: ['Five rows of sleepy blocks. Time for a square rest.'],
     sad: ['My square can feel quiet. A gentle high five helps.'],
   },
+  26: {
+    happy: ['Twenty-six blocks, ready for a friendly mission!', 'My hat and shades are ready for an adventure.', 'Six purple blocks and a mission to help our friends!'],
+    excited: ['Agent Twenty-Six is ready! Let’s solve a friendly puzzle!'],
+    curious: ['What clues can this curious agent find around town?'],
+    surprised: ['Oh! That clue surprised the agent under this hat!'],
+    sleepy: ['Even a friendly agent needs a little rest.'],
+    sad: ['This agent can ask a trusted friend for a little help.'],
+  },
+  27: {
+    happy: ['Twenty-seven blocks, with depth to discover!', 'Three by three by three. A whole cube of possibilities!', 'A cube-shaped friend loves building new ideas!'],
+    excited: ['Twenty-seven cheers! A whole cube full of adventures!'],
+    curious: ['What can we discover on every side of my cube?'],
+    surprised: ['Wow! A surprise around the corner of my cube!'],
+    sleepy: ['This little cube could use a quiet rest.'],
+    sad: ['A friend beside my cube can help me feel less alone.'],
+  },
+  28: {
+    happy: ['Twenty-eight blocks and five windows for wonder!', 'My frame lets little glimpses of town shine through.', 'Twenty and eight make a bright magenta team!'],
+    excited: ['Twenty-eight cheers! Peek through my playful frame!'],
+    curious: ['What can we spot through the holes in my frame?'],
+    surprised: ['Oh! A surprising view through my frame!'],
+    sleepy: ['This frame of twenty-eight blocks is feeling sleepy.'],
+    sad: ['A kind friend can share a quiet view through my frame.'],
+  },
+  29: {
+    happy: ['Twenty-nine blocks, and lots of thoughtful ideas!', 'Nine gray blocks and twenty golden reasons to smile.', 'My gray blocks love a gentle moment to think.'],
+    excited: ['Twenty-nine cheers! I have a bright new idea!'],
+    curious: ['What can my nine gray blocks help us figure out?'],
+    surprised: ['Oh! That surprised all nine of my gray blocks!'],
+    sleepy: ['My gray blocks are ready for a quiet rest.'],
+    sad: ['Gray blocks can have bright feelings again, in their own time.'],
+  },
+  30: {
+    happy: ['Thirty cheers for a kind and colorful town!', 'My crown makes every friendly walk feel royal.', 'Three by ten, ready for a royal adventure!'],
+    excited: ['Thirty royal cheers! Let’s celebrate together!'],
+    curious: ['What can this curious crowned friend discover today?'],
+    surprised: ['Oh my crown! A surprise for all thirty blocks!'],
+    sleepy: ['Even a crown and thirty blocks need a cozy rest.'],
+    sad: ['My crown can rest. A kind friend matters more today.'],
+  },
 };
 
 const characterNumber = number => {
@@ -218,8 +258,27 @@ const characterNumber = number => {
   return Number.isInteger(value) && value >= 1 && value <= CHARACTERS.length ? value : 1;
 };
 
-/** Derive short facts from arithmetic and the actual unit-cube layout. */
-function buildMathFacts(number) {
+/** Validate and measure unit-cube positions, including genuine depth. */
+function measureArrangement(number, definition) {
+  if (!definition || !Array.isArray(definition.cells) || definition.cells.length !== number
+    || (definition.number !== undefined && definition.number !== number)) return null;
+  if (definition.cells.some(cell => !cell || typeof cell !== 'object')) return null;
+  const cells = definition.cells.map(cell => ({ x: cell.x, y: cell.y, z: cell.z ?? 0 }));
+  if (cells.some(cell => ![cell.x, cell.y, cell.z].every(Number.isSafeInteger))) return null;
+  const coordinates = new Set(cells.map(cell => `${cell.x},${cell.y},${cell.z}`));
+  if (coordinates.size !== number) return null;
+  const minX = Math.min(...cells.map(cell => cell.x)), minY = Math.min(...cells.map(cell => cell.y));
+  const minZ = Math.min(...cells.map(cell => cell.z));
+  const width = Math.max(...cells.map(cell => cell.x)) - minX + 1;
+  const height = Math.max(...cells.map(cell => cell.y)) - minY + 1;
+  const depth = Math.max(...cells.map(cell => cell.z)) - minZ + 1;
+  if (width > number || height > number || depth > number) return null;
+  const has = (x, y, z = 0) => coordinates.has(`${x + minX},${y + minY},${z + minZ}`);
+  return { width, height, depth, cells, minX, has };
+}
+
+/** Derive short facts from arithmetic and the CURRENT unit-cube layout. */
+function buildMathFacts(number, definition) {
   const facts = new Set([`I have ${number} ${number === 1 ? 'block' : 'equal blocks'}.`]);
   const add = (a, b) => facts.add(`${a} + ${b} = ${number}.`);
   add(Math.floor(number / 2), Math.ceil(number / 2));
@@ -237,13 +296,14 @@ function buildMathFacts(number) {
   for (let a = 1; a * a <= number; a++) {
     if (number % a === 0) factors.push([a, number / a]);
   }
-  const definition = CHARACTERS.find(item => item.number === number);
-  const fullRectangle = definition && definition.cells.length === number
-    && definition.width * definition.height === number
-    && new Set(definition.cells.map(cell => `${cell.x},${cell.y}`)).size === number;
-  if (fullRectangle) {
-    const { width, height } = definition;
+  const shape = measureArrangement(number, definition);
+  if (shape?.depth === 1 && shape.width * shape.height === number) {
+    const { width, height } = shape;
     facts.add(`I am a ${width} by ${height} ${width === height ? 'square' : 'rectangle'}!`);
+  }
+  if (shape && shape.depth > 1 && shape.width * shape.height * shape.depth === number
+    && shape.width === shape.height && shape.height === shape.depth) {
+    facts.add(`I am a ${shape.width} by ${shape.height} by ${shape.depth} cube!`);
   }
   for (const [a, b] of factors) {
     facts.add(`${a} × ${b} = ${number}.`);
@@ -257,21 +317,41 @@ function buildMathFacts(number) {
   }
   const root = Math.sqrt(number);
   if (Number.isInteger(root)) facts.add(`${number} is a square number: ${root} × ${root} = ${number}.`);
+  const cubeRoot = Math.round(Math.cbrt(number));
+  if (cubeRoot ** 3 === number) facts.add(`${number} is a cube number: ${cubeRoot} × ${cubeRoot} × ${cubeRoot} = ${number}.`);
 
-  if (definition) {
-    const columns = Array.from({ length: definition.width }, (_, x) => definition.cells.filter(cell => cell.x === x).length);
-    if (columns.length > 1 && columns.every((height, index) => height === index + 1)) {
+  if (shape?.depth === 1) {
+    const columns = Array.from({ length: shape.width }, (_, x) => shape.cells.filter(cell => cell.x === x + shape.minX).length);
+    if (columns.length > 1 && columns.every((height, x) => height === x + 1
+      && Array.from({ length: height }, (_, y) => shape.has(x, y)).every(Boolean))) {
       facts.add(`My ${columns.length} steps have ${columns.join(' + ')} = ${number} blocks.`);
+    }
+    if (number === 28 && shape.width === 3 && shape.height === 11) {
+      const holes = [];
+      for (let x = 0; x < shape.width; x++) for (let y = 0; y < shape.height; y++) {
+        if (!shape.has(x, y)) holes.push({ x, y });
+      }
+      // Each hole is a single empty cell surrounded by the frame's blocks.
+      if (holes.length === 5 && holes.every(({ x, y }) => x > 0 && x < shape.width - 1 && y > 0 && y < shape.height - 1
+        && shape.has(x - 1, y) && shape.has(x + 1, y) && shape.has(x, y - 1) && shape.has(x, y + 1))) {
+        facts.add(`My ${shape.width} by ${shape.height} frame has ${holes.length} holes.`);
+        facts.add(`${shape.width * shape.height} - ${holes.length} = ${number}.`);
+      }
     }
   }
   return Object.freeze([...facts]);
 }
 
-const MATH_FACTS = Object.freeze(CHARACTERS.map(character => buildMathFacts(character.number)));
+const MATH_FACTS = Object.freeze(CHARACTERS.map(character => buildMathFacts(character.number, character)));
 
-/** Read-only facts for every available character; invalid numbers use One. */
-export function getMathFacts(number) {
-  return MATH_FACTS[characterNumber(number) - 1];
+/**
+ * Read-only facts for the original shape by default. Pass the current character
+ * definition as arrangement after transforming. Malformed arrangements retain
+ * numeric facts but omit current-shape claims; invalid numbers use One.
+ */
+export function getMathFacts(number, arrangement) {
+  const normalized = characterNumber(number);
+  return arrangement === undefined ? MATH_FACTS[normalized - 1] : buildMathFacts(normalized, arrangement);
 }
 
 const PLACES = {
@@ -420,7 +500,7 @@ export function chooseRemark(number, context = {}, random = Math.random) {
   const mood = EMOTIONS.some(item => item.id === context.emotion) ? context.emotion : 'happy';
   const personality = PERSONAL[characterNumber(number)] || PERSONAL[1];
   const place = PLACES[context.place];
-  const candidates = context.math === true ? [...getMathFacts(number)] : place
+  const candidates = context.math === true ? [...getMathFacts(number, context.arrangement)] : place
     ? [...place[mood]]
     : [...personality[mood], ...(mood === 'happy' ? [] : MOOD_LINES[mood])];
 

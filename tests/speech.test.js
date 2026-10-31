@@ -54,9 +54,9 @@ test('ordinary words, labels, hyphenated names, punctuation, and existing spoken
   assert.equal(toSpokenMath('Twenty-One: 22-1=21. Excited?'), 'Twenty-One: 22 minus 1 equals 21. Excited?');
 });
 
-test('every existing math fact for One through Twenty-Five has speakable operators and unchanged display text', () => {
+test('every existing math fact for One through Thirty has speakable operators and unchanged display text', () => {
   let arithmetic = 0, prose = 0;
-  for (let number = 1; number <= 25; number++) {
+  for (let number = 1; number <= 30; number++) {
     const facts = getMathFacts(number), original = [...facts];
     for (const fact of facts) {
       const spoken = toSpokenMath(fact);

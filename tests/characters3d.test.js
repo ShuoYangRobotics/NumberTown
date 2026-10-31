@@ -5,10 +5,11 @@ import { getCharacterDefinition } from '../dist/character-data.js';
 import { Box3, Raycaster, Vector3 } from '../dist/vendor/three.module.js';
 
 const key = ({ x, y }) => `${x},${y}`;
+const key3 = ({ x, y, z=0 }) => `${x},${y},${z}`;
 const shapes = [
   [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [1, 7], [2, 4], [3, 3], [2, 5],
   [2, 6], [3, 4], [3, 6], [2, 7], [5, 5], [4,4], [4,7], [3,6], [2,10], [2,10],
-  [3,7], [4,6], [3,10], [3,8], [5,5],
+  [3,7], [4,6], [3,10], [3,8], [5,5], [4,7], [3,3], [3,11], [3,10], [3,10],
 ];
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 
@@ -18,25 +19,25 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('One to Twenty-Five have exactly counted, unique, connected unit-cell shapes totaling 325 cubes', () => {
-  assert.equal(CHARACTERS.length, 25);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 25);
-  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),325);
+test('One to Thirty have exactly counted, unique, connected unit-cell shapes totaling 465 cubes', () => {
+  assert.equal(CHARACTERS.length, 30);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 30);
+  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),465);
   for (const [index, friend] of CHARACTERS.entries()) {
     assert.equal(friend.number, index + 1);
     assert.equal(friend.cells.length, friend.number);
     assert.deepEqual([friend.width, friend.height], shapes[index]);
-    const cells = new Set(friend.cells.map(key));
+    const cells = new Set(friend.cells.map(key3));
     assert.equal(cells.size, friend.number, `${friend.name} has overlapping cubes`);
     for (const cell of friend.cells) {
       assert.ok(Number.isInteger(cell.x) && Number.isInteger(cell.y) && cell.x >= 0 && cell.y >= 0);
       assert.match(cell.color, /^#[0-9a-f]{6}$/i);
     }
-    const queue = [friend.cells[0]], seen = new Set([key(queue[0])]);
+    const queue = [friend.cells[0]], seen = new Set([key3(queue[0])]);
     for (let head = 0; head < queue.length; head++) {
-      const { x, y } = queue[head];
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const next = { x: x + dx, y: y + dy }, id = key(next);
+      const { x, y, z=0 } = queue[head];
+      for (const [dx, dy, dz] of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) {
+        const next = { x: x + dx, y: y + dy, z:z+dz }, id = key3(next);
         if (!cells.has(id) || seen.has(id)) continue;
         seen.add(id); queue.push(next);
       }
@@ -63,7 +64,7 @@ test('Sixteen to Twenty match the supplied shapes, ten-parts, and color groups',
 });
 
 test('definition lookup supports the whole roster and clamps safely',()=>{
-  assert.equal(getCharacterDefinition(25).name,'Twenty-Five');
+  assert.equal(getCharacterDefinition(30).name,'Thirty');
   assert.equal(getCharacterDefinition(200).number,CHARACTERS.length);
   assert.equal(getCharacterDefinition('19').number,19);
   assert.equal(getCharacterDefinition(-3).number,1);
@@ -80,6 +81,80 @@ test('Twenty-One to Twenty-Five match their reference cube layouts and twenty-pl
     assert.ok(data.cells.every(c=>c.outline==='#d49a37'));
   }
   assert.deepEqual(getCharacterDefinition(23).cells.filter(c=>c.x===2).map(c=>c.y),[0,1,2]);
+});
+
+test('Twenty-Six to Thirty match the reference shapes, colors, cube depth, and accessories',()=>{
+  const data=getCharacterDefinition(26);
+  assert.deepEqual(data.cells.filter(c=>c.color==='#7c26c4').map(key).sort(),['0,0','0,1','1,0','2,0','3,0','3,1']);
+  assert.deepEqual(data.cells.filter(c=>c.y===6).map(key),['1,6','2,6']);
+  const cube=getCharacterDefinition(27);
+  assert.equal(cube.depth,3);assert.equal(new Set(cube.cells.map(key3)).size,27);
+  assert.equal(cube.cells.filter(c=>c.color==='#ffd58b').length,20);
+  for(let x=0;x<3;x++)for(let y=0;y<3;y++)for(let z=0;z<3;z++)assert.ok(cube.cells.some(c=>c.x===x&&c.y===y&&c.z===z));
+  const frame=getCharacterDefinition(28);
+  assert.equal(frame.cells.filter(c=>c.color==='#ef2ad7').length,8);
+  assert.equal(frame.cells.filter(c=>c.color==='#ffd58b').length,20);
+  assert.deepEqual(Array.from({length:11},(_,y)=>y).filter(y=>!frame.cells.some(c=>c.x===1&&c.y===y)),[1,3,5,7,9]);
+  const twentyNine=getCharacterDefinition(29);
+  assert.equal(twentyNine.cells.filter(c=>c.x<2).length,20);assert.equal(twentyNine.cells.filter(c=>c.x===2).length,9);
+  assert.ok(getCharacterDefinition(30).cells.every(c=>c.color==='#f7e548'));
+  const names={26:['black secret agent hat','black sunglass lens','secret agent tie'],27:['golden cube badge'],28:['rainbow window mask','rainbow wrist band'],29:['little number tile','number tile digit'],30:['thirty golden crown','red crown jewel']};
+  for(const number of[26,27,28,29,30]){
+    const model=createCharacter(number);
+    for(const name of names[number])assert.ok(model.root.getObjectByName(name),`${number} is missing ${name}`);
+    assert.ok(model.root.userData.faceCenter.z>getCharacterDefinition(number).depth/2);
+    assert.equal(model.root.userData.armAttachments.length,2);
+  }
+});
+
+test('Twenty-Eight has five visibly clear through-holes, including around its facial details',()=>{
+  const model=createCharacter(28);model.root.updateMatrixWorld(true);
+  for(const y of[1,3,5,7,9])for(const dx of[-.32,0,.32])for(const dy of[-.32,0,.32]){
+    const ray=new Raycaster(new Vector3(dx,y+.85+dy,3),new Vector3(0,0,-1));
+    assert.equal(ray.intersectObject(model.root,true).filter(hit=>hit.object.isMesh).length,0,`hole ${y} is filled by art at ${dx},${dy}`);
+  }
+});
+
+test('definition overrides keep all cubes unscaled while faces, limbs, and props fit one-high bodies',()=>{
+  for(const number of[6,10,20,21,24,26,27,28,29,30]){
+    const original=getCharacterDefinition(number),definition={...original,formId:`${number}x1`,transformed:true,width:number,height:1,depth:1,cells:original.cells.map((c,i)=>({...c,x:i,y:0,z:0}))};
+    const model=createCharacter(number,{definition}),metrics=getCharacterMetrics(definition);
+    assert.equal(model.width,number);assert.equal(model.height,1);assert.equal(model.radius,metrics.radius);
+    for(const cube of unitBlocks(model.root)){assert.deepEqual(cube.scale.toArray(),[1,1,1]);assert.equal(cube.position.y,.85);}
+    const face=getCharacterFaceLayout(number,definition);
+    assert.ok(face.eyeY>.35&&face.eyeY<1.35);assert.ok(face.mouthY>.35&&face.mouthY<1.35);
+    for(const point of model.root.userData.armAttachments){assert.ok(point.y>.35&&point.y<1.35);assert.equal(Math.abs(point.x),number/2);}
+    model.root.updateMatrixWorld(true);
+    for(const child of model.root.children){
+      child.traverse(object=>{
+        if(object.name==='adapted handheld props'&&object.children.length){
+          const bounds=new Box3().setFromObject(object);assert.ok(bounds.min.y>=.13,`${number} handheld props sink into the ground`);
+        }
+      });
+    }
+    for(const mood of moods){model.setEmotion(mood);model.update(.016,{time:.7,moving:true});}
+    model.dispose();
+  }
+});
+
+test('dispose releases each model-owned geometry once while preserving shared cubes, spheres, and materials',()=>{
+  const model=createCharacter(21),second=createCharacter(27);
+  const sharedCube=unitBlocks(model.root)[0].geometry;
+  const sharedSphere=model.root.getObjectByName('walking shoe').geometry;
+  let sharedDisposed=0;
+  sharedCube.addEventListener('dispose',()=>sharedDisposed++);sharedSphere.addEventListener('dispose',()=>sharedDisposed++);
+  const geometries=new Map(),materials=new Set();
+  model.root.traverse(object=>{
+    if(object.geometry&&object.geometry!==sharedCube&&object.geometry!==sharedSphere)geometries.set(object.geometry,0);
+    if(object.material)materials.add(object.material);
+  });
+  for(const geometry of geometries.keys())geometry.addEventListener('dispose',()=>geometries.set(geometry,geometries.get(geometry)+1));
+  for(const material of materials)material.addEventListener('dispose',()=>sharedDisposed++);
+  model.dispose();model.dispose();
+  assert.ok(geometries.size>20);assert.ok([...geometries.values()].every(n=>n===1));assert.equal(sharedDisposed,0);
+  assert.equal(unitBlocks(second.root)[0].geometry,sharedCube);
+  second.setEmotion('happy');second.update(.016,{moving:true});second.dispose();
+  assert.equal(sharedDisposed,0);
 });
 
 test('Twenty-One has a substantial mesh backpack, rolled bedding, and a bounded navigable footprint',()=>{
@@ -196,13 +271,13 @@ test('3D bodies contain exact unscaled 1×1×1 cubes, flush on the declared grid
       assert.equal(block.geometry.parameters.depth, 1);
       assert.deepEqual(block.scale.toArray(), [1, 1, 1], 'body cubes cannot be stretched');
       assert.deepEqual(block.rotation.toArray().slice(0, 3), [0, 0, 0]);
-      const { x, y } = block.userData.cell;
+      const { x, y, z=0 } = block.userData.cell;
       assert.ok(Math.abs(block.position.x - (x + .5 - data.width / 2)) < 1e-10);
       assert.ok(Math.abs(block.position.y - (y + .85)) < 1e-10);
-      assert.equal(block.position.z, 0);
-      return key({ x, y });
+      assert.equal(block.position.z, z-(data.depth-1)/2);
+      return key3({ x, y, z });
     });
-    assert.deepEqual(actual.sort(), data.cells.map(key).sort());
+    assert.deepEqual(actual.sort(), data.cells.map(key3).sort());
     const left = Math.min(...blocks.map(block => block.position.x - .5));
     const right = Math.max(...blocks.map(block => block.position.x + .5));
     const bottom = Math.min(...blocks.map(block => block.position.y - .5));
@@ -219,9 +294,9 @@ test('body metrics reflect cube dimensions and enclose the ground footprint', ()
     const metrics = getCharacterMetrics(data.number);
     assert.equal(metrics.width, data.width);
     assert.equal(metrics.height, data.height);
-    assert.equal(metrics.depth, data.number===21?2.6:1);
+    assert.equal(metrics.depth, data.number===21?2.6:data.depth);
     assert.ok(metrics.radius >= data.width / 2);
-    assert.ok(Math.abs(metrics.radius - Math.hypot(data.width / 2, data.number===21?2.1:.5)) < 1e-10);
+    assert.ok(Math.abs(metrics.radius - Math.hypot(data.width / 2, data.number===21?2.1:data.depth/2)) < 1e-10);
     const character = createCharacter(data.number);
     assert.equal(character.height, metrics.height);
     assert.equal(character.width, metrics.width);
@@ -258,7 +333,7 @@ test('every character has six different prebuilt mesh expressions, with no canva
   assert.equal(typeof document, 'undefined');
   for (const data of CHARACTERS) {
     const character = createCharacter(data.number);
-    const expressions = character.root.children.filter(object => object.name.startsWith('expression '));
+    const expressions = character.face.children.filter(object => object.name.startsWith('expression '));
     assert.equal(expressions.length, 6);
     const sceneChildren = character.root.children.length;
     const signatures = [];

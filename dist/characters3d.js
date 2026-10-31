@@ -11,6 +11,8 @@ const SPHERE = new THREE.SphereGeometry(1, 16, 12);
 const EDGES = new THREE.EdgesGeometry(CUBE).getAttribute('position').array;
 const RAINBOW = ['#ee3d49', '#ff9f31', '#ffe03d', '#55bd38', '#32cce1', '#8053d4', '#b44ecc'];
 const Z = .56;
+const isTransformed = data => data.transformed === true || Boolean(data.formId && data.formId !== 'original');
+const bodyDepth = data => data.depth ?? Math.max(...data.cells.map(cell => cell.z ?? 0)) + 1;
 
 function material(color) {
   if (!materials.has(color)) materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: .54, metalness: 0 }));
@@ -77,8 +79,9 @@ function goldenGrid(body, data) {
   const edges = new Map();
   for (const cell of data.cells) {
     for (let i = 0; i < EDGES.length; i += 6) {
-      const a = [EDGES[i] + cell.x + .5, EDGES[i + 1] + cell.y + .5, EDGES[i + 2] * 1.032];
-      const b = [EDGES[i + 3] + cell.x + .5, EDGES[i + 4] + cell.y + .5, EDGES[i + 5] * 1.032];
+      const cz=(cell.z??0)-(bodyDepth(data)-1)/2;
+      const a = [EDGES[i] + cell.x + .5, EDGES[i + 1] + cell.y + .5, EDGES[i + 2] * 1.032+cz];
+      const b = [EDGES[i + 3] + cell.x + .5, EDGES[i + 4] + cell.y + .5, EDGES[i + 5] * 1.032+cz];
       const key = [a.join(','), b.join(',')].sort().join('|');
       if (!edges.has(key)) edges.set(key, [a, b]);
     }
@@ -115,7 +118,7 @@ function outlineBody(body, data) {
     if (!grouped.has(color)) grouped.set(color, []);
     const vertices = grouped.get(color);
     for (let index = 0; index < EDGES.length; index += 3) {
-      vertices.push(EDGES[index] * 1.012 + cell.x + .5 - data.width / 2, EDGES[index + 1] * 1.012 + cell.y + .5 + FEET, EDGES[index + 2] * 1.012);
+      vertices.push(EDGES[index] * 1.012 + cell.x + .5 - data.width / 2, EDGES[index + 1] * 1.012 + cell.y + .5 + FEET, EDGES[index + 2] * 1.012+(cell.z??0)-(bodyDepth(data)-1)/2);
     }
   }
   for (const [color, vertices] of grouped) {
@@ -367,9 +370,28 @@ function faceLayout(data) {
   if (n === 23) Object.assign(result, { x: .62, eyeY: FEET + 1.69, mouthY: FEET + 1.15, gap: .3, size: .215, mouth: .55 });
   if (n === 24) Object.assign(result, { eyeY: FEET + 4.49, mouthY: FEET + 3.77, gap: .34, size: .26, mouth: .7 });
   if (n === 25) Object.assign(result, { eyeY: FEET + 1.6, mouthY: FEET + .78, gap: .65, size: .34, mouth: 1.02 });
+  if (n === 26) Object.assign(result, { eyeY: FEET+3.34, mouthY: FEET+2.69, gap:.48, size:.30, mouth:.72 });
+  if (n === 27) Object.assign(result, { eyeY: FEET+1.65, mouthY: FEET+1.04, gap:.36, size:.25, mouth:.72 });
+  if (n === 28) Object.assign(result, { eyeY: FEET+2.59, mouthY: FEET+2.24, gap:.36, size:.19, mouth:.48 });
+  if (n === 29) Object.assign(result, { eyeY: FEET+1.69, mouthY: FEET+.72, gap:.34, size:.24, mouth:.55 });
+  if (n === 30) Object.assign(result, { eyeY: FEET+8.96, mouthY: FEET+8.26, gap:.48, size:.29, mouth:.91 });
   return result;
 }
-export function getCharacterFaceLayout(number){return {...faceLayout(getCharacterDefinition(number))};}
+function faceTransform(data) {
+  const original=getCharacterDefinition(data.number),source=faceLayout(original);
+  if(!isTransformed(data))return{source,scale:1,x:0,y:0,z:(bodyDepth(data)-1)/2};
+  const halfWidth=Math.max(source.gap+Math.max(source.size*1.6,.5),source.mouth*.6);
+  const above=original.number===25?1.2:original.number===21?.92:source.size*1.9+.15;
+  const lower=source.mouthY-source.mouth*.5-.07,upper=source.eyeY+above;
+  const windowHeight=Math.min(2.5,data.height*.86);
+  const scale=Math.min(1,(data.width-.16)/(halfWidth*2),windowHeight/(upper-lower));
+  const center=FEET+Math.max(windowHeight/2+.02,data.height/3);
+  return{source,scale,x:-source.x*scale,y:center-(upper+lower)/2*scale,z:bodyDepth(data)/2-.5*scale+.015};
+}
+export function getCharacterFaceLayout(number,definition){
+  const data=definition??getCharacterDefinition(number),t=faceTransform(data),f=t.source;
+  return{...f,x:f.x*t.scale+t.x,eyeY:f.eyeY*t.scale+t.y,mouthY:f.mouthY*t.scale+t.y,gap:f.gap*t.scale,size:f.size*t.scale,mouth:f.mouth*t.scale};
+}
 function eyeDecorations(parent, data, f) {
   const n = data.number;
   const positions = n === 1 ? [f.x] : [f.x - f.gap, f.x + f.gap];
@@ -400,6 +422,20 @@ function eyeDecorations(parent, data, f) {
     }
     if(n===23)ring(parent,x,f.eyeY,Z+.025,f.size*1.18,f.size*1.18,.042,'#6d3289');
     if(n===24||n===25)rectangleRing(parent,x,f.eyeY,Z+.04,n===24?.61:.94,n===24?.94:.89,.055,n===24?'#315b94':'#28608a');
+    if(n===26){
+      ball(parent,x,f.eyeY,.61,.41,.31,.08,'#1c2223','black sunglass lens');
+      tube(parent,[[x-.35,f.eyeY+.13,.66],[x-.1,f.eyeY+.16,.69],[x+.17,f.eyeY+.15,.69]],.023,'#657273',false,'sunglass reflection');
+      tube(parent,[[x-.43,f.eyeY+.22,.64],[x,f.eyeY+.25,.65],[x+.43,f.eyeY+.22,.64]],.035,'#161c1b',false,'sunglasses upper rim');
+    }
+    if(n===27){
+      star(parent,x,f.eyeY,.515,.47,.28,'#66347b',6,Math.PI/2);
+      ring(parent,x,f.eyeY,.595,.29,.3,.049,'#7f478c');
+    }
+    if(n===28){
+      for(let band=0;band<7;band++)box(parent,x-.245+band*.07,f.eyeY,.537,.071,.64,.045,RAINBOW[band],'rainbow window mask');
+      rectangleRing(parent,x,f.eyeY,.59,.43,.5,.027,'#356da6');
+    }
+    if(n===29||n===30)ring(parent,x,f.eyeY,.59,f.size*1.2,f.size*1.21,.04,n===29?'#5e6260':'#c19d26');
     if (n === 16) {
       const side=index?1:-1;
       box(parent,x+side*.34,f.eyeY+.12,.6,.10,.49,.09,'#242231','bold square eyelash');
@@ -418,6 +454,11 @@ function eyeDecorations(parent, data, f) {
   if([16,17,18,19,20].includes(n))tube(parent,[[f.x-.10,f.eyeY+.02,.61],[f.x,f.eyeY+.07,.64],[f.x+.10,f.eyeY+.02,.61]],.035,n===19?'#41494c':data.dark);
   if([21,23,24,25].includes(n))tube(parent,[[f.x-.13,f.eyeY+.03,.61],[f.x,f.eyeY+.08,.64],[f.x+.13,f.eyeY+.03,.61]],.034,[21,23].includes(n)?'#5c2b83':'#315b94');
   if(n===20)for(const side of[-1,1])box(parent,side*.95,f.eyeY,.04,.09,.18,1.18,'#8f478e','purple spectacle temple');
+  if(n===26)tube(parent,[[f.x-.13,f.eyeY+.14,.66],[f.x,f.eyeY+.19,.66],[f.x+.13,f.eyeY+.14,.66]],.04,'#1c2223',false,'sunglasses bridge');
+  if(n===27){
+    polygon(parent,[[0,.18],[.19,0],[0,-.18],[-.19,0]],.05,'#fff6c4',0,f.eyeY+.6,.52,'golden cube badge');
+    polygon(parent,[[0,.1],[.1,0],[0,-.1],[-.1,0]],.04,'#c4a13a',0,f.eyeY+.6,.575,'cube badge inset');
+  }
   if (n === 15) {
     for (const side of [-1, 1]) polygon(parent, [[0, 0], [side * .65, .05], [side * .65, .85], [side * .51, .85], [side * .51, .69], [side * .38, .69], [side * .38, .54], [side * .25, .54], [side * .25, .39], [side * .12, .39], [side * .12, .23]], .055, '#244583', f.x, f.eyeY + .04, .505, 'stepped superhero mask');
   }
@@ -476,8 +517,8 @@ function expression(data, f, emotion) {
   for (let i = 0; i < positions.length; i++) {
     const x = positions[i], side = positions.length === 1 ? 0 : i ? 1 : -1;
     const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number===21?'#3f256e':data.number===23?'#edcd40':data.number===24?'#77c627':data.number>=22?'#ffd58b':data.number>=10?'#fffaf1':data.color;
-    eye(group, x, f.eyeY, f.size*(data.number===22&&i===1?.72:1), emotion, eyelidColor);
-    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20,23,24,25].includes(data.number)) continue;
+    if(data.number!==26)eye(group, x, f.eyeY, f.size*(data.number===22&&i===1?.72:1), emotion, eyelidColor);
+    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20,23,24,25,26,29].includes(data.number)) continue;
     const y = f.eyeY + f.size * (emotion === 'surprised' ? 1.65 : 1.4);
     const tilt = emotion === 'sad' ? side * f.size * .45 : emotion === 'curious' ? f.size * .3 : 0;
     const lift = emotion === 'curious' && i === 1 ? f.size * .4 : 0;
@@ -493,7 +534,7 @@ function expression(data, f, emotion) {
       crown.rotation.z=emotion==='sad'?side*.22:emotion==='curious'?(i?.17:-.08):0;
     } else if(data.number===19){
       tube(group,[[x-f.size*.95,y+tilt,.64],[x-f.size*.48,y+.12+lift,.65],[x+f.size*.15,y+.015+lift,.65],[x+f.size*.8,y+.17-tilt,.64]],.049,'#485052',false,'zigzag eyebrow');
-    } else tube(group, points, [4,9,18,20,23,24].includes(data.number) ? .055 : .034, data.number===23?'#633287':data.number >= 11 ? data.dark : '#344d56');
+    } else tube(group, points, [4,9,18,20,23,24,26,29].includes(data.number) ? .055 : .034, data.number===23?'#633287':data.number >= 11 ? data.dark : '#344d56');
   }
   mouth(group, f.x + (data.number === 11 ? .24 : 0), f.mouthY, f.mouth, emotion, data.number);
   return group;
@@ -513,7 +554,7 @@ const DIGITS = {
 };
 function numberPlaque(root, data) {
   const label = new THREE.Group(); label.name = `number ${data.number}`;
-  const extra = data.number === 7 ? .6 : data.number === 21 ? .72 : data.number === 3 || data.number === 14 ? .46 : 0;
+  const extra = data.number === 7 ? .6 : data.number === 21 ? .72 : data.number===26?.57:data.number===30?1.03:data.number === 3 || data.number === 14 ? .46 : 0;
   label.position.set(data.number===20?.55:0, data.height + FEET + (data.number===20?.54:.47) + extra, .03);
   const digits = String(data.number), width = digits.length === 2 ? .65 : .43;
   ball(label, 0, 0, 0, width, .43, .055, '#fffcf1', 'number plaque');
@@ -522,6 +563,29 @@ function numberPlaque(root, data) {
     for (const stroke of DIGITS[digits[i]]) tube(label, stroke.map(([x, y]) => [x + offset, y - .29, .07]), .027, '#263c46');
   }
   root.add(label);
+}
+function agentOutfit(root, top) {
+  const hat=new THREE.Group();hat.name='black secret agent hat';hat.position.y=top+.04;root.add(hat);
+  const brim=cylinder(hat,0,0,0,.65,.1,'#202425','black hat brim');brim.scale.z=.7;
+  const crown=mesh(new THREE.CylinderGeometry(.32,.49,.48,5),'#303536','black hat crown');crown.position.y=.27;hat.add(crown);
+  cylinder(hat,0,.11,0,.46,.08,'#101819','black hat band');
+  const tie=new THREE.Group();tie.name='secret agent tie';tie.position.set(0,1.91,.53);root.add(tie);
+  for(const side of[-1,1])polygon(tie,[[side*.02,.38],[side*.51,.45],[side*.25,.03]],.04,'#fffcf1',0,0,0,'white shirt collar');
+  polygon(tie,[[0,.32],[.18,.14],[0,-.04],[-.18,.14]],.07,'#232b29',0,0,.05,'black tie knot');
+  polygon(tie,[[0,.04],[.23,-.25],[0,-.48],[-.23,-.25]],.07,'#232b29',0,0,.05,'black necktie');
+}
+function numberTiles(root) {
+  for(const [x,y,digit,color]of[[-1,1.72,'2','#b6934c'],[-1,.73,'1','#bd9341'],[1,1.72,'9','#737c76'],[1,.73,'9','#a6483d']]){
+    box(root,x,y,.54,.44,.45,.08,'#fff2c9','little number tile');
+    rectangleRing(root,x,y,.59,.36,.37,.018,color);
+    for(const stroke of DIGITS[digit])tube(root,stroke.map(([px,py])=>[x+(px-.15)*.45,y+(py-.3)*.45,.608]),.016,color,false,'number tile digit');
+  }
+}
+function thirtyCrown(root, top) {
+  const points=[[-1.04,0],[-1.12,.68],[-.55,.4],[0,1.12],[.55,.4],[1.12,.68],[1.04,0]];
+  polygon(root,points,.65,'#e6c52d',0,top,-.32,'thirty golden crown');
+  for(const[x,y]of[[-1.12,.68],[0,1.12],[1.12,.68]])ball(root,x,top+y,.02,.095,.095,.095,'#cf3433','red crown jewel');
+  box(root,0,top+.1,.34,1.99,.12,.07,'#f9e05b','crown band');
 }
 function decorations(root, data) {
   const n = data.number, top = data.height + FEET;
@@ -558,31 +622,55 @@ function decorations(root, data) {
   if(n===18)for(const side of[-1,1])box(root,side*.55,.30,0,.29,.14,.29,'#c43883','magenta boot cuff');
   if(n===20){topHat(root,top);bowTie(root);}
   if(n===21){backpack(root);explorerHat(root,top);}
+  if(n===26)agentOutfit(root,top);
+  if(n===29)numberTiles(root);
+  if(n===30)thirtyCrown(root,top);
+}
+function transformedDecorations(root,data) {
+  const original=getCharacterDefinition(data.number),scale=Math.min(1,data.width/original.width,data.height/original.height);
+  if(data.number===6||data.number===18){decorations(root,data);return;}
+  if(data.number===21){
+    const pack=new THREE.Group();root.add(pack);backpack(pack);pack.scale.setScalar(scale);
+    pack.position.set(0,FEET+data.height/2-3.8*scale,-bodyDepth(data)/2+.5*scale);
+    const hat=new THREE.Group();root.add(hat);explorerHat(hat,0);hat.scale.setScalar(Math.min(1,data.width/2));hat.position.y=FEET+data.height;
+    return;
+  }
+  const props=new THREE.Group();props.name='adapted character accessories';root.add(props);decorations(props,original);
+  props.scale.setScalar(scale);props.position.set(0,FEET+data.height-(FEET+original.height)*scale,(bodyDepth(data)-scale)/2);
+  for(const child of props.children){
+    if(child.name==='white bow tie'||child.name==='secret agent tie')child.position.y=(FEET+Math.min(.4,data.height*.2)-props.position.y)/scale;
+    if(data.number===14&&child.isGroup)child.position.set((data.width/2+.35)/scale,(FEET+data.height/3-props.position.y)/scale,0);
+  }
+  if(data.number===29){
+    const face=getCharacterFaceLayout(data.number,data),source=faceLayout(original);
+    props.position.y=(face.eyeY+face.mouthY)/2-(source.eyeY+source.mouthY)/2*scale;
+  }
 }
 
 /** Build true unit-cube geometry. Front is +Z; root y=0 is the shoe sole.
  * Calling update never changes root position/rotation: the game owns movement.
  * Expressions and labels use prebuilt meshes, with no DOM or canvas dependency.
  */
-export function createCharacter(number) {
-  const data = getCharacterDefinition(number);
-  const metrics = getCharacterMetrics(data.number);
+export function createCharacter(number, {definition} = {}) {
+  const data = definition ?? getCharacterDefinition(number), original=getCharacterDefinition(data.number), transformed=isTransformed(data);
+  const metrics = getCharacterMetrics(data), depth=bodyDepth(data);
   const root = new THREE.Group(); root.name = `${data.name} character`;
   root.userData.number = data.number;
-  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number===21?.72:data.number===24?.45:data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
+  root.userData.formId=data.formId??'original';root.userData.armAttachments=[];
+  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number===21?.72:data.number===24?.45:data.number===26?.57:data.number===30?1.03:data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
   const body = new THREE.Group(); body.name = 'unit block body'; root.add(body);
   for (const cell of data.cells) {
     const cube = mesh(CUBE, cell.color, `${data.name} block ${cell.x},${cell.y}`);
-    cube.position.set(cell.x + .5 - data.width / 2, cell.y + .5 + FEET, 0);
+    cube.position.set(cell.x + .5 - data.width / 2, cell.y + .5 + FEET, (cell.z??0)-(depth-1)/2);
     cube.userData.unitBlock = true;
-    cube.userData.cell = { x: cell.x, y: cell.y };
+    cube.userData.cell = { x: cell.x, y: cell.y, z:cell.z??0 };
     body.add(cube);
   }
   outlineBody(body, data);
   const feet = [];
   for (const side of [-1, 1]) {
     const pivot = new THREE.Group();
-    const fx = data.number === 15 ? 1.5 + side * .3 : data.number===23?-.5+side*.32:side * Math.min(.65, data.width * .26);
+    const fx = !transformed&&data.number === 15 ? 1.5 + side * .3 : !transformed&&data.number===23?-.5+side*.32:side * Math.min(.65, data.width * .26);
     pivot.position.set(fx, .38, 0); root.add(pivot); feet.push(pivot);
     const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.dark;
     const legColor=data.number===20?'#d58a2f':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.number===24?'#64ac25':data.dark;
@@ -595,16 +683,18 @@ export function createCharacter(number) {
   }
   const arms = [];
   const lowFace = data.number >= 11;
-  const armY = ({21:4.5,22:1.3,23:1.12,24:3.9,25:1.55})[data.number] ?? (lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8));
+  const armY = transformed?FEET+Math.max(.45,data.height/3):({21:4.5,22:1.3,23:1.12,24:3.9,25:1.55,26:2.0,27:1.9,28:1.5,29:1.1,30:8.3})[data.number] ?? (lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8));
   for (const side of [-1, 1]) {
     const count = data.number === 8 ? 3 : 1;
     for (let i = 0; i < count; i++) {
       const pivot = new THREE.Group();
-      pivot.position.set(side * (data.number===17?1:data.width/2), data.number === 8 ? data.height + FEET - 1.28 - i : armY, 0);
+      pivot.position.set(side * (!transformed&&data.number===17?1:data.width/2), data.number === 8 ? transformed?armY+(1-i)*Math.min(.3,data.height*.17):data.height + FEET - 1.28 - i : armY, 0);
+      root.userData.armAttachments.push({side,x:pivot.position.x,y:pivot.position.y,z:pivot.position.z});
+      pivot.userData.armAttachment=true;
       root.add(pivot);
-      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || [16,22,25].includes(data.number);
+      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || [16,22,25,27,30].includes(data.number);
       const limbColor=data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.number===22?(side<0?'#285f91':'#af342e'):data.dark;
-      const handY = data.number===24?-.05:lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
+      const handY = data.number===24?-.05:transformed&&data.height===1?(lifted?.22:-.25):lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
       const handX = side * (data.number === 8 ? .88 : data.number===24?.68:data.number===25?.55:.39);
       const points = data.number === 8
         ? [[0, 0, 0], [side * .44, -.25, .05], [side * .84, -.14, .07], [handX, handY, .06]]
@@ -620,24 +710,39 @@ export function createCharacter(number) {
         if (data.number === 5 && side > 0 || data.number === 10 || data.number===20) {
           hand.rotation.z = side * -.25; glove(hand, data.number === 10 || data.number===20 ? '#fffaf1' : data.dark, data.number === 10);
         } else ball(hand, 0, 0, 0, .105, .14, .1, limbColor, 'hand');
-        if (data.number === 11 && side < 0) { const prop = new THREE.Group(); prop.position.set(-.04, .25, .2); soccerBall(prop); hand.add(prop); }
-        if (data.number === 12 && side > 0) box(hand, -.07, -.035, .01, .065, .22, .2, '#fff6d9', 'wrist band');
-        if(data.number===16&&side<0)megaphone(hand);
-        if(data.number===17)paintTools(hand,side);
-        if(data.number===18&&side>0)box(hand,-.05,.06,0,.16,.12,.23,'#f8f3e6','white wrist band');
-        if(data.number===20&&side<0)cane(hand);
-        if(data.number===21&&side>0)hikingStaff(hand);
-        if(data.number===24)celestialStaff(hand,side<0);
+        const props=transformed?new THREE.Group():hand;
+        if(transformed){props.name='adapted handheld props';hand.add(props);}
+        if (data.number === 11 && side < 0) { const prop = new THREE.Group(); prop.position.set(-.04, .25, .2); soccerBall(prop); props.add(prop); }
+        if (data.number === 12 && side > 0) box(props, -.07, -.035, .01, .065, .22, .2, '#fff6d9', 'wrist band');
+        if(data.number===16&&side<0)megaphone(props);
+        if(data.number===17)paintTools(props,side);
+        if(data.number===18&&side>0)box(props,-.05,.06,0,.16,.12,.23,'#f8f3e6','white wrist band');
+        if(data.number===20&&side<0)cane(props);
+        if(data.number===21&&side>0)hikingStaff(props);
+        if(data.number===24)celestialStaff(props,side<0);
+        if(data.number===28){for(let band=0;band<7;band++)box(props,0,-.12+band*.045,.02,.23,.047,.24,RAINBOW[band],'rainbow wrist band');}
+        if(transformed){
+          hand.scale.setScalar(Math.min(1,.55+data.height*.15,data.width*.65));
+          props.scale.setScalar(Math.min(1,data.height/4));
+          if(props.children.length){
+            root.updateMatrixWorld(true);
+            const handHeight=hand.getWorldPosition(new THREE.Vector3()).y;
+            const bounds=new THREE.Box3().setFromObject(props),below=handHeight-bounds.min.y;
+            if(below>handHeight-.14)props.scale.multiplyScalar(Math.max(.02,(handHeight-.14)/below));
+          }
+        }
       }
       arms.push({ pivot, side, phase: i * .9, tentacle: data.number === 8 });
     }
   }
-  decorations(root, data);
-  const face = faceLayout(data);
-  root.userData.faceCenter={x:face.x,y:(face.eyeY+face.mouthY)/2,z:.65};
-  eyeDecorations(root, data, face);
+  if(transformed)transformedDecorations(root,data);else decorations(root, data);
+  const t=faceTransform(data),face=t.source,layout=getCharacterFaceLayout(data.number,data);
+  const faceRoot=new THREE.Group();faceRoot.name='character face';root.add(faceRoot);
+  faceRoot.position.set(t.x,t.y,t.z);faceRoot.scale.setScalar(t.scale);
+  root.userData.faceCenter={x:layout.x,y:(layout.eyeY+layout.mouthY)/2,z:.65*t.scale+t.z};
+  eyeDecorations(faceRoot, original, face);
   const expressions = Object.fromEntries(MOODS.map(emotion => {
-    const group = expression(data, face, emotion); group.visible = false; root.add(group); return [emotion, group];
+    const group = expression(original, face, emotion); group.visible = false; faceRoot.add(group); return [emotion, group];
   }));
   numberPlaque(root, data);
   let currentEmotion;
@@ -666,5 +771,12 @@ export function createCharacter(number) {
     }
   }
   setEmotion('happy');
-  return { root, body, setEmotion, update, height: metrics.height, width: metrics.width, radius: metrics.radius };
+  let disposed=false;
+  function dispose(){
+    if(disposed)return;disposed=true;
+    const geometries=new Set();root.traverse(object=>{if(object.geometry&&object.geometry!==CUBE&&object.geometry!==SPHERE)geometries.add(object.geometry);});
+    for(const geometry of geometries)geometry.dispose();
+    root.removeFromParent();
+  }
+  return { root, body, face:faceRoot, setEmotion, update, dispose, height: metrics.height, width: metrics.width, depth:metrics.depth, radius: metrics.radius };
 }

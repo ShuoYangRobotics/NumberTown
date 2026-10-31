@@ -1,4 +1,4 @@
-/** Cell coordinates use unit cubes: x grows right, y grows up from the feet. */
+/** Unit cubes: x grows right, y grows up from the feet, z grows toward the face. */
 const WHITE = '#fffaf1';
 const RED_EDGE = '#d9384a';
 const RAINBOW = ['#ec3546', '#ff9d2e', '#f9dc31', '#35bb66', '#2ac6df', '#8654cb', '#bd63cb'];
@@ -15,9 +15,10 @@ function ten() { return grid(2, 5, WHITE, RED_EDGE); }
 function character(number, name, color, dark, description, cells) {
   return Object.freeze({
     number, name, color, dark, description,
-    cells: Object.freeze(cells.map(cell => Object.freeze(cell))),
+    cells: Object.freeze(cells.map(cell => Object.freeze({z:0,...cell}))),
     width: Math.max(...cells.map(cell => cell.x)) + 1,
     height: Math.max(...cells.map(cell => cell.y)) + 1,
+    depth: Math.max(...cells.map(cell => cell.z ?? 0)) + 1,
   });
 }
 
@@ -58,6 +59,20 @@ export const CHARACTERS = Object.freeze([
   ]),
   character(24, 'Twenty-Four', GOLD, '#215791', 'Twenty-four hours of wonder, from sunny mornings to starry nights.', grid(3,8,(x,y)=>x===1&&y>=2&&y<=5?'#77c627':GOLD,GOLD_EDGE)),
   character(25, 'Twenty-Five', GOLD, '#285780', 'A five-by-five square with a bright blue smile.', grid(5,5,(_,y)=>y===0?'#37c5dc':GOLD,GOLD_EDGE)),
+  character(26, 'Twenty-Six', GOLD, '#7025a6', 'A cool secret agent with twenty golden cubes and six purple ones.', [
+    ...grid(4,6,(x,y)=>y===0||y===1&&(x===0||x===3)?'#7c26c4':GOLD,GOLD_EDGE),
+    {x:1,y:6,color:GOLD,outline:GOLD_EDGE},{x:2,y:6,color:GOLD,outline:GOLD_EDGE},
+  ]),
+  character(27, 'Twenty-Seven', GOLD, '#753d83', 'Three by three by three: a golden cube with a rainbow secret.', Array.from({length:27},(_,i)=>{
+    const x=i%3,y=Math.floor(i/3)%3,z=Math.floor(i/9);
+    const rainbow=['2,0,0','2,1,0','2,2,0','2,2,1','2,1,1','2,0,1','1,2,0'].indexOf(`${x},${y},${z}`);
+    return{x,y,z,color:rainbow<0?GOLD:RAINBOW[rainbow],outline:GOLD_EDGE};
+  })),
+  character(28, 'Twenty-Eight', GOLD, '#ae36b4', 'A tall windowed friend with twenty golden cubes and a pink eight.', grid(3,11,(_,y)=>y>=8?'#ef2ad7':GOLD,GOLD_EDGE).filter(c=>!(c.x===1&&[1,3,5,7,9].includes(c.y)))),
+  character(29, 'Twenty-Nine', GOLD, '#545654', 'Twenty and nine, collecting little number discoveries.', [
+    ...grid(2,10,GOLD,GOLD_EDGE),...grid(1,9,(_,y)=>['#b7b9b8','#979b99','#626866'][Math.floor(y/3)],'#666b67').map(c=>({...c,x:2})),
+  ]),
+  character(30, 'Thirty', '#f7e548', '#b6a326', 'Three golden tens and a crown full of cheerful ideas.', grid(3,10,'#f7e548','#c8af28')),
 ]);
 
 export function getCharacterDefinition(number) {
@@ -70,8 +85,11 @@ export function getCharacterDefinition(number) {
  * The asymmetric pack extends 2.1 units behind the body center. All number cubes
  * remain exactly one unit deep, regardless of the collision footprint.
  */
-export function getCharacterMetrics(number) {
-  const { number: id, width, height } = getCharacterDefinition(number);
-  const rearExtent = id === 21 ? 2.1 : .5;
-  return { width, height, depth: rearExtent + .5, radius: Math.hypot(width / 2, rearExtent) };
+export function getCharacterMetrics(numberOrDefinition) {
+  const data = typeof numberOrDefinition === 'object' && numberOrDefinition?.cells ? numberOrDefinition : getCharacterDefinition(numberOrDefinition);
+  const { number: id, width, height } = data, bodyDepth = data.depth ?? Math.max(...data.cells.map(c=>c.z??0))+1;
+  const transformed=data.transformed===true||data.formId&&data.formId!=='original';
+  const packScale=id===21&&transformed?Math.min(1,width/3,height/7):1;
+  const rearExtent = bodyDepth/2 + (id===21?1.6*packScale:0);
+  return { width, height, depth: rearExtent + bodyDepth/2, radius: Math.hypot(width / 2, rearExtent) };
 }
