@@ -171,11 +171,51 @@ const PERSONAL = {
     sleepy: ['Twenty dancing blocks need a quiet rest.'],
     sad: ['A gentle dance with a friend might brighten my day.'],
   },
+  21: {
+    happy: ['Twenty-one blocks, and a backpack full of adventures!', 'My backpack and I are ready to explore.', 'Three by seven, ready for a traveler’s adventure!'],
+    excited: ['Backpack ready! Twenty-one cheers for a new journey!'],
+    curious: ['Which path should this curious traveler explore next?'],
+    surprised: ['Oh! A surprising sight on my backpack adventure!'],
+    sleepy: ['My backpack and I could use a little rest.'],
+    sad: ['A traveler can rest and ask a friend for company.'],
+  },
+  22: {
+    happy: ['Twenty-two blocks, with two perched up top!', 'My two top blocks are ready for a new adventure.', 'Twenty and two make a cheerful crew!'],
+    excited: ['Twenty-two cheers! My two top blocks are ready!'],
+    curious: ['What can my two top blocks spot from up here?'],
+    surprised: ['Oh! Both of my two top blocks are surprised!'],
+    sleepy: ['Twenty-two sleepy blocks need a cozy pause.'],
+    sad: ['My two top blocks feel quiet. A kind friend helps.'],
+  },
+  23: {
+    happy: ['Twenty-three blocks, with a sunny yellow side!', 'My three yellow blocks bring a little sunshine.', 'Twenty and three, come exploring with me!'],
+    excited: ['Twenty-three cheers! My yellow blocks are glowing!'],
+    curious: ['What can my three yellow blocks discover today?'],
+    surprised: ['Oh! That surprised all three of my yellow blocks!'],
+    sleepy: ['My three yellow blocks could use a gentle rest.'],
+    sad: ['Even sunny yellow blocks have quiet days.'],
+  },
+  24: {
+    happy: ['Twenty-four blocks, with green at my center!', 'Three by eight, ready for a rectangle adventure!', 'This rectangle has a little green heart for friends.'],
+    excited: ['Twenty-four cheers! Another rectangle adventure!'],
+    curious: ['How many rectangles can my twenty-four blocks make?'],
+    surprised: ['Wow! A new rectangle for my twenty-four blocks!'],
+    sleepy: ['This green-centered rectangle could use a rest.'],
+    sad: ['A rectangle friend can share a quiet moment with me.'],
+  },
+  25: {
+    happy: ['Twenty-five blocks, ready for a square celebration!', 'Five by five, with a bright bottom row!', 'A big square and a high five for every friend!'],
+    excited: ['Twenty-five cheers! A whole square full of joy!'],
+    curious: ['Can we find five things along each side of my square?'],
+    surprised: ['Oh! That surprised all twenty-five of my blocks!'],
+    sleepy: ['Five rows of sleepy blocks. Time for a square rest.'],
+    sad: ['My square can feel quiet. A gentle high five helps.'],
+  },
 };
 
 const characterNumber = number => {
-  const value = Number(number);
-  return Number.isInteger(value) && value >= 1 && value <= 20 ? value : 1;
+  const value = typeof number === 'number' || typeof number === 'string' ? Number(number) : NaN;
+  return Number.isInteger(value) && value >= 1 && value <= CHARACTERS.length ? value : 1;
 };
 
 /** Derive short facts from arithmetic and the actual unit-cube layout. */
@@ -184,6 +224,7 @@ function buildMathFacts(number) {
   const add = (a, b) => facts.add(`${a} + ${b} = ${number}.`);
   add(Math.floor(number / 2), Math.ceil(number / 2));
   if (number >= 10) add(10, number - 10);
+  if (number > 20) add(20, number - 20);
   if (number > 1) add(number - 1, 1);
   if (number > 1 && Number.isInteger(Math.sqrt(number))) add(number - Math.sqrt(number), Math.sqrt(number));
   facts.add(`${number + 1} - 1 = ${number}.`);
@@ -226,9 +267,9 @@ function buildMathFacts(number) {
   return Object.freeze([...facts]);
 }
 
-const MATH_FACTS = Object.freeze(Array.from({ length: 20 }, (_, index) => buildMathFacts(index + 1)));
+const MATH_FACTS = Object.freeze(CHARACTERS.map(character => buildMathFacts(character.number)));
 
-/** Read-only facts for One through Twenty; unknown numbers fall back to One. */
+/** Read-only facts for every available character; invalid numbers use One. */
 export function getMathFacts(number) {
   return MATH_FACTS[characterNumber(number) - 1];
 }
@@ -377,7 +418,7 @@ const FRIEND_LINES = {
  */
 export function chooseRemark(number, context = {}, random = Math.random) {
   const mood = EMOTIONS.some(item => item.id === context.emotion) ? context.emotion : 'happy';
-  const personality = PERSONAL[characterNumber(number)];
+  const personality = PERSONAL[characterNumber(number)] || PERSONAL[1];
   const place = PLACES[context.place];
   const candidates = context.math === true ? [...getMathFacts(number)] : place
     ? [...place[mood]]

@@ -15,18 +15,18 @@ test('all six moods have usable, unique display options', () => {
   }
 });
 
-test('all twenty friends have at least three different personal happy remarks', () => {
+test('all twenty-five friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
-  for (let number = 1; number <= 20; number++) {
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
     assert.ok(lines.size >= 3, `friend ${number} needs more personal dialogue`);
     signatures.add([...lines].sort().join('|'));
   }
-  assert.equal(signatures.size, 20, 'each friend should have a distinct personality');
+  assert.equal(signatures.size, CHARACTERS.length, 'each friend should have a distinct personality');
 });
 
 test('every friend preserves each chosen emotion in every landmark and while walking', () => {
-  for (let number = 1; number <= 20; number++) {
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -89,7 +89,7 @@ test('the scenic lookout has sea-view remarks in every emotion', () => {
 });
 
 test('lastText prevents an immediate repeat for every friend, emotion, and landmark', () => {
-  for (let number = 1; number <= 20; number++) {
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     for (const emotion of moods) {
       for (const place of [undefined, ...places]) {
         for (const value of samples) {
@@ -111,7 +111,7 @@ test('new friends retain dice, rainbow, helping, square, and counting personalit
   }
 });
 
-test('Eleven through Twenty retain their own personality in every emotion', () => {
+test('Eleven through Twenty-Five retain their own personality in every emotion', () => {
   const patterns = {
     11: /eleven|football|ball|team|goal/i,
     12: /twelve|rectangle/i,
@@ -123,6 +123,11 @@ test('Eleven through Twenty retain their own personality in every emotion', () =
     18: /eighteen|rectangle/i,
     19: /nineteen|shape|creative/i,
     20: /twenty|dance|dancing|two.*ten/i,
+    21: /twenty-one|backpack|travel/i,
+    22: /twenty|two/i,
+    23: /twenty|three|yellow/i,
+    24: /twenty-four|rectangle/i,
+    25: /twenty-five|five|square/i,
   };
   for (const [number, pattern] of Object.entries(patterns)) {
     const personalLines = new Set();
@@ -139,8 +144,8 @@ test('Eleven through Twenty retain their own personality in every emotion', () =
 });
 
 test('new friends can greet each other and retain location-specific dialogue', () => {
-  const names = ['Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
-  for (let number = 11; number <= 20; number++) {
+  const names = CHARACTERS.filter(character => character.number >= 11).map(character => character.name);
+  for (let number = 11; number <= CHARACTERS.length; number++) {
     for (const emotion of moods) {
       const name = names[(number - 10) % names.length];
       const greeting = chooseRemark(number, { emotion, nearbyName: name }, () => 1);
@@ -171,7 +176,7 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
   assert.deepEqual(chooseRemark(7, context, () => 2), chooseRemark(7, context, () => 1));
   assert.deepEqual(chooseRemark(7, context, () => NaN), chooseRemark(7, context, () => 0));
   assert.deepEqual(chooseRemark(99, { emotion: 'unknown' }, () => 0), chooseRemark(1, {}, () => 0));
-  assert.deepEqual(chooseRemark(21, {}, () => 0), chooseRemark(1, {}, () => 0));
+  assert.deepEqual(chooseRemark(CHARACTERS.length + 1, {}, () => 0), chooseRemark(1, {}, () => 0));
   assert.notDeepEqual(chooseRemark(20, {}, () => 0), chooseRemark(1, {}, () => 0));
 });
 
@@ -240,9 +245,9 @@ function checkMathFact(text, number) {
   }
 }
 
-test('all facts for One through Twenty are short, unique, and mathematically true', () => {
-  assert.equal(CHARACTERS.length, 20, 'math descriptions should match all twenty rendered friends');
-  for (let number = 1; number <= 20; number++) {
+test('all facts for One through Twenty-Five are short, unique, and mathematically true', () => {
+  assert.equal(CHARACTERS.length, 25, 'math descriptions should match all twenty-five rendered friends');
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     const facts = getMathFacts(number);
     assert.ok(Object.isFrozen(facts));
     assert.ok(facts.length >= 8);
@@ -255,9 +260,9 @@ test('all facts for One through Twenty are short, unique, and mathematically tru
 });
 
 test('every friend teaches operations, parity, factors, and accurate number categories', () => {
-  const primes = [2, 3, 5, 7, 11, 13, 17, 19];
-  const squares = [1, 4, 9, 16];
-  for (let number = 1; number <= 20; number++) {
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+  const squares = [1, 4, 9, 16, 25];
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     const facts = getMathFacts(number);
     assert.ok(facts.some(text => /^\d+ \+ \d+ = /.test(text)));
     assert.ok(facts.some(text => /^\d+ - \d+ = /.test(text)));
@@ -285,8 +290,41 @@ test('shape statements distinguish current bodies from possible rearrangements',
   }
 });
 
+test('Twenty-One through Twenty-Five describe their twenty-plus parts and actual layouts', () => {
+  for (let number = 21; number <= 25; number++) {
+    const facts = getMathFacts(number);
+    assert.ok(facts.includes(`20 + ${number - 20} = ${number}.`));
+    assert.ok(facts.includes(`${number * 2} divided by 2 is ${number}.`));
+  }
+  assert.ok(getMathFacts(21).includes('I am a 3 by 7 rectangle!'));
+  assert.ok(getMathFacts(22).includes('2 × 11 = 22.'));
+  assert.ok(getMathFacts(22).includes('I can arrange into a 2 by 11 rectangle!'));
+  assert.ok(getMathFacts(22).every(text => !text.startsWith('I am a ')), 'two extra top cubes do not fill the bounding box');
+  assert.ok(getMathFacts(23).includes('23 is prime: its only factors are 1 and 23.'));
+  assert.ok(getMathFacts(23).every(text => !text.startsWith('I am a ')), 'three side cubes do not fill the bounding box');
+  assert.ok(getMathFacts(24).includes('I am a 3 by 8 rectangle!'));
+  assert.ok(getMathFacts(24).includes('3 × 8 = 24.'));
+  assert.ok(getMathFacts(24).includes('4 × 6 = 24.'));
+  assert.ok(getMathFacts(24).includes('I can arrange into a 4 by 6 rectangle!'));
+  assert.ok(getMathFacts(25).includes('I am a 5 by 5 square!'));
+  assert.ok(getMathFacts(25).includes('25 is a square number: 5 × 5 = 25.'));
+});
+
+test('the character range follows the data and invalid inputs safely fall back to One', () => {
+  const highest = CHARACTERS.at(-1).number;
+  assert.equal(highest, 25);
+  assert.ok(getMathFacts(highest).includes(`I have ${highest} equal blocks.`));
+  assert.deepEqual(getMathFacts(String(highest)), getMathFacts(highest));
+  assert.notEqual(chooseRemark(highest, {}, () => 0).text, chooseRemark(1, {}, () => 0).text);
+  for (const invalid of [0, -1, highest + 1, 1.5, NaN, Infinity, -Infinity, undefined, null, '', 'not a number', true, {}, [], Symbol('invalid')]) {
+    assert.deepEqual(getMathFacts(invalid), getMathFacts(1));
+    assert.deepEqual(chooseRemark(invalid, {}, () => 0), chooseRemark(1, {}, () => 0));
+    assert.deepEqual(chooseRemark(invalid, { math: true }, () => .5), chooseRemark(1, { math: true }, () => .5));
+  }
+});
+
 test('math mode guarantees a fact, preserves every emotion, and avoids repetition', () => {
-  for (let number = 1; number <= 20; number++) {
+  for (let number = 1; number <= CHARACTERS.length; number++) {
     const facts = getMathFacts(number);
     for (const emotion of moods) for (const place of [undefined, ...places]) {
       for (let index = 0; index < facts.length; index++) {

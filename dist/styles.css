@@ -33,3 +33,8 @@
 /* A little invitation to discover each friend’s number. */
 #math-fact{pointer-events:auto;display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 10px;border:1px solid #dcc9a6;border-radius:10px;background:#faf0d9;color:#826c43;font-size:10px;font-weight:650;width:100%;justify-content:center}#math-fact:hover{background:#f4e5bf}#math-fact span{color:#b49a55;font-size:14px}
 @media(max-width:700px),(max-height:520px){#math-fact{font-size:8px;padding:6px 4px;gap:4px;margin-top:6px}}
+
+#inspect-backpack{pointer-events:auto;width:100%;margin-top:7px;padding:7px 6px;background:transparent;border:1px solid #cbd8bd;border-radius:9px;color:#6c835b;font-size:10px;font-weight:650}#inspect-backpack:hover{background:#e9efdf}
+@media(max-width:700px),(max-height:520px){#inspect-backpack{font-size:8px;padding:5px;margin-top:5px}.friend-label{letter-spacing:-.2px}}
+
+.friend-card.long-name .friend-label{font-size:7px;letter-spacing:-.2px;white-space:nowrap}

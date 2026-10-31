@@ -80,8 +80,8 @@ test('friends yield around one another without overlapping or becoming permanent
   for (const player of players) assert.ok(controller.stateFor(player).visits >= 1, 'A friend remained trapped behind another visitor');
 });
 
-test('all nineteen unselected friends keep exploring the assembled town within a frame budget', () => {
-  assert.equal(CHARACTERS.length, 20);
+test('all twenty-four unselected friends keep exploring the assembled town within a frame budget', () => {
+  assert.equal(CHARACTERS.length, 25);
   const players = FRIEND_STARTS.map((point, index) => friend(index + 1, point.x, point.z, getCharacterMetrics(index + 1).radius));
   const active = players[10], original = { ...active }, times = [], choices = players.map(() => new Set());
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,

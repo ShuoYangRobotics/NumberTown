@@ -2,6 +2,8 @@
 const WHITE = '#fffaf1';
 const RED_EDGE = '#d9384a';
 const RAINBOW = ['#ec3546', '#ff9d2e', '#f9dc31', '#35bb66', '#2ac6df', '#8654cb', '#bd63cb'];
+const GOLD_EDGE = '#d49a37';
+const GOLD = '#ffd58b';
 
 function grid(columns, rows, color, outline) {
   return Array.from({ length: columns * rows }, (_, index) => {
@@ -46,6 +48,16 @@ export const CHARACTERS = Object.freeze([
     ...grid(1,9,(_,y)=>['#b4bcba','#a7afad','#969f9d'][Math.floor(y/3)]).map(cell=>({...cell,x:1})),
   ]),
   character(20, 'Twenty', '#f7c96b', '#805070', 'Twenty golden blocks, a top hat, and a little showtime sparkle.', grid(2,10,(x,y)=>x===0?(y%2?'#ffd080':'#ffc56b'):'#ffe09a','#c58b35')),
+  character(21, 'Twenty-One', GOLD, '#68482c', 'An adventurous explorer with a backpack full of possibilities.', grid(3,7,(x,y)=>x===1&&y===3?'#ed292d':GOLD,GOLD_EDGE)),
+  character(22, 'Twenty-Two', GOLD, '#305b86', 'Two little orange blocks and twenty golden reasons to smile.', [
+    ...grid(4,5,GOLD,GOLD_EDGE),
+    {x:1,y:5,color:'#ff9f19',outline:GOLD_EDGE},{x:2,y:5,color:'#ff9f19',outline:GOLD_EDGE},
+  ]),
+  character(23, 'Twenty-Three', GOLD, '#a92c4c', 'A tall golden friend with three bright yellow blocks.', [
+    ...grid(2,10,GOLD,GOLD_EDGE),...grid(1,3,'#f6db2c',GOLD_EDGE).map(cell=>({...cell,x:2})),
+  ]),
+  character(24, 'Twenty-Four', GOLD, '#215791', 'Twenty-four hours of wonder, from sunny mornings to starry nights.', grid(3,8,(x,y)=>x===1&&y>=2&&y<=5?'#77c627':GOLD,GOLD_EDGE)),
+  character(25, 'Twenty-Five', GOLD, '#285780', 'A five-by-five square with a bright blue smile.', grid(5,5,(_,y)=>y===0?'#37c5dc':GOLD,GOLD_EDGE)),
 ]);
 
 export function getCharacterDefinition(number) {
@@ -54,8 +66,12 @@ export function getCharacterDefinition(number) {
   return CHARACTERS[index];
 }
 
-/** Body dimensions in world units; feet, faces, limbs and numeral are additional art. */
+/** Body width/height; depth and radius include Twenty-One's substantial backpack.
+ * The asymmetric pack extends 2.1 units behind the body center. All number cubes
+ * remain exactly one unit deep, regardless of the collision footprint.
+ */
 export function getCharacterMetrics(number) {
-  const { width, height } = getCharacterDefinition(number);
-  return { width, height, depth: 1, radius: Math.hypot(width / 2, .5) };
+  const { number: id, width, height } = getCharacterDefinition(number);
+  const rearExtent = id === 21 ? 2.1 : .5;
+  return { width, height, depth: rearExtent + .5, radius: Math.hypot(width / 2, rearExtent) };
 }

@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHARACTERS, getCharacterMetrics, getCharacterFaceLayout, createCharacter } from '../dist/characters3d.js';
 import { getCharacterDefinition } from '../dist/character-data.js';
+import { Box3, Raycaster, Vector3 } from '../dist/vendor/three.module.js';
 
 const key = ({ x, y }) => `${x},${y}`;
 const shapes = [
   [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [1, 7], [2, 4], [3, 3], [2, 5],
   [2, 6], [3, 4], [3, 6], [2, 7], [5, 5], [4,4], [4,7], [3,6], [2,10], [2,10],
+  [3,7], [4,6], [3,10], [3,8], [5,5],
 ];
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 
@@ -16,10 +18,10 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('One to Twenty have exactly counted, unique, connected unit-cell shapes totaling 210 cubes', () => {
-  assert.equal(CHARACTERS.length, 20);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 20);
-  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),210);
+test('One to Twenty-Five have exactly counted, unique, connected unit-cell shapes totaling 325 cubes', () => {
+  assert.equal(CHARACTERS.length, 25);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 25);
+  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),325);
   for (const [index, friend] of CHARACTERS.entries()) {
     assert.equal(friend.number, index + 1);
     assert.equal(friend.cells.length, friend.number);
@@ -61,11 +63,72 @@ test('Sixteen to Twenty match the supplied shapes, ten-parts, and color groups',
 });
 
 test('definition lookup supports the whole roster and clamps safely',()=>{
-  assert.equal(getCharacterDefinition(20).name,'Twenty');
+  assert.equal(getCharacterDefinition(25).name,'Twenty-Five');
   assert.equal(getCharacterDefinition(200).number,CHARACTERS.length);
   assert.equal(getCharacterDefinition('19').number,19);
   assert.equal(getCharacterDefinition(-3).number,1);
   assert.equal(getCharacterDefinition(NaN).number,1);
+});
+
+test('Twenty-One to Twenty-Five match their reference cube layouts and twenty-plus color groups',()=>{
+  const accents={21:'#ed292d',22:'#ff9f19',23:'#f6db2c',24:'#77c627',25:'#37c5dc'};
+  const expected={21:['1,3'],22:['1,5','2,5'],23:['2,0','2,1','2,2'],24:['1,2','1,3','1,4','1,5'],25:['0,0','1,0','2,0','3,0','4,0']};
+  for(const number of[21,22,23,24,25]){
+    const data=getCharacterDefinition(number);
+    assert.equal(data.cells.filter(c=>c.color==='#ffd58b').length,20);
+    assert.deepEqual(data.cells.filter(c=>c.color===accents[number]).map(key).sort(),expected[number]);
+    assert.ok(data.cells.every(c=>c.outline==='#d49a37'));
+  }
+  assert.deepEqual(getCharacterDefinition(23).cells.filter(c=>c.x===2).map(c=>c.y),[0,1,2]);
+});
+
+test('Twenty-One has a substantial mesh backpack, rolled bedding, and a bounded navigable footprint',()=>{
+  const model=createCharacter(21),pack=model.root.getObjectByName('explorer backpack'),metrics=getCharacterMetrics(21);
+  assert.ok(pack?.isGroup);
+  const names=['olive backpack body','backpack flap','backpack side pocket','backpack lower pocket','backpack shoulder strap','backpack securing strap','brass backpack buckle','green top roll','red roll end cap','cream sleeping mat','sleeping mat spiral','sleeping mat strap','green explorer hat','rainbow hat feather','hiking staff','hiking boot lace'];
+  for(const name of names)assert.ok(model.root.getObjectByName(name),`Twenty-One is missing ${name}`);
+  const main=model.root.getObjectByName('olive backpack body');
+  model.root.updateMatrixWorld(true);
+  const bounds=new Box3().setFromObject(main),size=bounds.getSize(new Vector3());
+  assert.ok(size.x>2.3&&size.y>4.5&&size.z>1,'the pack must be a substantial volume');
+  assert.ok(bounds.max.z<-.5&&bounds.min.z<-1.6,'the pack sits behind the unit-deep body');
+  let spirals=0,caps=0;
+  pack.traverse(object=>{
+    if(object.name==='sleeping mat spiral')spirals++;
+    if(object.name==='red roll end cap')caps++;
+    if(!object.isMesh)return;
+    const positions=object.geometry.getAttribute('position'),point=new Vector3();
+    for(let i=0;i<positions.count;i++){
+      point.fromBufferAttribute(positions,i).applyMatrix4(object.matrixWorld);
+      assert.ok(Math.hypot(point.x,point.z)<=metrics.radius+1e-5,`${object.name} exceeds the collision radius`);
+    }
+  });
+  assert.equal(spirals,2);assert.equal(caps,2);
+  assert.ok(metrics.depth>=2.5&&metrics.radius<=2.7,'the full backpack remains safe on the mountain route');
+  for(const name of['green top roll','cream sleeping mat']){
+    const roll=pack.getObjectByName(name);
+    assert.equal(roll.geometry.type,'CylinderGeometry');
+    assert.ok(Math.abs(roll.rotation.z-Math.PI/2)<1e-9,'bedrolls lie across the shoulders');
+  }
+});
+
+test('Twenty-One to Twenty-Five keep their distinctive faces, spectacles, and celestial accessories',()=>{
+  const layouts={21:[0,5.87,5.18],22:[-.17,1.53,.88],23:[.62,2.04,1.5],24:[0,4.84,4.12],25:[0,1.95,1.13]};
+  const features={21:['pointed purple explorer mask'],22:['striped trainer'],23:['eye rim'],24:['sun staff','golden sun','moon staff','starry crescent moon','square glasses'],25:['square glasses','blue crown eyebrow','gentle blue smile']};
+  for(const number of[21,22,23,24,25]){
+    const model=createCharacter(number),face=getCharacterFaceLayout(number);
+    for(const [index,value]of[face.x,face.eyeY,face.mouthY].entries())assert.ok(Math.abs(value-layouts[number][index])<1e-9);
+    assert.equal(model.root.userData.faceCenter.x,face.x);
+    assert.equal(model.root.userData.faceCenter.y,(face.eyeY+face.mouthY)/2);
+    for(const name of features[number])assert.ok(model.root.getObjectByName(name),`${number} is missing ${name}`);
+    model.root.traverse(object=>{
+      if(object.geometry)assert.ok(Array.from(object.geometry.getAttribute('position').array).every(Number.isFinite),`${number}/${object.name} has invalid vertices`);
+    });
+  }
+  const happy=createCharacter(22).root.getObjectByName('expression happy');
+  const eyes=happy.children.filter(o=>o.name==='eye white');
+  assert.equal(eyes.length,2);
+  assert.ok(eyes[0].scale.x>eyes[1].scale.x*1.3,'Twenty-Two has unequal eyes');
 });
 
 test('red frames trace the declared outlined cells and never appear on Twenty',()=>{
@@ -156,13 +219,38 @@ test('body metrics reflect cube dimensions and enclose the ground footprint', ()
     const metrics = getCharacterMetrics(data.number);
     assert.equal(metrics.width, data.width);
     assert.equal(metrics.height, data.height);
-    assert.equal(metrics.depth, 1);
+    assert.equal(metrics.depth, data.number===21?2.6:1);
     assert.ok(metrics.radius >= data.width / 2);
-    assert.ok(Math.abs(metrics.radius - Math.hypot(data.width / 2, .5)) < 1e-10);
+    assert.ok(Math.abs(metrics.radius - Math.hypot(data.width / 2, data.number===21?2.1:.5)) < 1e-10);
     const character = createCharacter(data.number);
     assert.equal(character.height, metrics.height);
     assert.equal(character.width, metrics.width);
     assert.equal(character.radius, metrics.radius);
+  }
+});
+
+test('golden cube grids stand clear of the body surface and retain depth occlusion',()=>{
+  for(const number of[20,21,22,23,24,25]){
+    const model=createCharacter(number),data=getCharacterDefinition(number);
+    const grid=model.body.getObjectByName('raised golden unit grid');
+    assert.ok(grid?.isMesh,'the visible grid must use real geometry');
+    assert.equal(grid.material.depthTest,true,'rear seams must stay hidden behind the body');
+    model.root.updateMatrixWorld(true);
+    for(const cell of data.cells){
+      for(const side of[-1,1]){
+        const origin=new Vector3(cell.x+.5-data.width/2,cell.y+1.35,side*2);
+        const ray=new Raycaster(origin,new Vector3(0,0,-side));
+        const hits=ray.intersectObject(grid);
+        assert.ok(hits.length>0,`${number}: cube ${key(cell)} has no solid horizontal seam`);
+        assert.ok(hits[0].point.z*side>.502,'the visible seam must be in front of its cube surface');
+      }
+    }
+    model.body.children.filter(o=>o.name==='unit cube seams').forEach(outline=>{
+      assert.equal(outline.material.depthWrite,false);
+      assert.equal(outline.material.depthTest,true);
+      const p=outline.geometry.getAttribute('position');
+      for(let i=0;i<p.count;i++)assert.ok(Math.abs(p.getZ(i))>.5,'line edges must not share the cube depth');
+    });
   }
 });
 

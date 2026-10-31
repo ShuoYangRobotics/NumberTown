@@ -6,6 +6,7 @@ import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from './world-d
 import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp, collides } from './navigation.js';
 import { EMOTIONS, chooseRemark } from './personalities.js';
 import { createRoamingController } from './roaming.js';
+import { toSpokenMath } from './speech.js';
 
 import { createLandscape } from './terrain.js';
 import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
@@ -66,13 +67,13 @@ const players = CHARACTERS.map((definition,index) => {
   const metrics = getCharacterMetrics(definition.number);
   const radius = metrics.radius ?? Math.hypot(metrics.width / 2, .5) + .12;
   const start = nearestOpenPosition(FRIEND_STARTS[index], ALL_OBSTACLES, WORLD, radius);
-  const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', lastRemarkKind:'', nextChat:8+index*.8+Math.random()*6, yaw:0};
+  const player = {...definition, model, ...start, radius, jump:0, jumpVelocity:0, moving:false, emotion:'happy', moodUntil:0, lastText:'', lastRemarkKind:'', yaw:0};
   model.root.position.set(player.x,groundHeight(player.x,player.z),player.z);
   model.root.userData.playerNumber = definition.number;
   scene.add(model.root);
   return player;
 });
-let active = players[15];
+let active = players[20];
 const camera = new THREE.PerspectiveCamera(42, 1, .3, 1300);
 const orbit = {yaw:.26, elevation:.64, distance:76, targetDistance:76};
 const target = new THREE.Vector3(active.x, 2.1, active.z);
@@ -89,7 +90,9 @@ let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, act
 let guidedWalk=null,trailNoticeUntil=0;
 const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
 let drag=null, pinchDistance=0, suppressClick=false;
-const bubbles = [{element:$('#speech'),player:active,until:0},{element:$('#neighbor-speech'),player:players[0],until:0}];
+const bubbles = [{element:$('#speech'),player:active,until:0}];
+let voiceUtterance=null;
+const voiceState={text:'',number:null,playing:false};
 
 function miniSVG(definition) {
   const w=definition.width, h=definition.height;
@@ -101,14 +104,14 @@ function miniSVG(definition) {
   return `<svg viewBox="-.2 -.1 ${w+.4} ${h+.4}" aria-hidden="true">${cubes}${face}<path d="M ${cx-.22} ${mouthY} q .22 .2 .44 0" fill="none" stroke="#854352" stroke-width=".07" stroke-linecap="round"/></svg>`;
 }
 for(const definition of CHARACTERS){
-  const button=document.createElement('button');button.type='button';button.className='friend-card';button.dataset.number=definition.number;
+  const button=document.createElement('button');button.type='button';button.className=definition.number>20?'friend-card long-name':'friend-card';button.dataset.number=definition.number;
   button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
-  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>15?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
+  button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number>20?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
   button.addEventListener('click',()=>selectFriend(definition.number));$('#friends').append(button);
 }
 function focusGame(){canvas.focus({preventScroll:true});}
 function selectFriend(number, initial=false){
-  active=players.find(p=>p.number===number)||players[0];clearInput();roaming.pause(active,time);active.yaw=orbit.yaw;
+  cancelVoice();active=players.find(p=>p.number===number)||players[0];clearInput();roaming.pause(active,time);active.yaw=orbit.yaw;
   document.querySelectorAll('.friend-card').forEach(button=>button.setAttribute('aria-pressed',String(+button.dataset.number===active.number)));
   $('#friend-name').textContent=active.name;$('#friend-description').textContent=active.description;
   $('#block-count').textContent=`${active.number} ${active.number===1?'cube':'cubes'}`;
@@ -116,14 +119,14 @@ function selectFriend(number, initial=false){
   // A broad character needs a slightly wider view; all cubes retain the same world size.
   orbit.targetDistance=Math.max(orbit.targetDistance,active.width>3?30:26);zoom(0);
   updateMood();currentPlace=null;updateLocation();
-  bubbles[0].until=0;bubbles[1].until=0;
+  bubbles[0].until=0;$('#inspect-backpack').hidden=active.number!==21;updateBackpackButton();
   if(!initial){remark(active,{math:true});focusGame();}
   keepSelectedCardVisible();
 }
 function keepSelectedCardVisible(){
   const card=$(`.friend-card[data-number="${active.number}"]`),strip=$('#friends');if(!card)return;
   const item=card.getBoundingClientRect(),row=strip.getBoundingClientRect();
-  if(item.left<row.left||item.right>row.right||active.number>15)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
+  if(item.left<row.left||item.right>row.right||active.number>20)strip.scrollTo({left:strip.scrollLeft+item.left-row.left-(row.width-item.width)/2,behavior:reducedMotion?'instant':'smooth'});
 }
 $('#previous-friend').addEventListener('click',()=>selectFriend(active.number===1?players.length:active.number-1));
 $('#next-friend').addEventListener('click',()=>selectFriend(active.number===players.length?1:active.number+1));
@@ -184,17 +187,45 @@ function updateLocation(){
   updateActivity(place);if(mapDialog.open)townMap.update(active);
 }
 function remark(player,context={}){
-  const place=findPlace(player);
-  const next=chooseRemark(player.number,{emotion:player.emotion,moving:player.moving,place:BRIDGE_IDS.has(place?.id)?'river':place?.id,lastText:player.lastText,...context});player.lastText=next.text;player.lastRemarkKind=next.kind||'conversation';player.nextChat=time+15+Math.random()*16;
-  const bubble=bubbles[player===active?0:1];bubble.player=player;bubble.until=time+5.7;
-  bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=next.kind==='math'?`${player.name} · number facts`:player.name;bubble.element.append(name,document.createTextNode(next.text));
-  if(player===active){nextRemark=time+11+Math.random()*6;speak(next.text,player);}else if(time>bubbles[0].until&&!window.speechSynthesis?.speaking)speak(next.text,player);
+  // Only the friend under the user's control speaks; wandering friends stay quiet.
+  if(player!==active)return;
+  const next=chooseRemark(player.number,{emotion:player.emotion,lastText:player.lastText,...context,math:true});
+  player.lastText=next.text;player.lastRemarkKind='math';
+  const bubble=bubbles[0];bubble.player=player;bubble.until=time+6.5;
+  bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=`${player.name} · number facts`;
+  bubble.element.append(name,document.createTextNode(next.text));bubble.element.dataset.spoken=toSpokenMath(next.text);
+  nextRemark=time+12+Math.random()*6;speak(next.text,player);
 }
-$('#math-fact').addEventListener('click',()=>{remark(active,{math:true});focusGame();});
-function speak(text,player){if(muted||!('speechSynthesis'in window))return;speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;speechSynthesis.speak(utterance);}
+$('#math-fact').addEventListener('click',()=>{remark(active);focusGame();});
+function cancelVoice(){
+  voiceUtterance=null;voiceState.playing=false;
+  if('speechSynthesis'in window)speechSynthesis.cancel();
+}
+function speak(text,player){
+  if(player!==active||muted||!('speechSynthesis'in window))return;
+  cancelVoice();
+  const utterance=new SpeechSynthesisUtterance(toSpokenMath(text));voiceUtterance=utterance;
+  utterance.lang='en-US';utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;
+  Object.assign(voiceState,{text:utterance.text,number:player.number,playing:false});
+  utterance.onstart=()=>{if(voiceUtterance===utterance)voiceState.playing=true;};
+  const finished=()=>{if(voiceUtterance===utterance){voiceUtterance=null;voiceState.playing=false;}};
+  utterance.onend=finished;utterance.onerror=finished;speechSynthesis.speak(utterance);
+}
+function updateBackpackButton(){
+  const rear=Math.cos(orbit.yaw-active.yaw)<0;
+  $('#inspect-backpack').textContent=rear?'↶ View face':'↶ View backpack';
+  $('#inspect-backpack').setAttribute('aria-label',rear?"View Twenty-One's face":"View Twenty-One's backpack");
+}
+$('#inspect-backpack').addEventListener('click',()=>{
+  if(active.number!==21)return;
+  if(guidedWalk)guidedWalk.autoCamera=false;
+  const rear=Math.cos(orbit.yaw-active.yaw)<0;
+  orbit.yaw=active.yaw+(rear?.3:Math.PI+.38);orbit.elevation=.34;orbit.targetDistance=25;
+  zoom(0);updateBackpackButton();focusGame();
+});
 function tone(){if(muted)return;try{audioContext ||= new(window.AudioContext||window.webkitAudioContext)();audioContext.resume();const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();oscillator.frequency.setValueAtTime(490,audioContext.currentTime);oscillator.frequency.exponentialRampToValueAtTime(780,audioContext.currentTime+.13);gain.gain.setValueAtTime(.025,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+.2);oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start();oscillator.stop(audioContext.currentTime+.2);}catch{}}
 function jump(){if(modalOpen()||active.jump>.01||time-lastJumpAt<.4)return;active.jumpVelocity=7.4;hopCount++;lastJumpAt=time;setEmotion(active,'excited',6);tone();}
-$('#sound').addEventListener('click',()=>{muted=!muted;$('#sound').setAttribute('aria-pressed',String(!muted));$('#sound').setAttribute('aria-label',muted?'Turn voices on':'Turn voices off');$('#sound-wave').setAttribute('d',muted?'m16 9 6 6m0-6-6 6':'M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14');if(muted&&'speechSynthesis'in window)speechSynthesis.cancel();else speak(`Hello, I'm ${active.name}! Welcome to NumberTown.`,active);focusGame();});
+$('#sound').addEventListener('click',()=>{muted=!muted;$('#sound').setAttribute('aria-pressed',String(!muted));$('#sound').setAttribute('aria-label',muted?'Turn voices on':'Turn voices off');$('#sound-wave').setAttribute('d',muted?'m16 9 6 6m0-6-6 6':'M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14');if(muted)cancelVoice();else remark(active);focusGame();});
 
 const moves=['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'];
 function clearInput(){guidedWalk=null;keys.clear();touches.clear();tapUntil.clear();players.forEach(p=>p.moving=false);document.querySelectorAll('[data-move]').forEach(button=>button.classList.remove('active'));}
@@ -223,7 +254,7 @@ addEventListener('keydown',event=>{
 });
 addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
 addEventListener('blur',()=>{clearInput();pointerPositions.clear();drag=null;});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();lastTime=0;if('speechSynthesis'in window)speechSynthesis.cancel();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();lastTime=0;cancelVoice();}});
 for(const button of document.querySelectorAll('[data-move]')){
   button.addEventListener('pointerdown',event=>{event.preventDefault();button.setPointerCapture(event.pointerId);touches.add(button.dataset.move);tapUntil.set(button.dataset.move,time+.12);button.classList.add('active');});
   const release=()=>{touches.delete(button.dataset.move);button.classList.remove('active');};
@@ -310,14 +341,14 @@ function updateActivity(place){
   if(id==='mountains'){title='The northern mountains';detail='A paved path winds around one peak. Visit Mountain trail to begin the climb.';}
   if(id==='mountain-trail'){title=`Summit Walk · ${Math.round(groundHeight(active.x,active.z))} / ${SUMMIT_DECK.height} m`;detail=time<trailNoticeUntil?'A friend is on the path. Use WASD to walk around them.':guidedWalk?'Enjoy the climb. WASD takes over whenever you like.':'Follow the paved bends with WASD, or take a guided walk to the top.';}
   if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Look across NumberTown, the river, and the sea. Drag to enjoy the panorama.';}
-  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all twenty friends.';}
+  if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A big colorful cube, and a larger square for all twenty-five friends.';}
   if(id==='pond'){title='The big duck pond';detail='Follow the shore and say hello to the ducks.';}
 
   $('#activity-title').textContent=title;$('#activity-detail').textContent=detail;
 }
 
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();requestAnimationFrame(keepSelectedCardVisible);}
-addEventListener('resize',resize);resize();selectFriend(16,true);
+addEventListener('resize',resize);resize();selectFriend(21,true);
 function updateCamera(dt){
   if(keys.has('q'))orbit.yaw-=dt*1.25;if(keys.has('r'))orbit.yaw+=dt*1.25;
   const desired=new THREE.Vector3(active.x,groundHeight(active.x,active.z)+Math.max(1.4,active.height*.45),active.z);
@@ -380,11 +411,7 @@ function animate(timestamp){
       player.model.update(dt,{time:reducedMotion?0:time,moving:player.moving,emotion:player.emotion});
       if(player.moodUntil<time){setEmotion(player,['happy','happy','curious','excited','surprised','sleepy'][Math.floor(Math.random()*6)],18+Math.random()*19);}
     }
-    if(time>nextRemark)remark(active,{math:Math.random()<.8});
-    if(time>bubbles[1].until+2){
-      const nearby=players.filter(p=>p!==active&&time>p.nextChat&&Math.hypot(p.x-active.x,p.z-active.z)<45).sort((a,b)=>a.nextChat-b.nextChat);
-      if(nearby.length)remark(nearby[0],{math:true});
-    }
+    if(time>nextRemark)remark(active);
     town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);
     if(active.jump<.3)updateBallContact(ballState,active,dt);
     const goal=stepBall(ballState,dt);football.update(ballState,time);
@@ -398,11 +425,11 @@ function animate(timestamp){
   updateBubbles();renderer.render(scene,camera);
   frameCount++;
   if(timestamp-statsAt>500){
-    fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();
+    fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();if(active.number===21)updateBackpackButton();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},speech:{text:active.lastText,kind:active.lastRemarkKind},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;
 requestAnimationFrame(animate);
-setTimeout(()=>{remark(active,{place:undefined,math:true});focusGame();},900);
+setTimeout(()=>{if(!active.lastText&&!modalOpen()&&!document.hidden){remark(active);focusGame();}},900);

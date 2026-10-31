@@ -70,6 +70,44 @@ function rectangleRing(parent, x, y, z, w, h, radius, color) {
   }
   return tube(parent, points, radius, color, true, 'square glasses');
 }
+function goldenGrid(body, data) {
+  // Thin solid ridges keep the twenty-part count readable at normal game
+  // distances. Merge every unique edge into one mesh rather than issuing a
+  // draw call for each cube seam. The unit cubes themselves remain untouched.
+  const edges = new Map();
+  for (const cell of data.cells) {
+    for (let i = 0; i < EDGES.length; i += 6) {
+      const a = [EDGES[i] + cell.x + .5, EDGES[i + 1] + cell.y + .5, EDGES[i + 2] * 1.032];
+      const b = [EDGES[i + 3] + cell.x + .5, EDGES[i + 4] + cell.y + .5, EDGES[i + 5] * 1.032];
+      const key = [a.join(','), b.join(',')].sort().join('|');
+      if (!edges.has(key)) edges.set(key, [a, b]);
+    }
+  }
+  const cylinder = new THREE.CylinderGeometry(.014, .014, 1, 6);
+  const source = cylinder.getAttribute('position'), normals = cylinder.getAttribute('normal');
+  const positions = [], normalData = [], indices = [];
+  const up = new THREE.Vector3(0, 1, 0), rotation = new THREE.Quaternion(), point = new THREE.Vector3();
+  for (const [a, b] of edges.values()) {
+    const start = new THREE.Vector3(a[0] - data.width / 2, a[1] + FEET, a[2]);
+    const end = new THREE.Vector3(b[0] - data.width / 2, b[1] + FEET, b[2]);
+    const direction = end.clone().sub(start), length = direction.length(), center = start.add(end).multiplyScalar(.5);
+    rotation.setFromUnitVectors(up, direction.normalize());
+    const offset = positions.length / 3;
+    for (let i = 0; i < source.count; i++) {
+      point.fromBufferAttribute(source, i); point.y *= length; point.applyQuaternion(rotation).add(center);
+      positions.push(point.x, point.y, point.z);
+      point.fromBufferAttribute(normals, i).applyQuaternion(rotation); normalData.push(point.x, point.y, point.z);
+    }
+    for (const index of cylinder.index.array) indices.push(index + offset);
+  }
+  cylinder.dispose();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalData, 3));
+  geometry.setIndex(indices);
+  const grid = mesh(geometry, '#b47a2e', 'raised golden unit grid');
+  grid.castShadow = false; body.add(grid);
+}
 function outlineBody(body, data) {
   const grouped = new Map();
   for (const cell of data.cells) {
@@ -77,15 +115,16 @@ function outlineBody(body, data) {
     if (!grouped.has(color)) grouped.set(color, []);
     const vertices = grouped.get(color);
     for (let index = 0; index < EDGES.length; index += 3) {
-      vertices.push(EDGES[index] + cell.x + .5 - data.width / 2, EDGES[index + 1] + cell.y + .5 + FEET, EDGES[index + 2]);
+      vertices.push(EDGES[index] * 1.012 + cell.x + .5 - data.width / 2, EDGES[index + 1] * 1.012 + cell.y + .5 + FEET, EDGES[index + 2] * 1.012);
     }
   }
   for (const [color, vertices] of grouped) {
-    if (!lines.has(color)) lines.set(color, new THREE.LineBasicMaterial({ color, transparent: true, opacity: color === '#36515a' ? .35 : .62 }));
+    if (!lines.has(color)) lines.set(color, new THREE.LineBasicMaterial({ color, transparent: true, depthWrite: false, opacity: color === '#36515a' ? .35 : .62 }));
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     const outline = new THREE.LineSegments(geometry, lines.get(color)); outline.name = 'unit cube seams'; body.add(outline);
   }
+  if (data.number >= 20) goldenGrid(body, data);
   const framed=data.cells.filter(cell=>cell.outline==='#d9384a');
   if (framed.length) {
     // Follow the actual ten-part outline, including offset rectangles and
@@ -210,6 +249,100 @@ function cane(parent){
   ball(prop,-.25,-.43,0,.045,.06,.045,'#343b39','cane tip');
 }
 
+function cylinder(parent, x, y, z, radius, length, color, name, axis = 'y') {
+  const object = mesh(new THREE.CylinderGeometry(radius, radius, length, 24), color, name);
+  object.position.set(x, y, z);
+  if (axis === 'x') object.rotation.z = Math.PI / 2;
+  if (axis === 'z') object.rotation.x = Math.PI / 2;
+  parent.add(object);
+  return object;
+}
+function roundedPackBox(parent, x, y, z, width, height, depth, color, name) {
+  const bevel = Math.min(.13, depth / 4), w = width / 2 - bevel, h = height / 2 - bevel;
+  const shape = new THREE.Shape();
+  shape.moveTo(-w, -h); shape.lineTo(w, -h); shape.lineTo(w, h); shape.lineTo(-w, h); shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {depth: depth - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3});
+  geometry.translate(0, 0, -depth / 2 + bevel);
+  const object = mesh(geometry, color, name); object.position.set(x, y, z); parent.add(object);
+  return object;
+}
+function backpack(parent) {
+  const pack = new THREE.Group(); pack.name = 'explorer backpack'; parent.add(pack);
+  pack.userData.collisionAccessory = true;
+  roundedPackBox(pack, 0, 3.8, -1.08, 2.48, 4.66, 1.12, '#7c8951', 'olive backpack body');
+  roundedPackBox(pack, 0, 5.2, -1.66, 2.3, 1.28, .16, '#9aa569', 'backpack flap');
+  tube(pack, [[-1.08,4.84,-1.76],[0,4.65,-1.76],[1.08,4.84,-1.76]], .028, '#576440', false, 'flap stitched edge');
+  for (const side of [-1, 1]) {
+    roundedPackBox(pack, side * 1.31, 3.6, -1.03, .32, 1.7, .92, '#899658', 'backpack side pocket');
+    roundedPackBox(pack, side * 1.31, 4.35, -1.04, .37, .31, .96, '#a5ad70', 'side pocket flap');
+    roundedPackBox(pack, side * .59, 2.25, -1.7, .98, 1.18, .3, '#a0aa6c', 'backpack lower pocket');
+    roundedPackBox(pack, side * .59, 2.71, -1.86, 1.01, .28, .1, '#b0b77b', 'lower pocket flap');
+    ball(pack, side * .59, 2.58, -1.94, .065, .065, .025, '#667141', 'pocket button');
+    // Broad shoulder loops wrap over the cube body and remain visible from
+    // the front, side and back, rather than being painted on the pack.
+    tube(pack, [[side*1.06,2.2,-.64],[side*1.39,2.5,-.17],[side*1.42,4.7,.49],[side*1.4,6.85,.53],[side*1.12,7.27,.12],[side*.94,6.7,-.93]], .09, '#7b3f29', false, 'backpack shoulder strap');
+    tube(pack, [[side*.76,6.93,-1.06],[side*.76,6.56,-1.68],[side*.76,5.8,-1.78],[side*.76,3.48,-1.95],[side*.76,2.87,-1.84]], .065, '#514e31', false, 'backpack securing strap');
+    const buckle = rectangleRing(pack, side*.76, 5.13, -1.86, .22, .31, .035, '#d2bc71');
+    buckle.name = 'brass backpack buckle';
+    box(pack, side*.76,5.13,-1.87,.2,.035,.055,'#d2bc71','buckle tongue');
+  }
+  // Both rolls are genuine cylinders oriented across the shoulders. Their
+  // end faces and spiral stitching are visible when the friend turns.
+  cylinder(pack,0,6.35,-1.08,.56,2.8,'#9ca76e','green top roll','x');
+  for(const side of[-1,1]){
+    cylinder(pack,side*1.43,6.35,-1.08,.54,.09,'#b73e3e','red roll end cap','x');
+    const seam=mesh(new THREE.TorusGeometry(.49,.035,8,24),'#8d3031','red roll cap rim');
+    seam.rotation.y=Math.PI/2;seam.position.set(side*1.48,6.35,-1.08);pack.add(seam);
+  }
+  cylinder(pack,0,3.42,-1.63,.4,2.74,'#ead79d','cream sleeping mat','x');
+  for(const side of[-1,1]){
+    cylinder(pack,side*1.38,3.42,-1.63,.385,.045,'#f5e6b5','sleeping mat end','x');
+    const spiral=Array.from({length:65},(_,i)=>{const t=i/64,a=t*Math.PI*5,r=.034+.31*t;return[side*1.41,3.42+Math.cos(a)*r,-1.63+Math.sin(a)*r];});
+    tube(pack,spiral,.016,'#b19b61',false,'sleeping mat spiral');
+    const belt=mesh(new THREE.TorusGeometry(.414,.045,8,24),'#565333','sleeping mat strap');
+    belt.rotation.y=Math.PI/2;belt.position.set(side*.79,3.42,-1.63);pack.add(belt);
+    const buckle=rectangleRing(pack,side*.79,3.43,-2.07,.18,.2,.028,'#c8b271');buckle.name='bedroll buckle';
+  }
+  tube(pack,[[-.35,6.12,-.66],[-.31,6.48,-.65],[.31,6.48,-.65],[.35,6.12,-.66]],.055,'#4e5635',false,'backpack carry handle');
+}
+function explorerHat(parent, top) {
+  const hat=new THREE.Group();hat.name='green explorer hat';hat.position.set(0,top+.05,0);hat.rotation.z=-.06;parent.add(hat);
+  const brim=cylinder(hat,0,0,0,.94,.1,'#285c30','explorer hat brim');brim.scale.z=.72;
+  const crown=mesh(new THREE.CylinderGeometry(.51,.61,.49,24),'#38723d','explorer hat crown');crown.position.y=.27;hat.add(crown);
+  const band=mesh(new THREE.CylinderGeometry(.59,.61,.12,24),'#183e24','dark green hat band');band.position.y=.12;hat.add(band);
+  box(hat,-.32,.13,.51,.16,.13,.045,'#d6c367','hat buckle');
+  for(const [index,color]of['#df347d','#35afd6','#a7cd38'].entries()){
+    const feather=ball(hat,.49+index*.055,.54+index*.055,.015,.07,.31,.024,color,'rainbow hat feather');feather.rotation.z=-.24-index*.12;
+    tube(hat,[[.45,.2,.04],[.5+index*.055,.58+index*.055,.04],[.57+index*.07,.82+index*.055,.04]],.012,'#f6e4ab',false,'feather quill');
+  }
+}
+function hikingStaff(parent) {
+  const staff=new THREE.Group();staff.name='hiking staff';staff.position.set(.04,0,.07);parent.add(staff);
+  tube(staff,[[0,.38,0],[.075,.43,0],[.11,.3,0],[.08,-3.87,0]],.044,'#bb3d34',false,'red hiking pole');
+  cylinder(staff,.08,-3.84,0,.063,.19,'#26383a','hiking staff rubber tip');
+  tube(staff,[[-.06,.23,.02],[-.18,.16,.03],[-.17,-.07,.03],[.01,-.14,.02]],.025,'#4a4732',false,'hiking wrist loop');
+}
+function celestialStaff(parent, sun) {
+  const staff=new THREE.Group();staff.name=sun?'sun staff':'moon staff';parent.add(staff);
+  const height=4.21, color=sun?'#b4a43b':'#364b83';
+  cylinder(staff,0,height/2-.52,0,.037,height+1.04,color,'celestial staff shaft');
+  ball(staff,0,height-.03,0,.11,.14,.1,color,'staff finial');
+  const emblem=new THREE.Group();emblem.position.y=height+.54;emblem.name=sun?'golden sun':'starry crescent moon';staff.add(emblem);
+  if(sun){
+    star(emblem,0,0,-.07,.79,.5,'#b89a34',16);
+    cylinder(emblem,0,0,0,.49,.16,'#f4dc56','sun face','z');
+    ring(emblem,0,0,.09,.48,.48,.03,'#ae9633');
+  }else{
+    const crescent=new THREE.Shape();
+    crescent.moveTo(.22,.58);crescent.bezierCurveTo(-.69,.75,-.94,-.67,.12,-.64);
+    crescent.bezierCurveTo(-.34,-.38,-.41,.26,.22,.58);
+    const object=mesh(new THREE.ExtrudeGeometry(crescent,{depth:.12,bevelEnabled:false}),'#fcf6d4','cream crescent rim');object.position.z=-.06;emblem.add(object);
+    cylinder(emblem,-.08,-.025,-.025,.6,.11,'#263d76','night sky disc','z');
+    object.position.z=.06;
+    for(const[x,y,s]of[[-.31,.32,.055],[-.42,.1,.037],[-.24,-.08,.045],[-.32,-.32,.032],[.02,.38,.028],[.02,-.36,.036]])star(emblem,x,y,.135,s,s*.35,'#fffae3');
+  }
+}
+
 function faceLayout(data) {
   const n = data.number, top = data.height + FEET;
   const result = { x: 0, eyeY: top - .37, mouthY: top - .76, gap: .235, size: .17, mouth: .52 };
@@ -229,6 +362,11 @@ function faceLayout(data) {
   if (n === 18) Object.assign(result, { x: -.5, eyeY: FEET + 1.52, mouthY: FEET + .59, gap: .45, size: .29, mouth: .78 });
   if (n === 19) Object.assign(result, { eyeY: FEET + 1.32, mouthY: FEET + .64, gap: .48, size: .3, mouth: .61 });
   if (n === 20) Object.assign(result, { eyeY: FEET + 1.83, mouthY: FEET + 1.18, gap: .46, size: .29, mouth: .65 });
+  if (n === 21) Object.assign(result, { eyeY: FEET + 5.52, mouthY: FEET + 4.83, gap: .43, size: .31, mouth: .78 });
+  if (n === 22) Object.assign(result, { x: -.17, eyeY: FEET + 1.18, mouthY: FEET + .53, gap: .45, size: .3, mouth: .62 });
+  if (n === 23) Object.assign(result, { x: .62, eyeY: FEET + 1.69, mouthY: FEET + 1.15, gap: .3, size: .215, mouth: .55 });
+  if (n === 24) Object.assign(result, { eyeY: FEET + 4.49, mouthY: FEET + 3.77, gap: .34, size: .26, mouth: .7 });
+  if (n === 25) Object.assign(result, { eyeY: FEET + 1.6, mouthY: FEET + .78, gap: .65, size: .34, mouth: 1.02 });
   return result;
 }
 export function getCharacterFaceLayout(number){return {...faceLayout(getCharacterDefinition(number))};}
@@ -251,12 +389,23 @@ function eyeDecorations(parent, data, f) {
     if (n === 10) star(parent, x, f.eyeY, .515, .48, .28, '#e7334b');
     if (n === 16 || n === 18) rectangleRing(parent,x,f.eyeY,Z+.035,n===16?.88:.84,n===16?.83:.99,n===16?.075:.06,n===16?'#512483':'#713066');
     if (n === 17 || n === 19 || n === 20) ring(parent,x,f.eyeY,Z+.03,f.size*1.2,f.size*(n===20?1.42:1.21),n===19?.064:.052,n===19?'#41494c':n===20?'#8f478e':'#6b3195');
+    if(n===21){
+      const side=index?1:-1;
+      polygon(parent,[[side*-.07,-.2],[side*.37,-.14],[side*.53,.16],[side*.48,.35],[side*.58,.79],[side*.22,.46],[0,.48],[side*-.24,.16]],.055,'#3f256e',x,f.eyeY,.509,'pointed purple explorer mask');
+      ring(parent,x,f.eyeY,Z+.03,f.size*1.16,f.size*1.18,.05,'#3f256e');
+    }
+    if(n===22){
+      const size=f.size*(index?.72:1);
+      ring(parent,x,f.eyeY,Z+.03,size*1.16,size*1.2,.035,index?'#8a3141':'#255b85');
+    }
+    if(n===23)ring(parent,x,f.eyeY,Z+.025,f.size*1.18,f.size*1.18,.042,'#6d3289');
+    if(n===24||n===25)rectangleRing(parent,x,f.eyeY,Z+.04,n===24?.61:.94,n===24?.94:.89,.055,n===24?'#315b94':'#28608a');
     if (n === 16) {
       const side=index?1:-1;
       box(parent,x+side*.34,f.eyeY+.12,.6,.10,.49,.09,'#242231','bold square eyelash');
       box(parent,x+side*.27,f.eyeY+.35,.6,.24,.09,.09,'#242231','bold square eyelash');
     }
-    if ([6, 11, 12, 15].includes(n)) {
+    if ([6, 11, 12, 15, 24, 25].includes(n)) {
       const side = index ? 1 : -1;
       const color = n === 6 ? '#ee377d' : '#263342';
       for (let lash = 0; lash < (n === 6 ? 3 : 2); lash++) {
@@ -267,6 +416,7 @@ function eyeDecorations(parent, data, f) {
   }
   if (n === 2 || n === 7 || n === 15) tube(parent, [[f.x - .07, f.eyeY, .59], [f.x, f.eyeY + .06, .6], [f.x + .07, f.eyeY, .59]], .027, n === 2 ? '#8c3a96' : n === 7 ? '#f4dd31' : '#213f79');
   if([16,17,18,19,20].includes(n))tube(parent,[[f.x-.10,f.eyeY+.02,.61],[f.x,f.eyeY+.07,.64],[f.x+.10,f.eyeY+.02,.61]],.035,n===19?'#41494c':data.dark);
+  if([21,23,24,25].includes(n))tube(parent,[[f.x-.13,f.eyeY+.03,.61],[f.x,f.eyeY+.08,.64],[f.x+.13,f.eyeY+.03,.61]],.034,[21,23].includes(n)?'#5c2b83':'#315b94');
   if(n===20)for(const side of[-1,1])box(parent,side*.95,f.eyeY,.04,.09,.18,1.18,'#8f478e','purple spectacle temple');
   if (n === 15) {
     for (const side of [-1, 1]) polygon(parent, [[0, 0], [side * .65, .05], [side * .65, .85], [side * .51, .85], [side * .51, .69], [side * .38, .69], [side * .38, .54], [side * .25, .54], [side * .25, .39], [side * .12, .39], [side * .12, .23]], .055, '#244583', f.x, f.eyeY + .04, .505, 'stepped superhero mask');
@@ -292,7 +442,11 @@ function eye(parent, x, y, size, emotion, color) {
   }
 }
 function mouth(parent, x, y, width, emotion, number) {
-  const lip = number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : number===16?'#46215f':number===17?'#7431a3':number===18?'#8b256f':number===19?'#4b5251':number===20?'#9b4b88':'#713549';
+  const lip = number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : number===16?'#46215f':number===17?'#7431a3':number===18?'#8b256f':number===19?'#4b5251':number===20?'#9b4b88':number===23?'#8c4688':number===24?'#226d42':number===25?'#246e8c':'#713549';
+  if(number===25&&emotion==='happy'){
+    tube(parent,[[x-width*.34,y+.05,.62],[x,y-width*.16,.64],[x+width*.34,y+.05,.62]],.026,lip,false,'gentle blue smile');
+    return;
+  }
   if (emotion === 'surprised' || emotion === 'sleepy') {
     const scale = emotion === 'sleepy' ? .65 : 1;
     ball(parent, x, y, .585, width * .17 * scale, width * .22 * scale, .04, lip, 'round mouth rim');
@@ -321,9 +475,9 @@ function expression(data, f, emotion) {
   const positions = data.number === 1 ? [f.x] : [f.x - f.gap, f.x + f.gap];
   for (let i = 0; i < positions.length; i++) {
     const x = positions[i], side = positions.length === 1 ? 0 : i ? 1 : -1;
-    const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number>=10?'#fffaf1':data.color;
-    eye(group, x, f.eyeY, f.size, emotion, eyelidColor);
-    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20].includes(data.number)) continue;
+    const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number===21?'#3f256e':data.number===23?'#edcd40':data.number===24?'#77c627':data.number>=22?'#ffd58b':data.number>=10?'#fffaf1':data.color;
+    eye(group, x, f.eyeY, f.size*(data.number===22&&i===1?.72:1), emotion, eyelidColor);
+    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20,23,24,25].includes(data.number)) continue;
     const y = f.eyeY + f.size * (emotion === 'surprised' ? 1.65 : 1.4);
     const tilt = emotion === 'sad' ? side * f.size * .45 : emotion === 'curious' ? f.size * .3 : 0;
     const lift = emotion === 'curious' && i === 1 ? f.size * .4 : 0;
@@ -334,9 +488,12 @@ function expression(data, f, emotion) {
         const interval = [j / 7, (j + .5) / 7, (j + 1) / 7].map(t => curve.getPoint(t).toArray());
         tube(group, interval, .065, RAINBOW[i ? 6 - j : j]);
       }
+    } else if(data.number===25){
+      const crown=polygon(group,[[-.45,0],[-.51,.35],[-.29,.2],[-.24,.55],[-.08,.26],[.07,.62],[.16,.24],[.36,.48],[.31,.13],[.51,.23],[.43,-.02]],.045,'#285e85',x,y+lift,.53,'blue crown eyebrow');
+      crown.rotation.z=emotion==='sad'?side*.22:emotion==='curious'?(i?.17:-.08):0;
     } else if(data.number===19){
       tube(group,[[x-f.size*.95,y+tilt,.64],[x-f.size*.48,y+.12+lift,.65],[x+f.size*.15,y+.015+lift,.65],[x+f.size*.8,y+.17-tilt,.64]],.049,'#485052',false,'zigzag eyebrow');
-    } else tube(group, points, [4,9,18,20].includes(data.number) ? .055 : .034, data.number >= 11 ? data.dark : '#344d56');
+    } else tube(group, points, [4,9,18,20,23,24].includes(data.number) ? .055 : .034, data.number===23?'#633287':data.number >= 11 ? data.dark : '#344d56');
   }
   mouth(group, f.x + (data.number === 11 ? .24 : 0), f.mouthY, f.mouth, emotion, data.number);
   return group;
@@ -356,7 +513,7 @@ const DIGITS = {
 };
 function numberPlaque(root, data) {
   const label = new THREE.Group(); label.name = `number ${data.number}`;
-  const extra = data.number === 7 ? .6 : data.number === 3 || data.number === 14 ? .46 : 0;
+  const extra = data.number === 7 ? .6 : data.number === 21 ? .72 : data.number === 3 || data.number === 14 ? .46 : 0;
   label.position.set(data.number===20?.55:0, data.height + FEET + (data.number===20?.54:.47) + extra, .03);
   const digits = String(data.number), width = digits.length === 2 ? .65 : .43;
   ball(label, 0, 0, 0, width, .43, .055, '#fffcf1', 'number plaque');
@@ -400,6 +557,7 @@ function decorations(root, data) {
   }
   if(n===18)for(const side of[-1,1])box(root,side*.55,.30,0,.29,.14,.29,'#c43883','magenta boot cuff');
   if(n===20){topHat(root,top);bowTie(root);}
+  if(n===21){backpack(root);explorerHat(root,top);}
 }
 
 /** Build true unit-cube geometry. Front is +Z; root y=0 is the shoe sole.
@@ -411,7 +569,7 @@ export function createCharacter(number) {
   const metrics = getCharacterMetrics(data.number);
   const root = new THREE.Group(); root.name = `${data.name} character`;
   root.userData.number = data.number;
-  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
+  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number===21?.72:data.number===24?.45:data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
   const body = new THREE.Group(); body.name = 'unit block body'; root.add(body);
   for (const cell of data.cells) {
     const cube = mesh(CUBE, cell.color, `${data.name} block ${cell.x},${cell.y}`);
@@ -424,30 +582,33 @@ export function createCharacter(number) {
   const feet = [];
   for (const side of [-1, 1]) {
     const pivot = new THREE.Group();
-    const fx = data.number === 15 ? 1.5 + side * .3 : side * Math.min(.65, data.width * .26);
+    const fx = data.number === 15 ? 1.5 + side * .3 : data.number===23?-.5+side*.32:side * Math.min(.65, data.width * .26);
     pivot.position.set(fx, .38, 0); root.add(pivot); feet.push(pivot);
-    const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.dark;
-    tube(pivot, [[0, .03, 0], [0, -.13, 0], [0, -.22, .04]], .075, data.number===20?'#d58a2f':data.dark);
+    const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.dark;
+    const legColor=data.number===20?'#d58a2f':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.number===24?'#64ac25':data.dark;
+    tube(pivot, [[0, .03, 0], [0, -.13, 0], [0, -.22, .04]], .075, legColor);
     ball(pivot, side * .015, -.24, .1, data.number === 8 ? .32 : .205, .14, .3, footColor, 'walking shoe');
     if (data.number === 11 || data.number === 15) box(pivot, 0, -.2, .345, .26, .065, .025, data.number === 11 ? '#fffdf5' : side < 0 ? '#cc3548' : '#188ab0', 'shoe stripe');
     if(data.number===20)box(pivot,0,-.12,.18,.27,.12,.27,'#fffbed','white spats');
+    if(data.number===21&&side<0)for(const y of[-.14,-.21,-.28])box(pivot,0,y,.365,.25,.026,.035,'#fff0c5','hiking boot lace');
+    if(data.number===22)for(const y of[-.14,-.25])box(pivot,0,y,.363,.27,.035,.025,'#fff0d2','striped trainer');
   }
   const arms = [];
   const lowFace = data.number >= 11;
-  const armY = lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8);
+  const armY = ({21:4.5,22:1.3,23:1.12,24:3.9,25:1.55})[data.number] ?? (lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8));
   for (const side of [-1, 1]) {
     const count = data.number === 8 ? 3 : 1;
     for (let i = 0; i < count; i++) {
       const pivot = new THREE.Group();
       pivot.position.set(side * (data.number===17?1:data.width/2), data.number === 8 ? data.height + FEET - 1.28 - i : armY, 0);
       root.add(pivot);
-      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || data.number===16;
-      const limbColor=data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.dark;
-      const handY = lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
-      const handX = side * (data.number === 8 ? .88 : .39);
+      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || [16,22,25].includes(data.number);
+      const limbColor=data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.number===22?(side<0?'#285f91':'#af342e'):data.dark;
+      const handY = data.number===24?-.05:lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
+      const handX = side * (data.number === 8 ? .88 : data.number===24?.68:data.number===25?.55:.39);
       const points = data.number === 8
         ? [[0, 0, 0], [side * .44, -.25, .05], [side * .84, -.14, .07], [handX, handY, .06]]
-        : [[0, 0, 0], [side * .3, lifted ? -.05 : -.18, .03], [handX, handY, .055]];
+        : [[0, 0, 0], [side * .3, data.number===24?-.07:lifted ? -.05 : -.18, .03], [handX, handY, .055]];
       const arm = tube(pivot, points, data.number === 8 ? .09 : .085, limbColor, false, data.number === 8 ? 'tentacle' : 'arm');
       if (data.number === 8) {
         const curve = arm.geometry.parameters.path;
@@ -465,6 +626,8 @@ export function createCharacter(number) {
         if(data.number===17)paintTools(hand,side);
         if(data.number===18&&side>0)box(hand,-.05,.06,0,.16,.12,.23,'#f8f3e6','white wrist band');
         if(data.number===20&&side<0)cane(hand);
+        if(data.number===21&&side>0)hikingStaff(hand);
+        if(data.number===24)celestialStaff(hand,side<0);
       }
       arms.push({ pivot, side, phase: i * .9, tentacle: data.number === 8 });
     }
