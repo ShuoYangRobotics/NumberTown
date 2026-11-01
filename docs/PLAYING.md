@@ -39,7 +39,7 @@ Friends you take onto Sunny Hill or the mountain route **stay where you leave th
 
 ## Places and activities
 
-The world spans **440 × 550 units**, with **70 houses**: 50 on the west bank and 20 on the east bank. There are also **10 stores** and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks.
+The world spans **440 × 780 units**, with **70 houses**: 50 on the west bank and 20 on the east bank. There are also **10 stores** and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks and in the expanded southern sea.
 
 - **Town square:** a colorful Rubik’s cube statue balances on one corner and spins at 50 degrees per second, completing a turn every 7.2 seconds.
 - **Duck pond and gardens:** follow the shore, watch the ducks, and explore the flowers and paths.
@@ -48,7 +48,9 @@ The world spans **440 × 550 units**, with **70 houses**: 50 on the west bank an
 - **Sunny Hill:** follow the winding trail to the 12-metre hilltop and viewing deck. View sea frames the southern beach and water; drag to look around freely.
 - **River and bridges:** the river runs continuously from the northern mountain gorge to the sea. The North, Market, and Coast bridges join the two neighborhoods. Characters follow the heights of bridges and hills as they walk.
 - **Mountain summit:** visit Mountain trail and follow the paved bends manually or choose Follow trail. A progress bar tracks the ascent to the 72-metre summit deck. Walk down guides the return. This marked route reaches one summit; the other mountain slopes remain blocked. Sunny Hill is a separate, lower climb.
-- **Beach and water play:** choose Beach, then **Water play**, or select Water play on the map. Wade into the shallow sea between the colored buoys. Walk close to the striped beach ball and press **F / Pick up**, face your throwing direction with WASD, then press **F / Throw**. The ball arcs through the air, bobs on the water, and drifts toward the beach with the waves. It slows on the sand so you can pick it up again. Reset ball returns it to the shallows. Switching characters, traveling to another destination, or carrying it out of the play area leaves the ball at the beach. The surrounding deep sea and river remain blocked.
+- **Beach and sea:** choose Seaside beach, then **Water play**, or select Water play on the map. The sea covers **194 × 262 units**, about eleven times the previous play area. The sand slopes continuously down to **18 blocks deep**. Walk farther out with WASD to submerge; friends shorter than 15 blocks can go completely underwater, including their number labels. Drag to look around and zoom in for an underwater view. **Explore seabed**, or **Underwater garden** on the map, takes you directly to the deep sand. **Back to beach** returns you to shore.
+- **Sea life:** find schools of colorful fish and five-armed sea stars on the sandy floor. Sea turtles swim through the bay, crawl onto the beach to bask, then return to the water. The clear surface lets you see below from above; an underwater camera gets a blue-green view.
+- **Beach ball:** walk close to the striped ball at the same depth and press **F / Pick up**, face your throwing direction with WASD, then press **F / Throw**. Carry it down the slope for an underwater throw: it rises to the surface before the waves carry it shoreward. A ball on the surface cannot be grabbed from the deep seabed. It slows on the sand so you can pick it up again. Reset ball returns it to the shallows. Switching characters, traveling to another destination, or carrying it out of the play area releases it where you leave it. The river and ocean beyond the buoys remain blocked.
 
 ## Characters and shapes
 

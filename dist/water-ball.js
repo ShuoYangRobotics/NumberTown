@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { WATER_PLAY } from './geography.js';
+import { waterPlayHeight } from './terrain-data.js';
 
 export const WATER_BALL_RADIUS = .68;
 const GRAVITY = 12;
@@ -7,13 +8,16 @@ const SAND_Y = .035;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = value => Number.isFinite(value);
 const finiteState = state => state && ['x', 'y', 'z', 'vx', 'vy', 'vz', 'time', 'rollX', 'rollZ', 'splash', 'throws'].every(key => finite(state[key]));
+const floorHeight = (x, z) => waterPlayHeight(x, z) + SAND_Y + WATER_BALL_RADIUS;
 
 function waveHeight(x, z, time) {
   const wet = clamp((z - WATER_PLAY.shoreZ + WATER_BALL_RADIUS) / 1.7, 0, 1);
   const afloat = WATER_PLAY.waterY + WATER_BALL_RADIUS * .62
     + .075 * Math.sin(time * 2.1 + x * .11) + .035 * Math.sin(time * 3.7 + z * .19);
-  return SAND_Y + WATER_BALL_RADIUS + (afloat - SAND_Y - WATER_BALL_RADIUS) * wet;
+  return Math.max(floorHeight(x, z), SAND_Y + WATER_BALL_RADIUS + (afloat - SAND_Y - WATER_BALL_RADIUS) * wet);
 }
+
+const isSubmerged = state => state.z >= WATER_PLAY.shoreZ && state.y < waveHeight(state.x, state.z, state.time);
 
 export function createWaterBallState() {
   return {
@@ -70,11 +74,13 @@ export function updateHeldWaterBall(state, player, time = state.time) {
   const reach = clamp(depth / 2 + .75, .95, 2.2);
   state.x = player.x + Math.sin(player.yaw) * reach + Math.cos(player.yaw) * .18;
   state.z = player.z + Math.cos(player.yaw) * reach - Math.sin(player.yaw) * .18;
-  state.y = Math.max(SAND_Y + WATER_BALL_RADIUS, holdHeight(player))
-    + .025 * Math.sin((finite(time) ? time : state.time) * 3);
   state.vx = 0; state.vy = 0; state.vz = 0; state.mode = 'held';
   state.carrierX = player.x; state.carrierZ = player.z;
   keepInBay(state);
+  // Follow the hand below water too. Only the local seabed can lift the ball,
+  // for example when a small friend turns to face up the sandy slope.
+  state.y = Math.max(floorHeight(state.x, state.z), holdHeight(player)
+    + .025 * Math.sin((finite(time) ? time : state.time) * 3));
   return true;
 }
 
@@ -97,25 +103,31 @@ export function pickUpWaterBall(state, player) {
 export function releaseWaterBall(state, player) {
   if (state.heldBy === null || player && state.heldBy !== player.number) return false;
   state.heldBy = null; state.carrierX = null; state.carrierZ = null;
-  state.vx = 0; state.vy = 0; state.vz = 0; state.mode = 'airborne';
+  state.vx = 0; state.vy = 0; state.vz = 0;
+  state.mode = isSubmerged(state) ? 'rising' : 'airborne';
   keepInBay(state);
   return true;
 }
 
-/** Facing follows the game's convention: yaw 0 throws toward +z. */
+/** Facing follows the game's convention: yaw 0 throws toward +z. Water slows
+ * a submerged throw; buoyancy then carries it toward the surface. */
 export function throwWaterBall(state, player, power = 12, lift = 7) {
   if (!finiteState(state) || !validPlayer(player) || state.heldBy !== player.number
       || !finite(power) || power <= 0 || !finite(lift) || lift <= 0) return false;
   if (!updateHeldWaterBall(state, player)) return false;
   const strength = clamp(power, 1, 22);
+  const submerged = isSubmerged(state);
   state.heldBy = null; state.carrierX = null; state.carrierZ = null;
-  state.vx = Math.sin(player.yaw) * strength; state.vz = Math.cos(player.yaw) * strength;
-  state.vy = clamp(lift, 3, 11); state.mode = 'airborne'; state.throws++;
+  state.vx = Math.sin(player.yaw) * strength * (submerged ? .55 : 1);
+  state.vz = Math.cos(player.yaw) * strength * (submerged ? .55 : 1);
+  state.vy = clamp(lift, 3, 11) * (submerged ? .4 : 1);
+  state.mode = submerged ? 'rising' : 'airborne'; state.throws++;
   return true;
 }
 
-/** Seconds, with optional frame-end world time. Returns a splash/landing event
- * or null. Substeps preserve throw arcs and shoreline crossings during stalls.
+/** Seconds, with optional frame-end world time. Returns a splash, surfaced,
+ * landing or washed-ashore event, or null. Substeps preserve throw arcs,
+ * underwater ascent and shoreline crossings during stalls.
  */
 export function stepWaterBall(state, dt, time) {
   if (!finite(dt) || dt <= 0) return null;
@@ -131,7 +143,28 @@ export function stepWaterBall(state, dt, time) {
   for (let i = 0; i < steps; i++) {
     const t = end - duration + (i + 1) * h, previousX = state.x, previousZ = state.z;
     state.splash = Math.max(0, state.splash - h);
-    if (state.mode === 'floating') {
+    if (state.mode === 'rising') {
+      // Exact drag integration keeps deep-water ascent smooth through frame
+      // stalls. A thrown ball travels a few metres, then rises nearly upright.
+      const drag = 2.4, damping = Math.exp(-drag * h), travel = (1 - damping) / drag;
+      state.x += state.vx * travel; state.z += state.vz * travel;
+      state.vx *= damping; state.vz *= damping;
+      const riseSpeed = 2.8, verticalDrag = 1.8, verticalDamping = Math.exp(-verticalDrag * h);
+      state.y += riseSpeed * h + (state.vy - riseSpeed) * (1 - verticalDamping) / verticalDrag;
+      state.vy = riseSpeed + (state.vy - riseSpeed) * verticalDamping;
+      keepInBay(state);
+      const floor = floorHeight(state.x, state.z);
+      if (state.y < floor) { state.y = floor; state.vy = Math.max(0, state.vy); }
+      const surface = waveHeight(state.x, state.z, t);
+      if (state.y >= surface) {
+        state.y = surface; state.vy = 0;
+        if (state.z >= WATER_PLAY.shoreZ) {
+          state.mode = 'floating'; state.splash = .35; event = { type: 'surfaced' };
+        } else {
+          state.mode = 'sand'; event = { type: 'landed' };
+        }
+      }
+    } else if (state.mode === 'floating') {
       const currentX = .16 * Math.sin(t * .7 + state.z * .09);
       const currentZ = -.76 - .12 * Math.sin(t * .9 + state.z * .08);
       const damping = Math.exp(-2 * h), travel = (1 - damping) / 2;
@@ -205,12 +238,13 @@ export function createWaterBall() {
     ballMesh.position.set(live.x, live.y, live.z);
     ballMesh.rotation.set(live.rollX + (live.mode === 'floating' ? Math.sin(t * 1.6) * .08 : 0), 0, live.rollZ);
     const water = live.z >= WATER_PLAY.shoreZ, surface = water ? WATER_PLAY.waterY : SAND_Y;
+    shadow.visible = !water || live.y >= WATER_PLAY.waterY;
     shadow.position.set(live.x, surface + .012, live.z);
     shadow.material.opacity = .16 * Math.exp(-Math.max(0, live.y - surface - WATER_BALL_RADIUS) * .3);
     shadow.scale.setScalar(1 + Math.max(0, live.y - surface - WATER_BALL_RADIUS) * .035);
     ripples.forEach((ripple, index) => {
       const phase = ((t * .45 + index / 3) % 1 + 1) % 1;
-      ripple.visible = water && live.heldBy === null && (live.mode === 'floating' || live.splash > 0);
+      ripple.visible = water && live.y >= WATER_PLAY.waterY && live.heldBy === null && (live.mode === 'floating' || live.splash > 0);
       ripple.position.set(live.x, WATER_PLAY.waterY + .018, live.z);
       ripple.scale.setScalar(.8 + phase * 1.5 + live.splash * .5);
       ripple.material.opacity = (1 - phase) * (.14 + live.splash * .1);

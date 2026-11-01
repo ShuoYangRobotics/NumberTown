@@ -33,6 +33,9 @@ Paths below are relative to the repository root.
 | `dist/park.js` | Ferris wheel, upright cabins, and park scenery |
 | `dist/football.js` | Pitch and ball geometry, kicks, dribbling, physics, scoring, and reset |
 | `dist/water-ball.js` | Beach ball geometry, pickup, carrying, throw arcs, buoyancy, shoreward current, and sand drag |
+| `dist/sea-life.js` | Fish schools, sea stars, and turtles with swimming, beach approach, and basking cycles |
+| `dist/water-view.js` | Depth, complete character immersion, and underwater camera transitions |
+| `dist/ground-marker.js` | Selection ring and shadow that follow sloping ground |
 | `dist/town-map.js` | Map geometry, destination buttons, and player marker |
 | `dist/navigation.js` | Camera-relative movement, collision checks, and safe positions |
 | `dist/roaming.js` | Destination choice, route planning, and unselected character movement |
@@ -44,7 +47,7 @@ Paths below are relative to the repository root.
 
 ## Working with game data
 
-World coordinates use **+x east, +z south, and y up**. The world is 440 units wide; z runs from −90 to 460, making its full north–south span 550 units. Shared geographic data drives rendering, collision boundaries, and the map. Keep these representations aligned when changing a place.
+World coordinates use **+x east, +z south, and y up**. The world is 440 units wide; z runs from −90 to 690, making its full north–south span 780 units. Shared geographic data drives rendering, collision boundaries, and the map. Keep these representations aligned when changing a place. The town island ends at the coastline; the bay has its own sloping sand geometry and a transparent water surface. The seabed uses the same height function as walking and wildlife, reaching −18 beyond the 120-unit descent.
 
 Characters are identified by their **number**, from 0 through 30. The cast has 31 entries, so its length is not its highest number. Zero has no occupied cube cells but has finite display and navigation dimensions. One through Thirty have exactly their number of unit cubes.
 

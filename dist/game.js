@@ -7,22 +7,25 @@ import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp, col
 import { EMOTIONS, chooseRemark } from './personalities.js';
 import { createRoamingController } from './roaming.js';
 import { shouldStayAtScenicSpot } from './scenic-stay.js';
+import { conformGroundMarker } from './ground-marker.js';
 import { toSpokenMath } from './speech.js';
 import { mountCharacterShortcut } from './character-shortcut.js';
 import { getCharacterArrangements, getNextArrangement, findArrangementPosition } from './arrangements.js';
 
 import { createLandscape } from './terrain.js';
-import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
+import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
 import { createPark, PARK_LANDMARK, PARK_OBSTACLES } from './park.js';
 import { createFootball, createBallState, stepBall, kickBall, updateBallContact, resetBall, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from './football.js';
 import { BRIDGES, RIVER, COAST, WATER_PLAY, riverX } from './geography.js';
 import { createWaterBall, createWaterBallState, stepWaterBall, pickUpWaterBall, updateHeldWaterBall, throwWaterBall, releaseWaterBall, resetWaterBall } from './water-ball.js';
+import { createSeaLife } from './sea-life.js';
+import { waterDepthAt, immersionFor, cameraWaterBlend } from './water-view.js';
 import { mountTownMap } from './town-map.js';
 import { SUMMIT, SUMMIT_DECK, MOUNTAIN_TRAIL, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, mountainHeight, isOnMountainRoute, nearestTrailPoint, mountainProgress } from './mountain-route.js';
 
 const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TERRAIN_OBSTACLES];
-const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK];
-const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,shouldStay:shouldStayAtScenicSpot,destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains','water-play'].includes(p.id))});
+const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK];
+const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,shouldStay:shouldStayAtScenicSpot,destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains','water-play','seabed'].includes(p.id))});
 const BRIDGE_IDS=new Set(BRIDGE_LANDMARKS.map(p=>p.id));
 const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
@@ -49,8 +52,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#dcecf0');
-scene.fog = new THREE.Fog('#dcecf0', 260, 800);
+const skyColor=new THREE.Color('#dcecf0'),underwaterColor=new THREE.Color('#73bac6');
+scene.background = skyColor.clone();
+scene.fog = new THREE.Fog(skyColor, 260, 800);
 scene.add(new THREE.HemisphereLight('#fff8de', '#8fbd9a', 2.0));
 const sunlight = new THREE.DirectionalLight('#fff1d4', 2.5);
 sunlight.position.set(24, 63, 40);
@@ -64,7 +68,8 @@ scene.add(sunlight, sunlight.target);
 const fillLight = new THREE.DirectionalLight('#d8eaf5', .8); fillLight.position.set(85,25,10); scene.add(fillLight);
 const town = createTown(), landscape=createLandscape(), park=createPark(), football=createFootball(), ballState=createBallState();
 const waterBall=createWaterBall(), waterBallState=createWaterBallState();
-scene.add(town.root,landscape.root,park.root,football.root,waterBall.root);
+const seaLife=createSeaLife();
+scene.add(town.root,landscape.root,park.root,football.root,waterBall.root,seaLife.root);
 football.update(ballState,0);
 waterBall.update(waterBallState,0);
 
@@ -215,7 +220,7 @@ function visit(place){
   roaming.pause(active,time);active.jump=0;active.jumpVelocity=0;currentPlace=place;
   const presets={
     'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
-    hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],'water-play':[Math.PI,.55,44],mountains:[0,.43,180],
+    hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],'water-play':[Math.PI,.55,44],seabed:[Math.PI+.3,.32,30],mountains:[0,.43,180],
     'mountain-trail':[.25,.59,180],summit:[Math.PI,.5,100],
   };
   const preset=presets[place.id]||(BRIDGE_IDS.has(place.id)?[0,.64,100]:[.26,.64,55]);
@@ -227,12 +232,12 @@ function visit(place){
   setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:BRIDGE_IDS.has(place.id)?'river':place.id});updateLocation();focusGame();
 }
 function findPlace(player){
-  if(inWaterPlayArea(player))return player.z>=WATER_PLAY.shoreZ-1?WATER_PLAY_LANDMARK:BEACH_LANDMARK;
+  if(inWaterPlayArea(player))return waterDepthAt(player)>10?UNDERWATER_LANDMARK:player.z>=WATER_PLAY.shoreZ-1?WATER_PLAY_LANDMARK:BEACH_LANDMARK;
   if(isOnMountainRoute(player.x,player.z)){
     if(Math.abs(player.x-SUMMIT_DECK.x)<=SUMMIT_DECK.width/2&&Math.abs(player.z-SUMMIT_DECK.z)<=SUMMIT_DECK.depth/2)return SUMMIT_LANDMARK;
     return MOUNTAIN_TRAIL_LANDMARK;
   }
-  return ALL_PLACES.filter(place=>!['mountain-trail','summit','water-play'].includes(place.id)&&Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;
+  return ALL_PLACES.filter(place=>!['mountain-trail','summit','water-play','seabed'].includes(place.id)&&Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;
 }
 function inWaterPlayArea(player){return player.x>=WATER_PLAY.xMin&&player.x<=WATER_PLAY.xMax&&player.z>=WATER_PLAY.beachZ&&player.z<=WATER_PLAY.deepZ;}
 function isWaterActivity(player,place){return inWaterPlayArea(player)||place?.id==='beach'||waterBallState.heldBy===player.number;}
@@ -241,8 +246,8 @@ function updateLocation(){
   const place=findPlace(active);
   if(place?.id!==currentPlace?.id){currentPlace=place;}
   $('#location-name').textContent=place?.name||'Neighborhood lanes';
-  $('#bank-name').textContent=['mountain-trail','summit'].includes(place?.id)?'Northern range':active.x<riverX(active.z)?'West bank':'East bank';
-  document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id||(button.dataset.place==='river'&&BRIDGE_IDS.has(place?.id))||(button.dataset.place==='mountain-trail'&&place?.id==='summit')));
+  $('#bank-name').textContent=['water-play','seabed'].includes(place?.id)?'Southern Sea':['mountain-trail','summit'].includes(place?.id)?'Northern range':active.x<riverX(active.z)?'West bank':'East bank';
+  document.querySelectorAll('[data-place]').forEach(button=>button.classList.toggle('active',button.dataset.place===place?.id||(button.dataset.place==='river'&&BRIDGE_IDS.has(place?.id))||(button.dataset.place==='mountain-trail'&&place?.id==='summit')||(button.dataset.place==='beach'&&['water-play','seabed'].includes(place?.id))));
   updateActivity(place);if(mapDialog.open)townMap.update(active);
 }
 function remark(player,context={}){
@@ -379,10 +384,10 @@ function playBall(){
   if(!isWaterActivity(active,findPlace(active))){kick();return;}
   const pose=carrierPose(active);
   if(waterBallState.heldBy===active.number){
-    if(throwWaterBall(waterBallState,pose)){throwCount++;tone();activityMessage='Splash! The waves will bring the ball back toward the beach.';}
+    if(throwWaterBall(waterBallState,pose)){throwCount++;tone();activityMessage=waterBallState.mode==='rising'?'Up it floats! The ball rises to the surface, then drifts toward shore.':'Splash! The waves will bring the ball back toward the beach.';}
   }else if(pickUpWaterBall(waterBallState,pose)){
     tone();activityMessage='Got it! Face a direction with WASD, then press F to throw.';
-  }else activityMessage='Walk closer to the beach ball, then press F to pick it up.';
+  }else activityMessage=waterDepthAt(active)>3?'Reach the ball at the same depth, then press F. Floating balls can be reached from the shallows.':'Walk closer to the beach ball, then press F to pick it up.';
   activityUntil=time+3.5;updateActivity(findPlace(active));focusGame();
 }
 $('#kick-ball').addEventListener('click',kick);
@@ -390,6 +395,7 @@ $('#reset-ball').addEventListener('click',()=>{resetBall(ballState);activityMess
 $('#water-ball-action').addEventListener('click',playBall);
 $('#reset-water-ball').addEventListener('click',()=>{resetWaterBall(waterBallState);activityMessage='The beach ball is back in the shallows.';activityUntil=time+3;updateActivity(findPlace(active));focusGame();});
 $('#enter-water').addEventListener('click',()=>visit(WATER_PLAY_LANDMARK));
+$('#water-depth-trip').addEventListener('click',()=>visit(waterDepthAt(active)>10?BEACH_LANDMARK:UNDERWATER_LANDMARK));
 $('#view-sea').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw=Math.PI;orbit.elevation=.35;orbit.targetDistance=currentPlace?.id==='summit'?210:95;zoom(0);focusGame();});
 $('#view-town').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw=currentPlace?.id==='summit'?Math.PI:0;orbit.elevation=.44;orbit.targetDistance=currentPlace?.id==='summit'?140:100;zoom(0);focusGame();});
 function followTrail(direction){
@@ -405,7 +411,8 @@ function updateActivity(place){
   const id=place?.id,isFootball=id==='football',isLookout=id==='lookout'||id==='summit',isTrail=id==='mountain-trail'||id==='summit',isWater=isWaterActivity(active,place);
   $('#activity').hidden=!isWater&&!['park','football','hill','lookout','beach','water-play','mountains','town-square','pond','mountain-trail','summit'].includes(id)&&!BRIDGE_IDS.has(id);
   $('#football-actions').hidden=!isFootball;$('#lookout-actions').hidden=!isLookout;
-  $('#water-actions').hidden=!isWater;$('#enter-water').hidden=id==='water-play';
+  $('#water-actions').hidden=!isWater;$('#enter-water').hidden=id==='water-play'||id==='seabed';
+  $('#water-depth-trip').hidden=!isWater||id==='beach';$('#water-depth-trip').textContent=waterDepthAt(active)>10?'Back to beach':'Explore seabed';
   $('#water-ball-action').innerHTML=`${waterBallState.heldBy===active.number?'Throw':'Pick up'} <kbd>F</kbd>`;
   $('#water-ball-action').setAttribute('aria-label',waterBallState.heldBy===active.number?'Throw beach ball':'Pick up beach ball');
   $('#trail-actions').hidden=!isTrail;$('#trail-progress').hidden=!isTrail;
@@ -418,7 +425,11 @@ function updateActivity(place){
   if(id==='hill'){title=`Sunny Hill · ${Math.round(groundHeight(active.x,active.z))} / 12 m`;detail='WASD to follow the cream trail. Your friend stays on the hill when you switch away.';}
   if(isLookout){title='You made it! · Scenic deck';detail='Enjoy the view. Your friend stays here, even when you choose another number. WASD to leave.';}
   if(BRIDGE_IDS.has(id)){title=place.name;detail='Follow the river from the mountains to the sea. Three bridges join the banks.';}
-  if(isWater){title=id==='water-play'?'Water play · Beach ball':'Long Beach · Southern Sea';detail=time<activityUntil?activityMessage:waterBallState.heldBy===active.number?'Face a direction with WASD, then F to throw. The waves carry the ball toward shore.':'Wade between the buoys. F picks up or throws the beach ball; waves bring it toward the sand.';}
+  if(isWater){
+    const immersion=immersionFor(active,active.model.root.userData.visualHeight);
+    title=id==='beach'?'Long Beach · Southern Sea':`${id==='seabed'?'Underwater garden':'Water play'} · ${immersion.depth.toFixed(1)} blocks deep`;
+    detail=time<activityUntil?activityMessage:waterBallState.heldBy===active.number?'Face a direction with WASD, then F to throw. An underwater ball floats back up.':immersion.submerged?'Fully underwater! Explore the sandy floor, fish, and sea stars with WASD. Drag to look around.':id==='beach'?'Turtles swim ashore to bask. Enter the water to find fish, sea stars, and the beach ball.':'The sand slopes into an 18-block-deep sea. WASD to explore · F to pick up or throw the ball.';
+  }
   if(id==='mountains'){title='The northern mountains';detail='A paved path winds around one peak. Visit Mountain trail to begin the climb.';}
   if(id==='mountain-trail'){title=`Summit Walk · ${Math.round(groundHeight(active.x,active.z))} / ${SUMMIT_DECK.height} m`;detail=time<trailNoticeUntil?'A friend is on the path. Use WASD to walk around them.':guidedWalk?'Enjoy the climb. WASD takes over whenever you like.':'Follow the paved bends with WASD, or take a guided walk to the top.';}
   if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Your friend stays here when you switch away. Drag to look around; Walk down when you are ready.';}
@@ -450,6 +461,10 @@ function updateCamera(dt){
   camera.position.set(target.x+Math.sin(orbit.yaw)*horizontal,target.y+Math.sin(orbit.elevation)*distance,target.z+Math.cos(orbit.yaw)*horizontal);
   if(camera.position.z<68&&camera.position.z>=-65)camera.position.y=Math.max(camera.position.y,mountainHeight(camera.position.x,camera.position.z)+5);
   camera.lookAt(target);camera.updateMatrixWorld();
+  const waterBlend=cameraWaterBlend(camera.position);
+  scene.background.copy(skyColor).lerp(underwaterColor,waterBlend);scene.fog.color.copy(scene.background);
+  scene.fog.near=THREE.MathUtils.lerp(260,28,waterBlend);scene.fog.far=THREE.MathUtils.lerp(800,170,waterBlend);
+  canvas.dataset.underwater=String(waterBlend>.5);
 }
 function updateBubbles(){
   const pickerTop=$('.friends-panel').getBoundingClientRect().top;
@@ -493,7 +508,7 @@ function animate(timestamp){
       if(player.moodUntil<time){setEmotion(player,['happy','happy','curious','excited','surprised','sleepy'][Math.floor(Math.random()*6)],18+Math.random()*19);}
     }
     if(time>nextRemark)remark(active);
-    town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);
+    town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);seaLife.update(reducedMotion?0:time);
     if(active.jump<.3)updateBallContact(ballState,active,dt);
     const goal=stepBall(ballState,dt);football.update(ballState,time);
     if(goal){activityMessage=`Goal! ${ballState.goals} scored. Back to the center!`;activityUntil=time+4;setEmotion(active,'excited',8);tone();}
@@ -506,16 +521,17 @@ function animate(timestamp){
 
   }else active.moving=false;
   updateCamera(dt);
-  const radiusX=Math.max(.9,active.width*.57),radiusZ=Math.max(.85,(active.depth||1)*.65);selectedRing.scale.set(radiusX,radiusZ,1);selectedRing.rotation.set(-Math.PI/2,0,active.yaw);selectedRing.position.x=active.x;selectedRing.position.z=active.z;selectedRing.position.y=Math.max(groundHeight(active.x,active.z)+.16,inWaterPlayArea(active)&&active.z>=WATER_PLAY.shoreZ?WATER_PLAY.waterY+.055:-Infinity);
-  selectionShadow.scale.set(radiusX*.9,radiusZ*.85,1);selectionShadow.rotation.set(-Math.PI/2,0,active.yaw);selectionShadow.position.x=active.x;selectionShadow.position.z=active.z;selectionShadow.position.y=groundHeight(active.x,active.z)+.13;
-  selectionShadow.visible=!(inWaterPlayArea(active)&&active.z>=WATER_PLAY.shoreZ);
+  const radiusX=Math.max(.9,active.width*.57),radiusZ=Math.max(.85,(active.depth||1)*.65);
+  conformGroundMarker(selectedRing,{x:active.x,z:active.z,yaw:active.yaw,scaleX:radiusX,scaleZ:radiusZ,offset:.16},groundHeight);
+  conformGroundMarker(selectionShadow,{x:active.x,z:active.z,yaw:active.yaw,scaleX:radiusX*.9,scaleZ:radiusZ*.85,offset:.13},groundHeight);
+  selectionShadow.visible=true;
   sunlight.target.position.set(active.x,groundHeight(active.x,active.z),active.z);sunlight.position.set(active.x-24,groundHeight(active.x,active.z)+63,active.z-2);
   updateBubbles();renderer.render(scene,camera);
   frameCount++;
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();if(active.number===21)updateBackpackButton();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2),staying:shouldStayAtScenicSpot(active)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},seaLife:seaLife.diagnosticSnapshot(time),trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2),staying:shouldStayAtScenicSpot(active),water:immersionFor(active,active.model.root.userData.visualHeight)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{underwater:cameraWaterBlend(camera.position)>.5,y:+camera.position.y.toFixed(2),yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
 import { WORLD, WATER_PLAY } from '../dist/geography.js';
-import { HILL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_TRAIL, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, RIVER_LANDMARK, BEACH_LANDMARK, WATER_PLAY_LANDMARK, WATER_PLAY_BUOYS, MOUNTAIN_LANDMARK, hillHeight, bridgeHeight, waterPlayHeight, groundHeight, riverX, riverWidth, TERRAIN_OBSTACLES } from '../dist/terrain-data.js';
+import { HILL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_TRAIL, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, RIVER_LANDMARK, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, WATER_PLAY_BUOYS, MOUNTAIN_LANDMARK, hillHeight, bridgeHeight, waterPlayHeight, groundHeight, riverX, riverWidth, TERRAIN_OBSTACLES } from '../dist/terrain-data.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
 import { createCharacter } from '../dist/characters3d.js';
+import { getCharacterArrangements } from '../dist/arrangements.js';
+import { createTown } from '../dist/world3d.js';
 import { mountTownMap } from '../dist/town-map.js';
 import { collides, moveWithCollisions } from '../dist/navigation.js';
 import { createLandscape } from '../dist/terrain.js';
@@ -85,22 +87,27 @@ test('mountains and the gorge remain inaccessible away from the paved summit rou
   }
 });
 
-test('all original friends can walk from the beach into the shallow bay and are stopped before deep water',()=>{
+test('all original footprints fit the expanded bay and the widest walks from shore to the offshore boundary',()=>{
   assert.ok(Object.isFrozen(WATER_PLAY)&&Object.isFrozen(WATER_PLAY.spawn));
-  assert.deepEqual(WATER_PLAY,{xMin:90,xMax:205,shoreZ:398,deepZ:438,beachZ:379,spawn:{x:160,z:410},waterY:.045});
+  assert.deepEqual(WATER_PLAY,{xMin:18,xMax:212,shoreZ:398,deepZ:660,beachZ:379,spawn:{x:160,z:410},waterY:.045,maxDepth:18,depthRamp:120});
+  assert.ok((WATER_PLAY.xMax-WATER_PLAY.xMin)*(WATER_PLAY.deepZ-WATER_PLAY.shoreZ)>11*115*40);
   for(const character of CHARACTERS){
     const player={...BEACH_LANDMARK.arrival,radius:getCharacterMetrics(character.number).radius};
-    for(const destination of [WATER_PLAY_LANDMARK.arrival,WATER_PLAY.spawn]){
+    for(const destination of [WATER_PLAY_LANDMARK.arrival,WATER_PLAY.spawn,UNDERWATER_LANDMARK.arrival]){
+      assert.equal(collides(destination.x,destination.z,TERRAIN_OBSTACLES,WORLD,player.radius),false,`${character.name} cannot enter the bay`);
+    }
+    assert.ok(player.radius<=2.7,'the continuous widest route must cover every original footprint');
+  }
+  const player={...BEACH_LANDMARK.arrival,radius:2.7};
+  for(const destination of [WATER_PLAY_LANDMARK.arrival,WATER_PLAY.spawn,{x:160,z:460},UNDERWATER_LANDMARK.arrival,{x:160,z:640}]){
       moveWithCollisions(player,destination.x-player.x,destination.z-player.z,TERRAIN_OBSTACLES,WORLD);
       close(player.x,destination.x);close(player.z,destination.z);
-      assert.equal(collides(player.x,player.z,TERRAIN_OBSTACLES,WORLD,player.radius),false,`${character.name} cannot enter the bay`);
-    }
-    moveWithCollisions(player,0,100,TERRAIN_OBSTACLES,WORLD);
-    assert.ok(player.z<=WATER_PLAY.deepZ-player.radius+1e-7,'the whole footprint stays out of deep water');
-    assert.ok(player.z>WATER_PLAY.deepZ-player.radius-1,'the shallow area remains usable up to its marked edge');
-    moveWithCollisions(player,0,BEACH_LANDMARK.arrival.z-player.z,TERRAIN_OBSTACLES,WORLD);
-    close(player.z,BEACH_LANDMARK.arrival.z);
   }
+  moveWithCollisions(player,0,100,TERRAIN_OBSTACLES,WORLD);
+  assert.ok(player.z<=WATER_PLAY.deepZ-player.radius+1e-7,'the whole footprint stays inside the marked boundary');
+  assert.ok(player.z>WATER_PLAY.deepZ-player.radius-1,'the expanded area remains usable to its offshore edge');
+  moveWithCollisions(player,0,BEACH_LANDMARK.arrival.z-player.z,TERRAIN_OBSTACLES,WORLD);
+  close(player.z,BEACH_LANDMARK.arrival.z);
 });
 
 test('the bay sides respect full footprints while the rest of the sea and the river mouth stay blocked',()=>{
@@ -113,38 +120,44 @@ test('the bay sides respect full footprints while the rest of the sea and the ri
     moveWithCollisions(player,250,0,TERRAIN_OBSTACLES,WORLD);
     assert.ok(player.x<=WATER_PLAY.xMax-radius+1e-7,'the river cannot be reached through the bay side');
   }
-  for(const x of [20,80,215,240,320,420])assert.equal(collides(x,COAST.seaStart+5,TERRAIN_OBSTACLES,WORLD,.6),true);
+  for(const x of [5,10,215,240,320,420])assert.equal(collides(x,COAST.seaStart+5,TERRAIN_OBSTACLES,WORLD,.6),true);
   for(let z=COAST.seaStart;z<=RIVER.endZ;z+=.5)assert.equal(collides(riverX(z),z,TERRAIN_OBSTACLES,WORLD,.6),true,'the estuary remains forbidden');
   for(let x=5;x<WORLD.width-5;x+=2)assert.equal(collides(x,WATER_PLAY.deepZ+1,TERRAIN_OBSTACLES,WORLD,.6),true,'the southern edge must be closed');
 });
 
-test('the shallow shelf has continuous gentle transitions and keeps Zero visible above the water',()=>{
-  for(const x of [WATER_PLAY.xMin-1,WATER_PLAY.xMin,94,105,160,201,WATER_PLAY.xMax,WATER_PLAY.xMax+1]){
+test('the sandy slope descends continuously to eighteen metres without a step at the former world boundary',()=>{
+  for(const x of [WATER_PLAY.xMin,94,105,160,201,WATER_PLAY.xMax]){
     let previous=groundHeight(x,WATER_PLAY.shoreZ-1);
     for(let z=WATER_PLAY.shoreZ-1;z<=WATER_PLAY.deepZ+1;z+=.1){
-      const height=groundHeight(x,z);assert.ok(height>=-.2-1e-9&&height<=0);
-      assert.ok(height<=previous+1e-9&&Math.abs(height-previous)<.002,'wading must descend gently');previous=height;
+      const height=groundHeight(x,z);assert.ok(height>=-WATER_PLAY.maxDepth-1e-9&&height<=0);
+      assert.ok(height<=previous+1e-9&&Math.abs(height-previous)<.023,'the sandy floor must descend gently');previous=height;
       close(height,waterPlayHeight(x,z));
     }
   }
-  let previous=0;
-  for(let x=WATER_PLAY.xMin-1;x<=WATER_PLAY.xMax+1;x+=.1){
-    const height=groundHeight(x,425);assert.ok(Math.abs(height-previous)<.004);previous=height;
+  close(groundHeight(160,WATER_PLAY.shoreZ),0);close(groundHeight(160,WATER_PLAY.shoreZ+WATER_PLAY.depthRamp),-18);
+  for(const x of [25,70,125,160,205]){
+    close(groundHeight(x,535),-18);close(groundHeight(x,650),-18);
+    assert.ok(Math.abs(groundHeight(x,460.1)-groundHeight(x,459.9))<.05);
+    assert.equal(collides(x,460,TERRAIN_OBSTACLES,WORLD,2.7),false,'the old world edge cannot become a seabed wall');
   }
-  close(groundHeight(160,WATER_PLAY.shoreZ),0);close(groundHeight(160,425),-.2);
-  const zero=createCharacter(0);zero.root.position.y=groundHeight(160,425);
-  for(const emotion of ['happy','excited','curious','surprised','sleepy','sad'])for(const time of [0,.7,2,5]){
-    zero.update(0,{time,emotion,moving:false});zero.root.updateMatrixWorld(true);
-    const expression=zero.root.getObjectByName(`expression ${emotion}`),bounds=new THREE.Box3().setFromObject(expression);
-    assert.ok(bounds.max.y>WATER_PLAY.waterY+.2,`${emotion}: Zero's floating mouth is submerged`);
-    const teeth=expression.getObjectByName('zero smiling teeth');
-    if(teeth)assert.ok(new THREE.Box3().setFromObject(teeth).min.y>WATER_PLAY.waterY+.025,'the ivory smile stays above water');
+});
+
+test('every form shorter than fifteen blocks, including Zero, can fully submerge on the deep floor',()=>{
+  let checked=0;
+  for(const character of CHARACTERS)for(const definition of getCharacterArrangements(character.number)){
+    if(definition.height>=15)continue;
+    const model=createCharacter(character.number,{definition});
+    model.root.position.set(UNDERWATER_LANDMARK.arrival.x,groundHeight(125,535),UNDERWATER_LANDMARK.arrival.z);
+    model.update(0,{time:2,moving:false});model.root.updateMatrixWorld(true);
+    const bounds=new THREE.Box3().setFromObject(model.root);
+    assert.ok(bounds.max.y<WATER_PLAY.waterY,`${character.name}/${definition.formId}: full model and accessories must fit below the surface`);
+    model.dispose();checked++;
   }
-  zero.dispose();
+  assert.ok(checked>60,'check original shapes and their short rectangle forms');
 });
 
 test('every geographic landmark has an open arrival for the widest supported footprint',()=>{
-  for(const place of [HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK]){
+  for(const place of [HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK]){
     assert.equal(collides(place.arrival.x,place.arrival.z,TERRAIN_OBSTACLES,WORLD,2.7),false,`${place.name} arrival blocked`);
   }
 });
@@ -161,6 +174,37 @@ test('landscape builds without a DOM, uses batched props, and has finite geometr
   assert.ok(meshes>50&&meshes<180,'static scenery should remain batched');assert.ok(instances>10);
   for(const geometry of geometries)for(const value of geometry.attributes.position.array)assert.ok(Number.isFinite(value));
   assert.equal(landscape.root.children.filter(object=>object.userData.bridgeId).length,3);
+});
+
+test('the actual sandy floor matches walking height, and neither the island nor opaque sea covers the underwater bay',()=>{
+  const landscape=createLandscape(),town=createTown();
+  landscape.root.updateMatrixWorld(true);town.root.updateMatrixWorld(true);
+  const floor=landscape.root.getObjectByName('Sandy underwater floor'),sea=landscape.root.getObjectByName('Open sea');
+  const bay=landscape.root.getObjectByName('Water-play bay surface'),island=town.root.getObjectByName('Dry town island');
+  assert.ok(floor&&sea&&bay&&island);
+  const landBounds=new THREE.Box3().setFromObject(island);
+  assert.ok(landBounds.max.z<=COAST.seaStart+1e-4,'dry land must end before the underwater area');
+  floor.geometry.computeBoundingBox();const bounds=floor.geometry.boundingBox;
+  close(bounds.min.y,-18);close(bounds.max.y,0);close(bounds.min.z,398);close(bounds.max.z,660);
+  const positions=floor.geometry.attributes.position;
+  for(let index=0;index<positions.count;index++){
+    assert.ok(Math.abs(positions.getY(index)-groundHeight(positions.getX(index),positions.getZ(index)))<1e-5,'rendered floor vertices must use the walking profile');
+  }
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  for(const x of [25,75,125,160,205])for(const z of [399.13,410.44,450.77,459.97,460.37,475.61,518.9,535.3,650.5]){
+    ray.ray.origin.set(x,30,z);
+    const hits=ray.intersectObject(floor);
+    assert.ok(hits.length>0,`missing sandy floor at ${x},${z}`);
+    assert.ok(Math.abs(hits[0].point.y-groundHeight(x,z))<.002,'triangle interpolation must track the continuous slope');
+    assert.equal(ray.intersectObject(sea).length,0,'the opaque ocean must have an actual opening over the whole bay');
+    assert.equal(ray.intersectObject(island).length,0,'no island slab may conceal the seafloor');
+  }
+  for(const [x,z] of [[10,535],[225,535],[125,680]]){
+    ray.ray.origin.set(x,30,z);assert.ok(ray.intersectObject(sea).length>0,'the ocean outside the play area remains opaque');
+  }
+  assert.equal(bay.material.transparent,true);assert.ok(bay.material.opacity>0&&bay.material.opacity<.6);
+  assert.equal(bay.material.depthWrite,false);assert.equal(bay.material.side,THREE.DoubleSide);
+  assert.ok(bay.renderOrder>0,'the transparent surface tints underwater objects after they are drawn');
 });
 
 test('every rendered trail triangle clears the actual triangulated hill, including tight bends',()=>{
@@ -245,13 +289,13 @@ test('flowing ripples and sea foam remain finite and bounded at all elapsed time
   }
 });
 
-test('waves travel toward shore and the shallow bay has a sparse, matching buoy boundary',()=>{
-  const landscape=createLandscape(),bay=landscape.root.getObjectByName('Shallow water-play bay'),buoys=landscape.root.getObjectByName('Water-play boundary buoys');
+test('waves travel toward shore and the expanded bay has a matching buoy boundary',()=>{
+  const landscape=createLandscape(),bay=landscape.root.getObjectByName('Water-play bay surface'),buoys=landscape.root.getObjectByName('Water-play boundary buoys');
   bay.geometry.computeBoundingBox();const bounds=bay.geometry.boundingBox;
   close(bounds.min.x,WATER_PLAY.xMin);close(bounds.max.x,WATER_PLAY.xMax);close(bounds.min.z,WATER_PLAY.shoreZ);close(bounds.max.z,WATER_PLAY.deepZ);
   close(bounds.min.y,WATER_PLAY.waterY+.01);close(bounds.max.y,WATER_PLAY.waterY+.01);
-  assert.equal(WATER_PLAY_BUOYS.length,13);
-  assert.equal(buoys.children.filter(mesh=>mesh.name.startsWith('Colored bay buoys')).reduce((sum,mesh)=>sum+mesh.count,0),13);
+  assert.equal(WATER_PLAY_BUOYS.length,29);
+  assert.equal(buoys.children.filter(mesh=>mesh.name.startsWith('Colored bay buoys')).reduce((sum,mesh)=>sum+mesh.count,0),WATER_PLAY_BUOYS.length);
   assert.ok(WATER_PLAY_BUOYS.every(buoy=>buoy.x===WATER_PLAY.xMin||buoy.x===WATER_PLAY.xMax||buoy.z===WATER_PLAY.deepZ));
   const waves=landscape.root.children.filter(object=>object.name.startsWith('Sea foam '));
   landscape.update(.25);const positions=waves.map(wave=>wave.position.z);
@@ -262,14 +306,15 @@ test('waves travel toward shore and the shallow bay has a sparse, matching buoy 
     for(const wave of waves){
       wave.geometry.computeBoundingBox();
       assert.ok(wave.position.z+wave.geometry.boundingBox.min.z>=COAST.seaStart,'foam must not drift inland across the beach');
-      assert.ok(wave.position.z<COAST.seaStart+146);
+      assert.ok(wave.position.z<COAST.seaStart+waves.length*12+2);
+      assert.ok(wave.renderOrder>bay.renderOrder,'surface transparency must not cover the foam');
     }
     for(const mesh of buoys.children)assert.ok(Array.from(mesh.instanceMatrix.array).every(Number.isFinite));
   }
 });
 
 test('foam and beach-ball ripples sit above the bay without a depth-offset surface hiding them',()=>{
-  const landscape=createLandscape(),bay=landscape.root.getObjectByName('Shallow water-play bay');
+  const landscape=createLandscape(),bay=landscape.root.getObjectByName('Water-play bay surface');
   assert.equal(bay.material.polygonOffset,false,'a slope-scaled offset can hide higher foam at low viewing angles');
   const bayTop=new THREE.Box3().setFromObject(bay).max.y;
   for(const wave of landscape.root.children.filter(object=>object.name.startsWith('Sea foam '))){
@@ -292,10 +337,11 @@ test('the town map shows the bounded bay and exposes its supplied water-play des
   const container={innerHTML:'',querySelector(selector){return selector==='.map-places'?{append(button){buttons.push(button);}}:playerMarker;}};
   globalThis.document={createElement(){return{addEventListener(type,callback){this[type]=callback;}};}};
   try{
-    mountTownMap(container,[BEACH_LANDMARK,WATER_PLAY_LANDMARK],place=>{selected=place;});
-    assert.match(container.innerHTML,/WATER PLAY/);assert.match(container.innerHTML,/shallow water-play bay/);
-    assert.match(container.innerHTML,new RegExp(`x="${WATER_PLAY.xMin}" y="${WATER_PLAY.shoreZ}" width="115" height="40"`));
+    mountTownMap(container,[BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK],place=>{selected=place;});
+    assert.match(container.innerHTML,/WATER PLAY/);assert.match(container.innerHTML,/UNDERWATER GARDEN/);
+    assert.match(container.innerHTML,new RegExp(`x="${WATER_PLAY.xMin}" y="${WATER_PLAY.shoreZ}" width="194" height="262"`));
     const button=buttons.find(item=>item.textContent==='Water play');assert.ok(button);button.click();assert.equal(selected,WATER_PLAY_LANDMARK);
+    const underwaterButton=buttons.find(item=>item.textContent==='Underwater garden');assert.ok(underwaterButton);underwaterButton.click();assert.equal(selected,UNDERWATER_LANDMARK);
   }finally{if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
 });
 

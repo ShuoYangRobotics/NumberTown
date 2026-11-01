@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN, ROAD_SEGMENTS, SQUARE, STATUE, BUNTING } from './world-data.js';
+import { COAST } from './geography.js';
 
 const COLORS = {
   grass: '#b7cda4', soil: '#dfd0ad', path: '#f3e6cc', edge: '#fff5df',
@@ -100,12 +101,15 @@ export function createTown() {
     }
   }
 
-  // The rounded, layered island reads as a little model of a real place.
-  const island = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRectangle(WORLD.width, WORLD.depth, 6), {
+  // Dry land ends at the shore. A slab extending under the bay would hide
+  // submerged friends and the sloping seabed, even through clear water.
+  const landDepth = COAST.seaStart - .35;
+  const island = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRectangle(WORLD.width, landDepth, 6), {
     depth: .8, bevelEnabled: true, bevelSize: .35, bevelThickness: .2, bevelSegments: 2, steps: 1,
   }), [material(COLORS.grass), material(COLORS.soil)]);
+  island.name = 'Dry town island';
   island.rotation.x = -Math.PI / 2;
-  island.position.set(WORLD.width / 2, -1, WORLD.depth / 2);
+  island.position.set(WORLD.width / 2, -1, landDepth / 2);
   island.receiveShadow = true; root.add(island);
 
   for (const road of ROAD_SEGMENTS) {

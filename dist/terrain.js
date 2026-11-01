@@ -158,12 +158,35 @@ export function createLandscape() {
   // The sea continues far past the world's walking boundary and into the fog.
   const seaColor = '#7dbfc9';
   const seaVisualEnd = Math.max(COAST.seaEnd, 1500);
-  const sea = plane(WORLD.width/2,(COAST.seaStart+seaVisualEnd)/2,WORLD.width+2400,seaVisualEnd-COAST.seaStart,seaColor,WATER_PLAY.waterY,'Open sea');
+  const seaVertices=[],seaIndices=[];
+  function seaSection(x1,x2,z1,z2){
+    const start=seaVertices.length/3;
+    seaVertices.push(x1,WATER_PLAY.waterY,z1,x2,WATER_PLAY.waterY,z1,x1,WATER_PLAY.waterY,z2,x2,WATER_PLAY.waterY,z2);
+    seaIndices.push(start,start+2,start+1,start+1,start+2,start+3);
+  }
+  // The opaque ocean has a real opening. Placing transparent water over an
+  // uncut ocean plane would still conceal everything below the surface.
+  seaSection(-1200,WATER_PLAY.xMin,COAST.seaStart,WATER_PLAY.deepZ);
+  seaSection(WATER_PLAY.xMax,WORLD.width+1200,COAST.seaStart,WATER_PLAY.deepZ);
+  seaSection(-1200,WORLD.width+1200,WATER_PLAY.deepZ,seaVisualEnd);
+  const sea = surface(seaVertices,seaIndices,seaColor,'Open sea');
   sea.material.roughness=.35; sea.material.metalness=.05; sea.receiveShadow=false;
-  // Lighter turquoise shows the shallow sand shelf, fading into the sea at
-  // its edges. The beach entrance stays broad and free of furniture.
-  const bayVertices=[],bayColors=[],bayIndices=[],bayColumns=24,bayRows=12;
-  const shallowColor=new THREE.Color('#b1e1d5'),oceanColor=new THREE.Color(seaColor),bayTint=new THREE.Color();
+  // Sand continues below the beach, following the same gentle walking slope.
+  // One-unit rows keep interpolation within a millimetre of the height field.
+  const floorVertices=[],floorColors=[],floorIndices=[],floorColumns=24,floorRows=WATER_PLAY.deepZ-WATER_PLAY.shoreZ;
+  const sandColor=new THREE.Color('#f2dfb5'),deepSand=new THREE.Color('#c3d5b5'),floorTint=new THREE.Color();
+  for(let row=0;row<=floorRows;row++)for(let column=0;column<=floorColumns;column++){
+    const x=WATER_PLAY.xMin+(WATER_PLAY.xMax-WATER_PLAY.xMin)*column/floorColumns,z=WATER_PLAY.shoreZ+row;
+    const height=waterPlayHeight(x,z),depth=-height/WATER_PLAY.maxDepth;
+    floorTint.copy(sandColor).lerp(deepSand,depth*.72);
+    floorTint.multiplyScalar(1+Math.sin(x*.21+z*.18)*Math.sin(z*.31)*.025*depth);
+    floorVertices.push(x,height,z);floorColors.push(floorTint.r,floorTint.g,floorTint.b);
+    if(row<floorRows&&column<floorColumns){const i=row*(floorColumns+1)+column;floorIndices.push(i,i+floorColumns+1,i+1,i+1,i+floorColumns+1,i+floorColumns+2);}
+  }
+  const seabed=surface(floorVertices,floorIndices,'#ffffff','Sandy underwater floor',{vertexColors:true,roughness:1});
+  seabed.geometry.setAttribute('color',new THREE.Float32BufferAttribute(floorColors,3));
+  const bayVertices=[],bayColors=[],bayIndices=[],bayColumns=24,bayRows=32;
+  const shallowColor=new THREE.Color('#53c3cd'),oceanColor=new THREE.Color('#158ca8'),bayTint=new THREE.Color();
   for(let row=0;row<=bayRows;row++)for(let column=0;column<=bayColumns;column++){
     const x=WATER_PLAY.xMin+(WATER_PLAY.xMax-WATER_PLAY.xMin)*column/bayColumns;
     const z=WATER_PLAY.shoreZ+(WATER_PLAY.deepZ-WATER_PLAY.shoreZ)*row/bayRows;
@@ -175,8 +198,9 @@ export function createLandscape() {
   }
   // Physical separation preserves the depth order at low camera angles;
   // polygon offset would incorrectly pull the bay over foam and ball ripples.
-  const bay=surface(bayVertices,bayIndices,'#ffffff','Shallow water-play bay',{vertexColors:true,roughness:.3,metalness:.04});
+  const bay=surface(bayVertices,bayIndices,'#ffffff','Water-play bay surface',{vertexColors:true,roughness:.3,metalness:.04,transparent:true,opacity:.45,depthWrite:false,side:THREE.DoubleSide});
   bay.geometry.setAttribute('color',new THREE.Float32BufferAttribute(bayColors,3));bay.receiveShadow=false;
+  bay.renderOrder=10;
   bay.userData.floorDepth=-waterPlayHeight(WATER_PLAY.spawn.x,WATER_PLAY.deepZ);
   const buoyGroup=new THREE.Group();buoyGroup.name='Water-play boundary buoys';root.add(buoyGroup);
   const buoyBatches=[];
@@ -312,12 +336,13 @@ export function createLandscape() {
     const object=new THREE.Mesh(rippleGeometry,rippleMaterial);object.name='River ripple';object.rotation.x=-Math.PI/2;object.scale.set(1.4,.44,1);object.position.set(riverX(z)+side*riverWidth(z)*.22,.095,z);root.add(object);ripples.push({mesh:object,z,side});
   }
   const waves=[];
-  for(let row=0;row<16;row++) {
+  const waveSpacing=12,waveCount=Math.ceil((WATER_PLAY.deepZ-WATER_PLAY.shoreZ+24)/waveSpacing);
+  for(let row=0;row<waveCount;row++) {
     const points=[];
     for(let x=-90;x<=WORLD.width+90;x+=7)points.push([x,Math.sin(x*.065+row*.9)*.75]);
-    const wave=ribbon(points,.18+row*.018,'#e0f1e3',()=>.12,1,`Sea foam ${row+1}`);
+    const wave=ribbon(points,.18+row*.012,'#e0f1e3',()=>.12,1,`Sea foam ${row+1}`);
     wave.material=new THREE.MeshBasicMaterial({color:row%3?'#d9efe4':'#ecf5e6',transparent:true,opacity:row<4?.48:.24,side:THREE.DoubleSide,depthWrite:false});
-    wave.receiveShadow=false;waves.push(wave);
+    wave.receiveShadow=false;wave.renderOrder=11;waves.push(wave);
   }
 
   for(const {shape,color,cast,matrices} of batches.values()) {
@@ -330,9 +355,9 @@ export function createLandscape() {
       const z=RIVER.startZ+((ripple.z-RIVER.startZ+elapsed*.6)%span+span)%span;
       ripple.mesh.position.set(riverX(z)+ripple.side*riverWidth(z)*.22,.095,z);
     }
-    const waveSpan=waves.length*9;
+    const waveSpan=waves.length*waveSpacing;
     waves.forEach((wave,index)=>{
-      const offset=((index*9-elapsed*.9)%waveSpan+waveSpan)%waveSpan;
+      const offset=((index*waveSpacing-elapsed*.9)%waveSpan+waveSpan)%waveSpan;
       wave.position.z=COAST.seaStart+1.2+offset;
       const fade=Math.min(1,offset/3,(waveSpan-offset)/6);
       wave.material.opacity=.025+fade*(offset<35?.38:.2);

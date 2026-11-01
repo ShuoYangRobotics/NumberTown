@@ -5,14 +5,14 @@ import { WORLD, OBSTACLES, LANDMARKS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS
 import { PARK, PARK_LANDMARK, PARK_OBSTACLES } from '../dist/park.js';
 import { FIELD, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from '../dist/football.js';
 import {
-  HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK,
+  HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK,
   TERRAIN_OBSTACLES, groundHeight, riverX, riverWidth,
 } from '../dist/terrain-data.js';
 import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
 
 const radius = 2.7;
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
-const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
+const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
 
 // Independent footprint checks exercise the assembled map, not just the
 // navigation implementation or each attraction in isolation.
@@ -77,6 +77,7 @@ test('the combined world connects every landmark, building approach, and activit
     ...BUILDING_APPROACHES,
     ...EXPANSION_CONNECTIONS.map(entry => ({ name: `${entry.id} entrance`, ...entry })),
     ...FRIEND_STARTS.map((point, index) => ({ name: `Friend ${index + 1}`, ...point })),
+    { name: 'deep seabed beyond former world edge', x: 125, z: 640 },
   ];
   const failures = destinations.filter(point => obstruction(point.x,point.z)||![-1,0,1].some(dx=>[-1,0,1].some(dz=>reached.has(`${Math.round(point.x)+dx},${Math.round(point.z)+dz}`))))
     .map(point => `${point.name} (${point.x},${point.z}): ${obstruction(point.x, point.z) ?? 'no continuous walking route'}`);

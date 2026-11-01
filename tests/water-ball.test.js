@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
 import { WATER_PLAY } from '../dist/geography.js';
+import { waterPlayHeight } from '../dist/terrain-data.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
 import { getCharacterArrangements } from '../dist/arrangements.js';
 import {
@@ -10,7 +11,17 @@ import {
 } from '../dist/water-ball.js';
 
 const near = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
-const player = (overrides = {}) => ({ number: 1, x: 160, z: 409, yaw: 0, height: 1, width: 1, depth: 1, radius: .7, groundY: -.15, jump: 0, ...overrides });
+const player = (overrides = {}) => ({ number: 1, x: WATER_PLAY.spawn.x, z: WATER_PLAY.spawn.z - 1, yaw: 0, height: 1, width: 1, depth: 1, radius: .7, groundY: -.15, jump: 0, ...overrides });
+function deepCarrier(overrides = {}) {
+  const carrier = player({ z: WATER_PLAY.shoreZ + WATER_PLAY.depthRamp + 20, ...overrides });
+  carrier.groundY = waterPlayHeight(carrier.x, carrier.z);
+  return carrier;
+}
+function submergedBall(carrier) {
+  const state = createWaterBallState();
+  Object.assign(state, { x: carrier.x, z: carrier.z, y: carrier.groundY + WATER_BALL_RADIUS, mode: 'rising' });
+  return state;
+}
 function assertInBay(state) {
   assert.ok(state.x >= WATER_PLAY.xMin + WATER_BALL_RADIUS && state.x <= WATER_PLAY.xMax - WATER_BALL_RADIUS, `x ${state.x}`);
   assert.ok(state.z >= WATER_PLAY.beachZ + WATER_BALL_RADIUS && state.z <= WATER_PLAY.deepZ - WATER_BALL_RADIUS, `z ${state.z}`);
@@ -49,12 +60,15 @@ test('every original friend and tall transformed shape can reach floating trough
     ...getCharacterArrangements(character.number).filter(form => form.transformed && form.height >= 7),
   ]);
   let lowestWave = Infinity;
-  for (const [z, groundY] of [[397, 0], [398.3, 0], [400, 0], [400, -.03], [410, -.2]]) {
+  for (const [z, groundY] of [
+    [WATER_PLAY.shoreZ - 1, 0], [WATER_PLAY.shoreZ + .3, 0],
+    [WATER_PLAY.shoreZ + 2, 0], [WATER_PLAY.shoreZ + 2, -.03], [WATER_PLAY.spawn.z, -.2],
+  ]) {
     for (let phase = 0; phase < 32; phase++) {
       const resting = createWaterBallState(); resting.z = z;
       resting.mode = z < WATER_PLAY.shoreZ ? 'sand' : 'floating';
       stepWaterBall(resting, 1 / 240, phase / 2);
-      if (z >= 400) lowestWave = Math.min(lowestWave, resting.y);
+      if (z >= WATER_PLAY.shoreZ + 2) lowestWave = Math.min(lowestWave, resting.y);
       for (const form of forms) {
         const state = structuredClone(resting);
         const carrier = player({ ...getCharacterMetrics(form), number: form.number, x: state.x, z: state.z - .5, groundY });
@@ -84,6 +98,99 @@ test('held placement follows facing, ground and jumps, with small offsets even f
   }
 });
 
+test('carrying down the real seabed follows the hand continuously for Zero, One and a tall wide friend', () => {
+  for (const shape of [{ number: 0, height: .65 }, { number: 1, height: 1 }, { number: 30, height: 30, width: 30, depth: 20 }]) {
+    const state = createWaterBallState(), carrier = player(shape);
+    carrier.groundY = waterPlayHeight(carrier.x, carrier.z);
+    assert.equal(pickUpWaterBall(state, carrier), true);
+    let previousY = state.y;
+    const destination = WATER_PLAY.shoreZ + WATER_PLAY.depthRamp + 20;
+    while (carrier.z < destination) {
+      carrier.z = Math.min(destination, carrier.z + 1);
+      carrier.groundY = waterPlayHeight(carrier.x, carrier.z);
+      assert.equal(updateHeldWaterBall(state, carrier, 0), true);
+      assert.ok(Math.abs(state.y - previousY) < .3, 'walking cannot jump the ball to the surface');
+      assert.ok(state.y - WATER_BALL_RADIUS >= waterPlayHeight(state.x, state.z), 'the ball stays above the seabed');
+      previousY = state.y;
+    }
+    near(state.y, -WATER_PLAY.maxDepth + Math.max(.8, Math.min(2.8, carrier.height / 3 + .5)));
+    assert.ok(state.y < -15, 'the ball is still in the deep carrier’s hand');
+    const pose = [state.x, state.y, state.z]; stepWaterBall(state, 3);
+    assert.deepEqual([state.x, state.y, state.z], pose);
+    carrier.jump = 1; updateHeldWaterBall(state, carrier, 0); near(state.y, pose[1] + 1);
+  }
+});
+
+test('deep friends cannot pick up a surface ball, but can reach a nearby submerged ball', () => {
+  for (const character of CHARACTERS) {
+    const carrier = deepCarrier({ number: character.number, ...getCharacterMetrics(character) });
+    const state = createWaterBallState(); state.x = carrier.x; state.z = carrier.z;
+    assert.equal(pickUpWaterBall(state, carrier), false, `${character.name} cannot reach eighteen metres up`);
+    assert.equal(state.heldBy, null);
+    const nearby = submergedBall(carrier);
+    assert.equal(pickUpWaterBall(nearby, carrier), true, `${character.name} can reach a ball by their feet`);
+    assert.equal(nearby.heldBy, character.number);
+    const below = submergedBall(carrier); below.y = carrier.groundY - WATER_BALL_RADIUS - .01;
+    assert.equal(pickUpWaterBall(below, carrier), false, 'pickup retains its lower vertical limit');
+  }
+});
+
+test('a deep release stays at its previous pose, rises gradually, then floats and drifts shoreward', () => {
+  const carrier = deepCarrier({ number: 0, height: .65 }), state = submergedBall(carrier);
+  assert.equal(pickUpWaterBall(state, carrier), true);
+  const pose = [state.x, state.y, state.z];
+  assert.equal(releaseWaterBall(state, { ...carrier, x: WATER_PLAY.spawn.x, z: WATER_PLAY.beachZ }), true);
+  assert.deepEqual([state.x, state.y, state.z], pose, 'fast travel must leave the ball underwater at its last pose');
+  assert.equal(state.mode, 'rising'); assert.equal(state.heldBy, null);
+  stepWaterBall(state, 1 / 60);
+  assert.ok(state.y > pose[1] && state.y < pose[1] + .01, 'buoyancy starts without a surface teleport');
+  let surfaced = false, previousY = state.y;
+  for (let i = 0; i < 12 * 60 && state.mode !== 'floating'; i++) {
+    const event = stepWaterBall(state, 1 / 60);
+    assert.ok(state.y >= previousY - 1e-8, 'the released ball rises steadily');
+    assert.ok(state.y - previousY < .05, 'each ascent frame is continuous');
+    previousY = state.y; surfaced ||= event?.type === 'surfaced'; assertInBay(state);
+  }
+  assert.equal(surfaced, true); assert.equal(state.mode, 'floating');
+  assert.ok(state.y > WATER_PLAY.waterY && state.y < WATER_PLAY.waterY + WATER_BALL_RADIUS);
+  const surfacedZ = state.z; simulate(state, 10);
+  assert.ok(state.z < surfacedZ - 6, 'surface waves still carry the ball toward the beach');
+});
+
+test('a submerged throw has a short directional trajectory and rises without jumping to the waterline', () => {
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const carrier = deepCarrier({ yaw }), state = submergedBall(carrier);
+    pickUpWaterBall(state, carrier);
+    const pose = [state.x, state.y, state.z];
+    assert.equal(throwWaterBall(state, carrier), true);
+    assert.deepEqual([state.x, state.y, state.z], pose);
+    assert.equal(state.mode, 'rising'); assert.equal(state.throws, 1);
+    assert.ok(state.vx * Math.sin(yaw) + state.vz * Math.cos(yaw) > 0);
+    stepWaterBall(state, 1 / 60);
+    assert.ok(state.y > pose[1] && state.y < pose[1] + .08);
+    for (let i = 0; i < 12 * 60 && state.mode !== 'floating'; i++) {
+      stepWaterBall(state, 1 / 60); assertInBay(state);
+      assert.ok(state.y - WATER_BALL_RADIUS >= waterPlayHeight(state.x, state.z));
+    }
+    assert.equal(state.mode, 'floating');
+    const distance = (state.x - pose[0]) * Math.sin(yaw) + (state.z - pose[2]) * Math.cos(yaw);
+    assert.ok(distance > 2 && distance < 4, `water drag limits the horizontal throw: ${distance}`);
+  }
+});
+
+test('held balls and underwater throws stay above the sloping seabed when facing uphill', () => {
+  const carrier = deepCarrier({ number: 0, height: .65, depth: 20, z: WATER_PLAY.shoreZ + WATER_PLAY.depthRamp / 2, yaw: Math.PI });
+  const state = submergedBall(carrier); assert.equal(pickUpWaterBall(state, carrier), true);
+  assert.ok(state.y - WATER_BALL_RADIUS >= waterPlayHeight(state.x, state.z));
+  throwWaterBall(state, carrier, 22, 3);
+  for (let i = 0; i < 60 * 8; i++) {
+    stepWaterBall(state, 1 / 60);
+    assert.ok(state.y - WATER_BALL_RADIUS >= waterPlayHeight(state.x, state.z), 'an uphill throw must not enter the floor');
+    assertInBay(state);
+  }
+  assert.equal(state.mode, 'floating');
+});
+
 test('release and travel retain the last held pose and tolerate missing or stale carriers', () => {
   const state = createWaterBallState(), carrier = player();
   assert.equal(releaseWaterBall(state), false);
@@ -94,7 +201,7 @@ test('release and travel retain the last held pose and tolerate missing or stale
   assert.equal(state.heldBy, null); assert.equal(releaseWaterBall(state), false);
   resetWaterBall(state); pickUpWaterBall(state, carrier);
   const oldPose = [state.x, state.y, state.z];
-  assert.equal(updateHeldWaterBall(state, { ...carrier, x: 190, z: 420 }), false, 'travel within the bay cannot teleport the ball');
+  assert.equal(updateHeldWaterBall(state, { ...carrier, x: carrier.x + 30, z: carrier.z + 11 }), false, 'travel within the bay cannot teleport the ball');
   assert.deepEqual([state.x, state.y, state.z], oldPose); assert.equal(state.heldBy, null);
   resetWaterBall(state); pickUpWaterBall(state, carrier);
   assert.equal(updateHeldWaterBall(state, { ...carrier, x: WATER_PLAY.xMax + 1 }), false);
@@ -103,8 +210,8 @@ test('release and travel retain the last held pose and tolerate missing or stale
 
 test('each shore edge keeps held and released balls inside the bay, including a wide deep friend', () => {
   for (const [x, z, yaw] of [
-    [WATER_PLAY.xMin, 410, -Math.PI / 2], [WATER_PLAY.xMax, 410, Math.PI / 2],
-    [160, WATER_PLAY.beachZ, Math.PI], [160, WATER_PLAY.deepZ, 0],
+    [WATER_PLAY.xMin, WATER_PLAY.spawn.z, -Math.PI / 2], [WATER_PLAY.xMax, WATER_PLAY.spawn.z, Math.PI / 2],
+    [WATER_PLAY.spawn.x, WATER_PLAY.beachZ, Math.PI], [WATER_PLAY.spawn.x, WATER_PLAY.deepZ, 0],
   ]) {
     const state = createWaterBallState(); state.x = x; state.z = z;
     const carrier = player({ x, z, yaw, width: 30, depth: 20, height: 10, radius: 2.7 });
@@ -158,14 +265,14 @@ test('a seaward throw splashes down, floats visibly and drifts back to settle on
 });
 
 test('a shoreward throw lands on sand and stops after its small bounce', () => {
-  const state = createWaterBallState(), carrier = player({ z: 403, yaw: Math.PI }); state.z = 404;
+  const state = createWaterBallState(), carrier = player({ z: WATER_PLAY.shoreZ + 5, yaw: Math.PI }); state.z = WATER_PLAY.shoreZ + 6;
   pickUpWaterBall(state, carrier); throwWaterBall(state, carrier);
   let landed = false;
   for (let i = 0; i < 300; i++) {
     const event = stepWaterBall(state, 1 / 60);
     landed ||= event?.type === 'landed';
   }
-  assert.equal(landed, true); assert.equal(state.mode, 'sand'); assert.ok(state.z < 390);
+  assert.equal(landed, true); assert.equal(state.mode, 'sand'); assert.ok(state.z < WATER_PLAY.shoreZ - 8);
   assert.equal(state.vx, 0); assert.equal(state.vz, 0); assertInBay(state);
 });
 
@@ -180,6 +287,22 @@ test('throw and wave motion remain close across frame rates and stalled updates'
   const stalled = structuredClone(initial); stepWaterBall(stalled, 8, 8);
   for (const key of ['x', 'y', 'z', 'vx', 'vy', 'vz']) near(stalled[key], reference[key], 1e-8);
   assert.equal(stalled.time, 8);
+});
+
+test('deep-water ascent remains stable across frame rates and long stalled updates', () => {
+  for (const throwIt of [false, true]) {
+    const carrier = deepCarrier({ yaw: .7 }), initial = submergedBall(carrier);
+    pickUpWaterBall(initial, carrier);
+    if (throwIt) throwWaterBall(initial, carrier); else releaseWaterBall(initial, carrier);
+    const reference = simulate(structuredClone(initial), 12, 120);
+    for (const fps of [30, 60, 144]) {
+      const actual = simulate(structuredClone(initial), 12, fps);
+      for (const key of ['x', 'y', 'z', 'vx', 'vy', 'vz']) near(actual[key], reference[key], .04);
+      assert.equal(actual.mode, 'floating'); assertInBay(actual);
+    }
+    const stalled = structuredClone(initial); stepWaterBall(stalled, 12, 12);
+    for (const key of ['x', 'y', 'z', 'vx', 'vy', 'vz']) near(stalled[key], reference[key], 1e-8);
+  }
 });
 
 test('bay sides and deep-water boundary bounce inward and long varied updates stay finite', () => {
@@ -224,6 +347,9 @@ test('the DOM-free renderer uses six bright spherical panels, tracks height and 
   assert.equal(ripples.length, 3); assert.ok(ripples.every(ripple => !ripple.visible));
   resetWaterBall(state); model.update(state, 3); assert.ok(ripples.every(ripple => ripple.visible));
   pickUpWaterBall(state, player({ number: 0 })); model.update(state, 4); assert.ok(ripples.every(ripple => !ripple.visible));
+  state.y = -12; state.mode = 'rising'; state.heldBy = null; state.splash = 1; model.update(state, 4);
+  near(model.ballMesh.position.y, -12); assert.ok(ripples.every(ripple => !ripple.visible));
+  assert.equal(model.root.getObjectByName('Beach ball shadow').visible, false, 'a submerged ball has no shadow on top of the water');
   model.root.traverse(object => {
     if (object.geometry) assert.ok([...object.geometry.attributes.position.array].every(Number.isFinite));
     assert.ok([...object.position, ...object.scale].every(Number.isFinite));

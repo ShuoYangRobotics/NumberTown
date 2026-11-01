@@ -14,10 +14,10 @@ export function bridgeHeight(bridge, x) {
   const distanceToEnd = bridge.span / 2 - Math.abs(x - bridge.x);
   return bridge.height * smoothstep(distanceToEnd / 6);
 }
-/** A gentle sand shelf, shallow enough that even Zero's smile clears the water. */
+/** The beach rolls gently into a broad, deep sandy floor. */
 export function waterPlayHeight(x, z) {
-  const across = smoothstep((x - WATER_PLAY.xMin) / 8) * smoothstep((WATER_PLAY.xMax - x) / 8);
-  return -.2 * across * smoothstep((z - WATER_PLAY.shoreZ) / 18);
+  if(x<WATER_PLAY.xMin||x>WATER_PLAY.xMax)return 0;
+  return -WATER_PLAY.maxDepth * smoothstep((z - WATER_PLAY.shoreZ) / WATER_PLAY.depthRamp);
 }
 export function groundHeight(x, z) {
   const mountain = mountainWalkHeight(x, z);
@@ -40,12 +40,13 @@ export const BRIDGE_LANDMARKS = Object.freeze(BRIDGES.map((bridge, index) => Obj
 })));
 export const RIVER_LANDMARK = BRIDGE_LANDMARKS[1];
 export const BEACH_LANDMARK = Object.freeze({ id: 'beach', name: 'Seaside beach', description: 'Walk along the sand and watch the rolling waves.', x: 160, z: 385, radius: 36, arrival: Object.freeze({ x: 160, z: 385 }) });
-export const WATER_PLAY_LANDMARK = Object.freeze({ id: 'water-play', name: 'Water play', description: 'Wade into the shallow turquoise bay and play with the floating beach ball.', x: 160, z: 410, radius: 31, arrival: Object.freeze({ x: 160, z: 403 }) });
+export const WATER_PLAY_LANDMARK = Object.freeze({ id: 'water-play', name: 'Water play', description: 'Follow the sandy beach into the turquoise bay and play with the floating beach ball.', x: 160, z: 410, radius: 31, arrival: Object.freeze({ x: 160, z: 403 }) });
+export const UNDERWATER_LANDMARK = Object.freeze({ id: 'seabed', name: 'Underwater garden', description: 'Explore the deep sandy floor beneath the clear blue bay.', x: 125, z: 535, radius: 110, arrival: Object.freeze({ x: 125, z: 535 }) });
 export const MOUNTAIN_LANDMARK = Object.freeze({ id: 'mountains', name: 'Mountain view', description: 'Look up at the rugged peaks and the river gorge.', x: 130, z: 79, radius: 34, arrival: Object.freeze({ x: 130, z: 79 }) });
 export const HILL_TREES = Object.freeze([.12, .75, 1.24, 1.98, 2.65, 3.35, 4.55, 5.5].map((angle, index) => Object.freeze({ x: HILL.x + Math.cos(angle) * (25 + index % 3), z: HILL.z + Math.sin(angle) * (25 + index % 3), height: 4.5 + index % 3 * .6, radius: 1.8 })));
 export const BEACH_UMBRELLAS = Object.freeze([[54, 384], [104, 386], [189, 384], [294, 385], [350, 384], [405, 386]].map(([x, z], index) => Object.freeze({ x, z, index, radius: 2.9 })));
 export const WATER_PLAY_BUOYS = Object.freeze([
-  ...[WATER_PLAY.xMin, WATER_PLAY.xMax].flatMap(x => [407, 422].map(z => ({ x, z }))),
+  ...[WATER_PLAY.xMin, WATER_PLAY.xMax].flatMap(x => Array.from({ length: 10 }, (_, index) => ({ x, z: WATER_PLAY.shoreZ + (index + .5) * (WATER_PLAY.deepZ - WATER_PLAY.shoreZ) / 10 }))),
   ...Array.from({ length: 9 }, (_, index) => ({ x: WATER_PLAY.xMin + (WATER_PLAY.xMax - WATER_PLAY.xMin) * index / 8, z: WATER_PLAY.deepZ })),
 ].map((point, index) => Object.freeze({ ...point, radius: .6, index })));
 
@@ -64,8 +65,8 @@ export const TERRAIN_OBSTACLES = Object.freeze([
   { id: 'mountain-range', kind: 'mountain', x: -100, z: RIVER.startZ - 40, w: WORLD.width + 200, d: MOUNTAINS.maxZ - RIVER.startZ + 40,
     blocks: (x, z, radius) => z - radius < MOUNTAINS.maxZ && !isOnMountainRoute(x, z, radius) },
   ...SUMMIT_OBSTACLES,
-  // The beach opens into one shallow bay. Ordinary rectangle collisions keep
-  // the whole character footprint inside its side and deep-water boundaries.
+  // The beach opens into the bay. Ordinary rectangle collisions keep the
+  // whole footprint inside its sides and the offshore swimming boundary.
   { id: 'open-sea-west', kind: 'sea', x: -500, z: COAST.seaStart, w: WATER_PLAY.xMin + 500, d: WATER_PLAY.deepZ - COAST.seaStart },
   { id: 'open-sea-east', kind: 'sea', x: WATER_PLAY.xMax, z: COAST.seaStart, w: WORLD.width + 500 - WATER_PLAY.xMax, d: WATER_PLAY.deepZ - COAST.seaStart },
   { id: 'open-sea', kind: 'sea', x: -500, z: WATER_PLAY.deepZ, w: WORLD.width + 1000, d: COAST.seaEnd - WATER_PLAY.deepZ + 100 },
