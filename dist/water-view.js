@@ -15,7 +15,7 @@ export function waterDepthAt(point) {
 /** Use visual height so the number label and accessories also submerge. */
 export function immersionFor(player, visualHeight = player?.height ?? 1) {
   const depth = waterDepthAt(player);
-  const jump = Number.isFinite(player?.jump) ? Math.max(0, player.jump) : 0;
+  const jump = Number.isFinite(player?.swimY) && isInSea(player) ? Math.max(0, player.swimY - waterPlayHeight(player.x, player.z)) : Number.isFinite(player?.jump) ? Math.max(0, player.jump) : 0;
   const height = Number.isFinite(visualHeight) ? Math.max(0, visualHeight) : 1;
   return { depth, wet: depth > jump + .12, submerged: depth > height + jump + .1 };
 }

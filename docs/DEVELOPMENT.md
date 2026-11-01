@@ -34,6 +34,10 @@ Paths below are relative to the repository root.
 | `dist/football.js` | Pitch and ball geometry, kicks, dribbling, physics, scoring, and reset |
 | `dist/water-ball.js` | Beach ball geometry, pickup, carrying, throw arcs, buoyancy, shoreward current, and sand drag |
 | `dist/sea-life.js` | Fish schools, sea stars, and turtles with swimming, beach approach, and basking cycles |
+| `dist/swimming.js` | Absolute swimming altitude, Z/X controls, seabed and surface limits |
+| `dist/underwater-garden.js` | Garden road loop, marine plants, crabs, corals and sea urchins |
+| `dist/train-park.js` | Eastern landscapes, animals, track, occupied train movement and boarding |
+| `dist/animal-facts.js` | Animal facts and proximity encounters with depth checks and cooldowns |
 | `dist/water-view.js` | Depth, complete character immersion, and underwater camera transitions |
 | `dist/ground-marker.js` | Selection ring and shadow that follow sloping ground |
 | `dist/town-map.js` | Map geometry, destination buttons, and player marker |
@@ -47,11 +51,11 @@ Paths below are relative to the repository root.
 
 ## Working with game data
 
-World coordinates use **+x east, +z south, and y up**. The world is 440 units wide; z runs from −90 to 690, making its full north–south span 780 units. Shared geographic data drives rendering, collision boundaries, and the map. Keep these representations aligned when changing a place. The town island ends at the coastline; the bay has its own sloping sand geometry and a transparent water surface. The seabed uses the same height function as walking and wildlife, reaching −18 beyond the 120-unit descent.
+World coordinates use **+x east, +z south, and y up**. The world is 840 units wide; z runs from −90 to 690, making its full north–south span 780 units. Shared geographic data drives rendering, collision boundaries, and the map. Keep these representations aligned when changing a place. The town island ends at the coastline; the bay has its own sloping sand geometry and a transparent water surface. The seabed uses the same height function as walking and wildlife, reaching −18 beyond the 120-unit descent.
 
 Characters are identified by their **number**, from 0 through 30. The cast has 31 entries, so its length is not its highest number. Zero has no occupied cube cells but has finite display and navigation dimensions. One through Thirty have exactly their number of unit cubes.
 
-Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits spoken dialogue and bubbles to the selected character.
+Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits spoken dialogue and bubbles to the selected character. Animal encounters share the same speech pipeline, with global and per-species cooldowns. Swimming stores the absolute feet height in `swimY`; camera, carrying, immersion and character rendering all use that height. Empty trains never advance their motion clock. Switching characters and fast travel disembark before changing the active friend or position.
 
 ## Tests
 

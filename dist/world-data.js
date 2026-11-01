@@ -97,12 +97,15 @@ road('west-beach-turn', 218, 365, 160, 365, 10);
 road('west-beach-entry', 160, 365, 160, 385, 10);
 road('east-beach-turn', 266, 365, 278, 365, 10);
 road('east-beach-entry', 278, 365, 278, 382, 10);
+road('train-park-avenue', 316, 320, 435, 320, 12);
+road('train-park-approach', 435, 320, 435, 215, 10);
+road('train-park-gateway', 435, 215, 478, 215, 10);
 
 export const BUILDING_APPROACHES = BUILDINGS.map(b => ({ id: b.id, name: b.kind === 'house' ? `House ${b.name}` : b.name, x: b.x, z: b.street }));
 export const EXPANSION_CONNECTIONS = [
   { id: 'park', x: 332, z: 150 }, { id: 'football', x: 322, z: 219 }, { id: 'hill', x: 130, z: 307 },
   ...BRIDGES.flatMap(bridge => [{ id: `${bridge.id}-west`, x: 218, z: bridge.z }, { id: `${bridge.id}-east`, x: 266, z: bridge.z }]),
-  { id: 'beach-west', x: 160, z: 385 }, { id: 'beach-east', x: 278, z: 382 },
+  { id: 'train-park', x: 478, z: 215 }, { id: 'beach-west', x: 160, z: 385 }, { id: 'beach-east', x: 278, z: 382 },
 ];
 
 export const TREES = [

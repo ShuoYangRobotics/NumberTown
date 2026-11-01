@@ -11,8 +11,10 @@
 | Drag the world / Q and R | Orbit the camera; vertical dragging changes elevation |
 | Mouse wheel / + and − / zoom buttons | Zoom |
 | C | Reset the camera |
-| Space / Hop button | Hop |
-| F / ball action button | Kick the football; at the beach, pick up or throw the beach ball |
+| Space / Hop button | Hop on land; hold Space aboard the train for 2× speed |
+| Z / X | Swim upward / downward; release to hold height |
+| Esc | Leave train or stop garden tour |
+| F / activity button | Kick football, pick up / throw beach ball, or board a nearby train |
 | E / feeling menu | Change expression |
 | T / Change shape | Try the next factor rectangle, then return to the original shape |
 | K / Tell me a math fact | Ask the selected friend for another number fact |
@@ -28,6 +30,7 @@
 | Follow trail / Walk down | Start a guided mountain ascent or descent |
 | Pause walk | Stop the guided walk |
 | View sea / View town | Frame the view from a scenic deck |
+| Tour garden / Stop tour | Follow or stop the seabed loop |
 
 The bottom strip scrolls through all 31 thumbnails. To choose Zero directly, use **Tab + 0** or Zero’s thumbnail. **Escape** cancels number entry. Tab opens the number field when the game has focus; in menus, dialogs, and other controls, Tab and Shift + Tab keep their normal focus behavior.
 
@@ -39,7 +42,7 @@ Friends you take onto Sunny Hill or the mountain route **stay where you leave th
 
 ## Places and activities
 
-The world spans **440 × 780 units**, with **70 houses**: 50 on the west bank and 20 on the east bank. There are also **10 stores** and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks and in the expanded southern sea.
+The world spans **840 × 780 units**, with **70 houses**: 50 on the west bank and 20 on the east bank. There are also **10 stores** and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks and in the expanded southern sea.
 
 - **Town square:** a colorful Rubik’s cube statue balances on one corner and spins at 50 degrees per second, completing a turn every 7.2 seconds.
 - **Duck pond and gardens:** follow the shore, watch the ducks, and explore the flowers and paths.
@@ -48,9 +51,12 @@ The world spans **440 × 780 units**, with **70 houses**: 50 on the west bank an
 - **Sunny Hill:** follow the winding trail to the 12-metre hilltop and viewing deck. View sea frames the southern beach and water; drag to look around freely.
 - **River and bridges:** the river runs continuously from the northern mountain gorge to the sea. The North, Market, and Coast bridges join the two neighborhoods. Characters follow the heights of bridges and hills as they walk.
 - **Mountain summit:** visit Mountain trail and follow the paved bends manually or choose Follow trail. A progress bar tracks the ascent to the 72-metre summit deck. Walk down guides the return. This marked route reaches one summit; the other mountain slopes remain blocked. Sunny Hill is a separate, lower climb.
-- **Beach and sea:** choose Seaside beach, then **Water play**, or select Water play on the map. The sea covers **194 × 262 units**, about eleven times the previous play area. The sand slopes continuously down to **18 blocks deep**. Walk farther out with WASD to submerge; friends shorter than 15 blocks can go completely underwater, including their number labels. Drag to look around and zoom in for an underwater view. **Explore seabed**, or **Underwater garden** on the map, takes you directly to the deep sand. **Back to beach** returns you to shore.
+- **Beach and sea:** choose Seaside beach, then **Water play**, or select Water play on the map. The sea covers **194 × 262 units**, about eleven times the previous play area. The sand slopes continuously down to **18 blocks deep**. Use **WASD** to move horizontally, **Z** to rise and **X** to descend. Releasing Z and X holds your absolute height, even as you move over the sloping sand. The seabed and surface limit your movement; friends shorter than 15 blocks can go completely underwater, including their number labels. Drag to look around and zoom in for an underwater view. **Explore seabed**, or **Underwater garden** on the map, takes you directly to the deep sand. **Back to beach** returns you to shore.
+- **Underwater garden:** explore colorful seaweed, tall kelp, rocks, branching corals, sea urchins and crabs around a small paved seabed loop. **Tour garden** lowers you to the path and guides you around it; WASD, Z/X, Esc or Stop tour returns control to you.
+- **Discovery Train Park:** a new park east of town has desert, rainforest, snow mountains and farms, each with a few animals. Use Train park or the map, then **F / Board train** near the train. Your character rides inside and their body is hidden. The train moves automatically while occupied. **Hold Space** for exactly twice the speed and release it for normal speed. **Esc / Leave train** steps off beside the track. Switching friends or visiting another place also disembarks the rider and stops the train. **Find train** takes you to wherever it is parked.
+- **Animal encounters:** your selected character shares a short fact when near an animal, including train-park animals, sea life and pond ducks. Animals at a different water depth must also be nearby vertically. Facts have a pause between them, and wandering friends remain quiet. Optional voices speak the same fact shown in the bubble.
 - **Sea life:** find schools of colorful fish and five-armed sea stars on the sandy floor. Sea turtles swim through the bay, crawl onto the beach to bask, then return to the water. The clear surface lets you see below from above; an underwater camera gets a blue-green view.
-- **Beach ball:** walk close to the striped ball at the same depth and press **F / Pick up**, face your throwing direction with WASD, then press **F / Throw**. Carry it down the slope for an underwater throw: it rises to the surface before the waves carry it shoreward. A ball on the surface cannot be grabbed from the deep seabed. It slows on the sand so you can pick it up again. Reset ball returns it to the shallows. Switching characters, traveling to another destination, or carrying it out of the play area releases it where you leave it. The river and ocean beyond the buoys remain blocked.
+- **Beach ball:** walk close to the striped ball at the same depth and press **F / Pick up**, face your throwing direction with WASD, then press **F / Throw**. Carry it below the surface using X for an underwater throw: it rises to the surface before the waves carry it shoreward. A ball on the surface cannot be grabbed from the deep seabed. It slows on the sand so you can pick it up again. Reset ball returns it to the shallows. Switching characters, traveling to another destination, or carrying it out of the play area releases it where you leave it. The river and ocean beyond the buoys remain blocked.
 
 ## Characters and shapes
 
@@ -60,7 +66,7 @@ One through Thirty each contain exactly their number of equal **1 × 1 × 1 cube
 
 Press **T** to cycle through the number’s factor rectangles, including tall and wide orientations, and return to its original shape. Cubes keep their size and colors, while the face and accessories adapt to the arrangement. Movement, collision checks, roaming routes, and camera framing use the current form. A shape that needs more room is skipped when you press T again. Zero has no blocks to rearrange, and One has only its 1 × 1 form, so their Change shape buttons are disabled.
 
-Unselected friends wander quietly between destinations, pause, and continue exploring. Your hill and mountain visitors stay put until you move them away. Friends avoid scenery and each other and cross the river using bridges. Wider forms need more open space and may stay near a roomy destination.
+Unselected friends wander quietly between destinations, pause, and continue exploring. Your hill, mountain and underwater visitors stay put until you move them away. Underwater friends retain their swimming height. Friends avoid scenery and each other and cross the river using bridges. Wider forms need more open space and may stay near a roomy destination.
 
 ## Feelings and math speech
 

@@ -8,11 +8,12 @@ import {
   HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK,
   TERRAIN_OBSTACLES, groundHeight, riverX, riverWidth,
 } from '../dist/terrain-data.js';
+import { TRAIN_LANDMARK, TRAIN_OBSTACLES, createTrainState, boardingPoint } from '../dist/train-park.js';
 import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
 
 const radius = 2.7;
-const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
-const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
+const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES, ...TRAIN_OBSTACLES];
+const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, TRAIN_LANDMARK];
 
 // Independent footprint checks exercise the assembled map, not just the
 // navigation implementation or each attraction in isolation.
@@ -152,4 +153,11 @@ test('the river cannot be bypassed on foot except through the three bridge corri
     if(x<WATER_PLAY.xMin+radius||x>WATER_PLAY.xMax-radius)assert.ok(obstruction(x,COAST.seaStart+2),`Sea can be entered outside the shallow bay at x${x}`);
     assert.ok(obstruction(x,WATER_PLAY.deepZ+2),`Deep sea can be entered at x${x}`);
   }
+});
+
+test('eastern avenue reaches the parked train and exits stay safe in the assembled world',()=>{
+  const route=[[316,320],[435,320],[435,215],[478,215]];
+  for(const [x,z] of segmentSamples(route,.25))assert.equal(obstruction(x,z),null,`Railway approach ${x},${z}`);
+  const state=createTrainState();state.riderRadius=radius;
+  for(let i=0;i<500;i++){state.progress=i/500;const point=boardingPoint(state);assert.equal(obstruction(point.x,point.z),null,`Exit ${i}: ${point.x},${point.z}`);assert.equal(groundHeight(point.x,point.z),0);}
 });

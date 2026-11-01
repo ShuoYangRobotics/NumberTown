@@ -355,7 +355,7 @@ export function createTown() {
   }
 
   function makeDuck(x, z, phase) {
-    const duck = new THREE.Group();
+    const duck = new THREE.Group(); duck.name = 'Pond duck'; duck.userData.animalId = `pond-duck-${animated.ducks.length}`;
     function part(shape, color, px, py, pz, sx, sy, sz) {
       const mesh = new THREE.Mesh(geometry[shape], material(color));
       mesh.position.set(px, py, pz); mesh.scale.set(sx, sy, sz); mesh.castShadow = true; duck.add(mesh); return mesh;
@@ -370,6 +370,10 @@ export function createTown() {
     animated.ducks.push({ duck, x, z, phase });
   }
   for (const [i, [dx, dz]] of [[-9, -3], [-4, 4], [3, -4], [8, 2], [-2, 0], [5, 6]].entries()) makeDuck(POND.x + dx, POND.z + dz, i * 1.3);
+  function duckPose({ x, z, phase }, time) {
+    return { x: x + Math.sin(time * .18 + phase) * 1.2, y: .12 + Math.sin(time * 1.8 + phase) * .035,
+      z: z + Math.cos(time * .15 + phase) * .9, yaw: phase + Math.sin(time * .22 + phase) * .3 };
+  }
 
   const fx = FOUNTAIN.x, fz = FOUNTAIN.z;
   cylinder(fx, .16, fz, 2.3, .32, '#d6c7ad');
@@ -417,11 +421,15 @@ export function createTown() {
 
   return {
     root, statue,
+    animalPoses(time = 0) {
+      const t = Number.isFinite(time) ? time : 0;
+      return animated.ducks.map((duck, index) => ({ id: `pond-duck-${index}`, species: 'duck', radius: .85, ...duckPose(duck, t) }));
+    },
     update(time) {
       statue.rotation.y = statueYaw + time * statueSpeed;
-      for (const { duck, x, z, phase } of animated.ducks) {
-        duck.position.set(x + Math.sin(time * .18 + phase) * 1.2, .12 + Math.sin(time * 1.8 + phase) * .035, z + Math.cos(time * .15 + phase) * .9);
-        duck.rotation.y = phase + Math.sin(time * .22 + phase) * .3;
+      for (const entry of animated.ducks) {
+        const pose = duckPose(entry, time);
+        entry.duck.position.set(pose.x, pose.y, pose.z); entry.duck.rotation.y = pose.yaw;
       }
       for (const { drop, phase } of animated.drops) {
         const t = (time * .65 + phase) % 1, a = phase * Math.PI * 10;

@@ -108,6 +108,11 @@ function finGeometry(vertices, triangles) {
 
 export function createSeaLife() {
   const root = new THREE.Group(); root.name = 'Sea life';
+  const encounterAnimals = [
+    ...Array.from({ length: SEA_LIFE_COUNTS.fish }, (_, index) => ({ id: `sea-fish-${index}`, species: 'fish' })),
+    ...Array.from({ length: SEA_LIFE_COUNTS.stars }, (_, index) => ({ id: `sea-star-${index}`, species: 'sea-star' })),
+    ...Array.from({ length: SEA_LIFE_COUNTS.turtles }, (_, index) => ({ id: `sea-turtle-${index}`, species: 'sea-turtle' })),
+  ];
   const sphere = new THREE.SphereGeometry(1, 14, 10);
   const materials = new Map();
   function material(color, extra = '') {
@@ -243,6 +248,18 @@ export function createSeaLife() {
     return { counts: SEA_LIFE_COUNTS, fish: Array.from({ length: SEA_LIFE_COUNTS.fish }, (_, i) => fishPose(i, time)),
       stars: Array.from({ length: SEA_LIFE_COUNTS.stars }, (_, i) => starPose(i)), turtles: Array.from({ length: SEA_LIFE_COUNTS.turtles }, (_, i) => turtlePose(i, time)) };
   }
+  // Borrowed lightweight records are reused; callers need not allocate the
+  // diagnostic snapshot's nested normals and animation data to find animals.
+  function animalPoses(time = 0) {
+    let cursor = 0;
+    for (const [count, poseAt, radiusScale] of [
+      [SEA_LIFE_COUNTS.fish, fishPose, 1.6], [SEA_LIFE_COUNTS.stars, starPose, 1.03], [SEA_LIFE_COUNTS.turtles, turtlePose, 2.4],
+    ]) for (let index = 0; index < count; index++) {
+      const pose = poseAt(index, time), animal = encounterAnimals[cursor++];
+      animal.x = pose.x; animal.y = pose.y; animal.z = pose.z; animal.radius = pose.size * radiusScale;
+    }
+    return encounterAnimals;
+  }
   let disposed = false;
   function dispose() {
     if (disposed) return; disposed = true;
@@ -252,5 +269,5 @@ export function createSeaLife() {
     root.removeFromParent();
   }
   update(0);
-  return { root, update, counts: SEA_LIFE_COUNTS, diagnosticSnapshot, dispose };
+  return { root, update, counts: SEA_LIFE_COUNTS, diagnosticSnapshot, animalPoses, dispose };
 }
