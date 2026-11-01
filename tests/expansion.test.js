@@ -5,14 +5,14 @@ import { WORLD, OBSTACLES, LANDMARKS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS
 import { PARK, PARK_LANDMARK, PARK_OBSTACLES } from '../dist/park.js';
 import { FIELD, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from '../dist/football.js';
 import {
-  HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK,
+  HILL_TRAIL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK,
   TERRAIN_OBSTACLES, groundHeight, riverX, riverWidth,
 } from '../dist/terrain-data.js';
 import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
 
 const radius = 2.7;
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
-const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
+const landmarks = [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, HILL_LANDMARK, LOOKOUT_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK];
 
 // Independent footprint checks exercise the assembled map, not just the
 // navigation implementation or each attraction in isolation.
@@ -148,6 +148,7 @@ test('the river cannot be bypassed on foot except through the three bridge corri
     if (!isOnMountainRoute(x, MOUNTAINS.maxZ - 1, radius)) {
       assert.ok(obstruction(x,MOUNTAINS.maxZ-1),`Mountain can be entered away from its trail at x${x}`);
     }
-    assert.ok(obstruction(x,COAST.seaStart+2),`Sea can be entered at x${x}`);
+    if(x<WATER_PLAY.xMin+radius||x>WATER_PLAY.xMax-radius)assert.ok(obstruction(x,COAST.seaStart+2),`Sea can be entered outside the shallow bay at x${x}`);
+    assert.ok(obstruction(x,WATER_PLAY.deepZ+2),`Deep sea can be entered at x${x}`);
   }
 });

@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { WORLD } from './geography.js';
-import { HILL, DECK, RIVER, BRIDGES, COAST, MOUNTAINS, HILL_TRAIL, HILL_TREES, BEACH_UMBRELLAS, hillHeight, bridgeHeight, riverX, riverWidth } from './terrain-data.js';
+import { HILL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, WATER_PLAY_BUOYS, MOUNTAINS, HILL_TRAIL, HILL_TREES, BEACH_UMBRELLAS, hillHeight, bridgeHeight, waterPlayHeight, riverX, riverWidth } from './terrain-data.js';
 import { SUMMIT, mountainHeight, nearestTrailPoint } from './mountain-route.js';
 import { createMountainSummit } from './mountain-summit.js';
 
@@ -158,8 +158,33 @@ export function createLandscape() {
   // The sea continues far past the world's walking boundary and into the fog.
   const seaColor = '#7dbfc9';
   const seaVisualEnd = Math.max(COAST.seaEnd, 1500);
-  const sea = plane(WORLD.width/2,(COAST.seaStart+seaVisualEnd)/2,WORLD.width+2400,seaVisualEnd-COAST.seaStart,seaColor,.045,'Open sea');
+  const sea = plane(WORLD.width/2,(COAST.seaStart+seaVisualEnd)/2,WORLD.width+2400,seaVisualEnd-COAST.seaStart,seaColor,WATER_PLAY.waterY,'Open sea');
   sea.material.roughness=.35; sea.material.metalness=.05; sea.receiveShadow=false;
+  // Lighter turquoise shows the shallow sand shelf, fading into the sea at
+  // its edges. The beach entrance stays broad and free of furniture.
+  const bayVertices=[],bayColors=[],bayIndices=[],bayColumns=24,bayRows=12;
+  const shallowColor=new THREE.Color('#b1e1d5'),oceanColor=new THREE.Color(seaColor),bayTint=new THREE.Color();
+  for(let row=0;row<=bayRows;row++)for(let column=0;column<=bayColumns;column++){
+    const x=WATER_PLAY.xMin+(WATER_PLAY.xMax-WATER_PLAY.xMin)*column/bayColumns;
+    const z=WATER_PLAY.shoreZ+(WATER_PLAY.deepZ-WATER_PLAY.shoreZ)*row/bayRows;
+    const sideFade=Math.min(1,(x-WATER_PLAY.xMin)/8,(WATER_PLAY.xMax-x)/8);
+    const depthFade=1-(z-WATER_PLAY.shoreZ)/(WATER_PLAY.deepZ-WATER_PLAY.shoreZ);
+    bayTint.copy(oceanColor).lerp(shallowColor,sideFade*(.28+.72*depthFade));
+    bayVertices.push(x,WATER_PLAY.waterY+.01,z);bayColors.push(bayTint.r,bayTint.g,bayTint.b);
+    if(row<bayRows&&column<bayColumns){const i=row*(bayColumns+1)+column;bayIndices.push(i,i+bayColumns+1,i+1,i+1,i+bayColumns+1,i+bayColumns+2);}
+  }
+  // Physical separation preserves the depth order at low camera angles;
+  // polygon offset would incorrectly pull the bay over foam and ball ripples.
+  const bay=surface(bayVertices,bayIndices,'#ffffff','Shallow water-play bay',{vertexColors:true,roughness:.3,metalness:.04});
+  bay.geometry.setAttribute('color',new THREE.Float32BufferAttribute(bayColors,3));bay.receiveShadow=false;
+  bay.userData.floorDepth=-waterPlayHeight(WATER_PLAY.spawn.x,WATER_PLAY.deepZ);
+  const buoyGroup=new THREE.Group();buoyGroup.name='Water-play boundary buoys';root.add(buoyGroup);
+  const buoyBatches=[];
+  for(const [colorIndex,color] of ['#ed9a77','#f0d37a','#a1c8bc','#fff6d8'].entries()){
+    const entries=colorIndex===3?WATER_PLAY_BUOYS:WATER_PLAY_BUOYS.filter(buoy=>buoy.index%3===colorIndex);
+    const object=new THREE.InstancedMesh(geometry.sphere,mat(color),entries.length);object.name=colorIndex===3?'Buoy ivory bands':`Colored bay buoys ${colorIndex+1}`;
+    object.castShadow=true;object.receiveShadow=true;buoyGroup.add(object);buoyBatches.push({object,entries,band:colorIndex===3});
+  }
   plane(WORLD.width/2,(COAST.beachStart+COAST.seaStart)/2,WORLD.width+160,COAST.seaStart-COAST.beachStart,'#f2dfb5',.026,'Long sandy beach');
   plane(WORLD.width/2,COAST.seaStart-2.4,WORLD.width+160,4.8,'#dfcea9',.03,'Wet sand shoreline');
   for(let i=0;i<36;i++) {
@@ -186,6 +211,9 @@ export function createLandscape() {
     }
   });
   label('SEASIDE BEACH',160,1.1,COAST.beachStart-1,5.4,1.05);
+  // A small beach sign locates the ball without adding another screen overlay.
+  box(WATER_PLAY.xMin+3,.9,WATER_PLAY.beachZ,.12,1.8,.12,'#b49a70');
+  label('WATER PLAY  →',WATER_PLAY.xMin+3,1.6,WATER_PLAY.beachZ,5.3,.95);
 
   // One uninterrupted channel runs out of the gorge and blends into the sea.
   const riverPoints=[];
@@ -286,8 +314,8 @@ export function createLandscape() {
   const waves=[];
   for(let row=0;row<16;row++) {
     const points=[];
-    for(let x=-90;x<=WORLD.width+90;x+=7)points.push([x,COAST.seaStart+1.2+row*9+Math.sin(x*.065+row*.9)*.75]);
-    const wave=ribbon(points,.18+row*.018,'#e0f1e3',()=>.09,1,`Sea foam ${row+1}`);
+    for(let x=-90;x<=WORLD.width+90;x+=7)points.push([x,Math.sin(x*.065+row*.9)*.75]);
+    const wave=ribbon(points,.18+row*.018,'#e0f1e3',()=>.12,1,`Sea foam ${row+1}`);
     wave.material=new THREE.MeshBasicMaterial({color:row%3?'#d9efe4':'#ecf5e6',transparent:true,opacity:row<4?.48:.24,side:THREE.DoubleSide,depthWrite:false});
     wave.receiveShadow=false;waves.push(wave);
   }
@@ -296,12 +324,27 @@ export function createLandscape() {
     const object=new THREE.InstancedMesh(geometry[shape],mat(color),matrices.length);
     matrices.forEach((matrix,index)=>object.setMatrixAt(index,matrix));object.instanceMatrix.needsUpdate=true;object.castShadow=cast;object.receiveShadow=true;object.computeBoundingSphere();object.name=`Terrain ${shape} details`;root.add(object);
   }
-  return {root,update(time=0){
+  const landscape={root,update(time=0){
     const elapsed=Number.isFinite(time)?time:0,span=RIVER.endZ-RIVER.startZ;
     for(const ripple of ripples) {
       const z=RIVER.startZ+((ripple.z-RIVER.startZ+elapsed*.6)%span+span)%span;
       ripple.mesh.position.set(riverX(z)+ripple.side*riverWidth(z)*.22,.095,z);
     }
-    waves.forEach((wave,index)=>{wave.position.z=Math.sin(elapsed*.34+index*.63)*.75;wave.material.opacity=(index<4?.36:.19)+Math.sin(elapsed*.7-index*.8)*.08;});
+    const waveSpan=waves.length*9;
+    waves.forEach((wave,index)=>{
+      const offset=((index*9-elapsed*.9)%waveSpan+waveSpan)%waveSpan;
+      wave.position.z=COAST.seaStart+1.2+offset;
+      const fade=Math.min(1,offset/3,(waveSpan-offset)/6);
+      wave.material.opacity=.025+fade*(offset<35?.38:.2);
+    });
+    for(const {object,entries,band} of buoyBatches){
+      entries.forEach((buoy,index)=>{
+        dummy.position.set(buoy.x,WATER_PLAY.waterY+.23+Math.sin(elapsed*1.7+buoy.index)*.035,buoy.z);
+        dummy.rotation.set(0,0,Math.sin(elapsed*1.2+buoy.index)*.06);
+        dummy.scale.set(band?.48:.46,band?.12:.52,band?.48:.46);dummy.updateMatrix();object.setMatrixAt(index,dummy.matrix);
+      });
+      object.instanceMatrix.needsUpdate=true;object.computeBoundingSphere();
+    }
   }};
+  landscape.update(0);return landscape;
 }

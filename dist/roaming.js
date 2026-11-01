@@ -31,8 +31,8 @@ class MinHeap {
   }
 }
 
-/** Incremental, renderer-independent walking for every unselected friend. */
-export function createRoamingController({ obstacles, world, destinations, random = Math.random }) {
+/** Incremental NPC walking; user-selected scenic visitors can stay until moved. */
+export function createRoamingController({ obstacles, world, destinations, random = Math.random, shouldStay = () => false }) {
   const states = new Map(), queue = [], cells = new Map(), globalObstacles = [];
   const bucketSize = 12, originX = Math.floor(world.minX ?? 0), originZ = Math.floor(world.minZ ?? 0);
   const columns = Math.ceil(world.width - originX) + 1, rows = Math.ceil(world.depth - originZ) + 1;
@@ -117,12 +117,23 @@ export function createRoamingController({ obstacles, world, destinations, random
     if (!states.has(player)) states.set(player, {
       status: 'waiting', until: time + .2 + (player.number ?? states.size) * .12 + roll() * .6,
       speed: 1.9 + roll() * .85, path: [], cursor: 0, version: 0, destination: null,
-      lastId: null, recent: [], visits: 0, failures: new Map(), stalled: 0, bestDistance: Infinity, selected: false,
+      lastId: null, recent: [], visits: 0, failures: new Map(), stalled: 0, bestDistance: Infinity,
+      selected: false, controlled: false, stay: false,
     });
     return states.get(player);
   }
-  function cancel(s) { s.version++; s.path = []; s.cursor = 0; s.stalled = 0; }
+  function cancel(s) {
+    s.version++; s.path = []; s.cursor = 0; s.stalled = 0;
+    if (job?.s === s) job = null;
+    for (let index = queue.length - 1; index >= 0; index--) {
+      if (queue[index].s === s) queue.splice(index, 1);
+    }
+  }
   function wait(s, time, delay) { cancel(s); s.status = 'waiting'; s.until = time + delay; }
+  function hold(s) {
+    if (s.status !== 'staying') cancel(s);
+    s.status = 'staying'; s.destination = null;
+  }
   function fail(s, time) {
     if (s.destination) s.failures.set(s.destination.id, time + 25 + roll() * 20);
     wait(s, time, .25 + roll() * .6);
@@ -248,11 +259,19 @@ export function createRoamingController({ obstacles, world, destinations, random
       for (const player of players) {
         const s = state(player, logicalTime);
         if (player === active) {
+          s.controlled = true; s.stay = Boolean(shouldStay(player));
           if (!s.selected) { cancel(s); s.selected = true; }
           s.status = 'selected';
           continue;
         }
-        if (s.selected) { s.selected = false; wait(s, logicalTime, .35 + roll() * .6); }
+        if (s.selected) {
+          s.selected = false; s.stay = Boolean(shouldStay(player));
+          if (!s.stay) wait(s, logicalTime, .35 + roll() * .6);
+        }
+        if (s.stay) {
+          if (shouldStay(player)) { hold(s); player.moving = false; continue; }
+          s.stay = false; wait(s, logicalTime, .35 + roll() * .6);
+        }
         if (s.status === 'waiting' && logicalTime >= s.until) choose(player, s, logicalTime);
       }
       plan(logicalTime);
@@ -263,8 +282,20 @@ export function createRoamingController({ obstacles, world, destinations, random
         else player.moving = false;
       }
     },
+    // Record selection immediately, including a visit and switch that happen
+    // between animation frames. The caller retains control of the position.
+    select(player, time = logicalTime) {
+      const s = state(player, time);
+      cancel(s); s.controlled = true; s.selected = true;
+      s.stay = Boolean(shouldStay(player)); s.status = 'selected'; s.destination = null;
+    },
     pause(player, time = logicalTime) {
-      const s = state(player, time); wait(s, time, .6 + roll() * .6);
+      const s = state(player, time);
+      // Explicit visits and transformations may change the scenic position.
+      // Merely walking through a scenic area as an NPC does not create a hold.
+      s.stay = s.controlled && Boolean(shouldStay(player));
+      if (s.stay && !s.selected) hold(s);
+      else wait(s, time, .6 + roll() * .6);
     },
     stateFor(player) {
       const s = states.get(player);

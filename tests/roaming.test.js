@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRoamingController } from '../dist/roaming.js';
+import { shouldStayAtScenicSpot } from '../dist/scenic-stay.js';
 import { collides } from '../dist/navigation.js';
 import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS } from '../dist/world-data.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
 import { PARK_OBSTACLES, PARK_LANDMARK } from '../dist/park.js';
 import { FOOTBALL_OBSTACLES, FOOTBALL_LANDMARK } from '../dist/football.js';
-import { TERRAIN_OBSTACLES, groundHeight, BRIDGES, BRIDGE_LANDMARKS, BEACH_LANDMARK, riverX } from '../dist/terrain-data.js';
-import { SUMMIT_DECK } from '../dist/mountain-route.js';
+import { TERRAIN_OBSTACLES, groundHeight, HILL, DECK, HILL_TRAIL, BRIDGES, BRIDGE_LANDMARKS, BEACH_LANDMARK, riverX } from '../dist/terrain-data.js';
+import { SUMMIT_DECK, MOUNTAIN_TRAIL } from '../dist/mountain-route.js';
 
 const townObstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
 const friend = (number, x, z, radius = 2.55) => ({ number, x, z, radius, moving: false, yaw: 0 });
@@ -85,7 +86,8 @@ test('all thirty unselected friends keep exploring the assembled town within a f
   const players = CHARACTERS.map((character, index) => friend(character.number, FRIEND_STARTS[index].x, FRIEND_STARTS[index].z, getCharacterMetrics(character.number).radius));
   const active = players.find(p=>p.number===11), original = { ...active }, times = [], choices = players.map(() => new Set());
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
-    destinations: [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK], random: seeded(19) });
+    destinations: [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK],
+    random: seeded(19), shouldStay: shouldStayAtScenicSpot });
   // Two cross-town trips can exceed five simulated minutes at walking speed.
   for (let frame = 0; frame < 6000; frame++) {
     const started = performance.now();
@@ -145,7 +147,7 @@ test('large frame gaps cannot tunnel through thin walls or move the active frien
   assert.ok(controller.stateFor(player).visits >= 1, 'The NPC did not find the route around the wall');
 });
 
-test('a friend left at the mountain summit can walk down to town without teleporting', () => {
+test('a never-controlled friend at the mountain summit can still walk down without teleporting', () => {
   // A previous shortest path stepped off this side of the deck onto a lower
   // loop. The side exit must be blocked or have a continuous walking surface.
   const oldExit = [{ x: 107.91205195822079, z: -5.9019596921179085 }, { x: 108.05176809958581, z: -6.042351162777199 }];
@@ -154,7 +156,8 @@ test('a friend left at the mountain summit can walk down to town without telepor
   }
   const player = friend(20, SUMMIT_DECK.x, SUMMIT_DECK.z);
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
-    destinations: [LANDMARKS.find(p => p.id === 'town-square')], random: seeded(9) });
+    destinations: [LANDMARKS.find(p => p.id === 'town-square')], random: seeded(9), shouldStay: shouldStayAtScenicSpot });
+  controller.pause(player, 0);
   let previousHeight = groundHeight(player.x, player.z), descended = false;
   for (let frame = 0; frame < 5000 && !controller.stateFor(player).visits; frame++) {
     const before = { x: player.x, z: player.z };
@@ -166,6 +169,115 @@ test('a friend left at the mountain summit can walk down to town without telepor
     previousHeight = height; descended ||= height < 1;
   }
   assert.ok(descended && controller.stateFor(player).visits >= 1, 'The unselected summit visitor never returned to town');
+});
+
+test('controlled hill, trail, and summit visitors keep their latest position after switching away', () => {
+  const scenic = [
+    { x: DECK.x, z: DECK.z },
+    { x: HILL.x, z: HILL.z - 20 },
+    MOUNTAIN_TRAIL[460],
+    { x: SUMMIT_DECK.x, z: SUMMIT_DECK.z },
+  ];
+  for (const point of scenic) {
+    const visitor = friend(0, point.x, point.z, .7), active = friend(1, 90, 145, .7);
+    const players = [visitor, active];
+    assert.equal(shouldStayAtScenicSpot(visitor), true);
+    assert.equal(collides(visitor.x, visitor.z, townObstacles, WORLD, visitor.radius), false);
+    const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
+      destinations: LANDMARKS, random: seeded(4), shouldStay: shouldStayAtScenicSpot });
+    // Selection followed immediately by another selection must work even
+    // before the animation loop has seen the first friend as active.
+    controller.select(visitor, 0); controller.select(active, 0);
+    let expected = { x: visitor.x, z: visitor.z };
+    for (let frame = 0; frame < 3000; frame++) {
+      const time = frame / 10;
+      if (frame === 1000) {
+        controller.select(visitor, time);
+        visitor.x += .1; visitor.radius = 1.1; visitor.yaw = .9;
+        controller.pause(visitor, time);
+        controller.update(players, visitor, .1, time);
+        expected = { x: visitor.x, z: visitor.z };
+        controller.select(active, time);
+      }
+      if (frame % 200 === 0) controller.pause(visitor, time);
+      controller.update(players, active, .1, time);
+      assert.deepEqual({ x: visitor.x, z: visitor.z }, expected, 'the scenic view must survive selection, a new shape, and pauses');
+      assert.equal(visitor.moving, false);
+      assert.deepEqual(controller.stateFor(visitor), {
+        state: 'staying', destination: null, id: null, pathRemaining: 0, visits: 0,
+      });
+    }
+  }
+});
+
+test('walking or fast travel back to flat ground releases a controlled scenic visitor', () => {
+  for (const method of ['walk', 'fast-travel']) {
+    const visitor = friend(7, DECK.x, DECK.z, .7), active = friend(1, 90, 145, .7);
+    const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
+      destinations: [LANDMARKS.find(p => p.id === 'sunny-lanes')], random: seeded(7), shouldStay: shouldStayAtScenicSpot });
+    controller.update([visitor, active], visitor, .1, 0);
+    controller.update([visitor, active], active, .1, .1);
+    assert.equal(controller.stateFor(visitor).state, 'staying');
+    controller.select(visitor, .2);
+    [visitor.x, visitor.z] = HILL_TRAIL[0];
+    if (method === 'fast-travel') controller.pause(visitor, .2);
+    else controller.update([visitor, active], visitor, .1, .2);
+    assert.equal(shouldStayAtScenicSpot(visitor), false);
+    const start = { x: visitor.x, z: visitor.z };
+    controller.select(active, .3);
+    for (let frame = 0; frame < 1000 && !controller.stateFor(visitor).visits; frame++) {
+      controller.update([visitor, active], active, .1, .3 + frame / 10);
+      assert.notEqual(controller.stateFor(visitor).state, 'staying');
+      assert.equal(collides(visitor.x, visitor.z, townObstacles, WORLD, visitor.radius), false);
+    }
+    assert.ok(controller.stateFor(visitor).visits > 0, `${method}: wandering must resume after leaving the hill`);
+    assert.ok(Math.hypot(visitor.x - start.x, visitor.z - start.z) > 5);
+  }
+});
+
+test('fast travel and an immediate switch retain the new scenic position before the next frame', () => {
+  const visitor = friend(0, 90, 145, .7), active = friend(1, 80, 145, .7);
+  const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
+    destinations: LANDMARKS, random: seeded(4), shouldStay: shouldStayAtScenicSpot });
+  controller.select(visitor, 0);
+  Object.assign(visitor, { x: SUMMIT_DECK.x, z: SUMMIT_DECK.z });
+  controller.pause(visitor, 0);
+  controller.select(active, 0);
+  for (let frame = 0; frame < 100; frame++) controller.update([visitor, active], active, .1, frame / 10);
+  assert.deepEqual({ x: visitor.x, z: visitor.z }, { x: SUMMIT_DECK.x, z: SUMMIT_DECK.z });
+  assert.equal(controller.stateFor(visitor).state, 'staying');
+});
+
+test('a former controlled friend does not gain a scenic hold by wandering there autonomously', () => {
+  const world = { width: 100, depth: 70, margin: 1 }, player = friend(0, 15, 35, .7);
+  const controller = createRoamingController({ obstacles: [], world, destinations: [place('scenic-side', 80, 35)],
+    random: seeded(3), shouldStay: visitor => visitor.x > 50 });
+  controller.select(player, 0);
+  for (let frame = 0; frame < 1000 && !controller.stateFor(player).visits; frame++) {
+    controller.update([player], null, .1, frame / 10);
+    assert.notEqual(controller.stateFor(player).state, 'staying');
+  }
+  assert.ok(controller.stateFor(player).visits > 0);
+  assert.ok(player.x > 50);
+});
+
+test('scenic holds remove both active planning work and queued routes', () => {
+  const world = { width: 210, depth: 210, margin: 1 };
+  let collisionChecks = 0;
+  const wall = { blocks: (x, z, radius) => { collisionChecks++; return Math.abs(x - 100) < radius + 1; } };
+  const players = Array.from({ length: 6 }, (_, number) => friend(number, 12 + number * 4, 20, .7));
+  const controller = createRoamingController({ obstacles: [wall], world,
+    destinations: [place('opposite-side', 190, 20)], random: seeded(2), shouldStay: player => player.x < 100 });
+  controller.update(players, null, 0, 0);
+  controller.update(players, null, 0, 10);
+  assert.ok(players.every(player => controller.stateFor(player).state === 'planning'), 'exercise a live search plus queued jobs');
+  for (const player of players) controller.select(player, 10);
+  const before = players.map(player => ({ x: player.x, z: player.z }));
+  collisionChecks = 0;
+  for (let frame = 0; frame < 1000; frame++) controller.update(players, null, .1, 10 + frame / 10);
+  assert.equal(collisionChecks, 0, 'held friends must not retain or generate pathfinding work');
+  assert.deepEqual(players.map(player => ({ x: player.x, z: player.z })), before);
+  assert.ok(players.every(player => controller.stateFor(player).state === 'staying'));
 });
 
 test('a transformed wide friend routes around obstacles using its new footprint', () => {

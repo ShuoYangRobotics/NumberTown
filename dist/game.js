@@ -6,21 +6,23 @@ import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from './world-d
 import { movementVector, moveWithCollisions, nearestOpenPosition, angleLerp, collides } from './navigation.js';
 import { EMOTIONS, chooseRemark } from './personalities.js';
 import { createRoamingController } from './roaming.js';
+import { shouldStayAtScenicSpot } from './scenic-stay.js';
 import { toSpokenMath } from './speech.js';
 import { mountCharacterShortcut } from './character-shortcut.js';
 import { getCharacterArrangements, getNextArrangement, findArrangementPosition } from './arrangements.js';
 
 import { createLandscape } from './terrain.js';
-import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
+import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
 import { createPark, PARK_LANDMARK, PARK_OBSTACLES } from './park.js';
 import { createFootball, createBallState, stepBall, kickBall, updateBallContact, resetBall, FOOTBALL_LANDMARK, FOOTBALL_OBSTACLES } from './football.js';
-import { BRIDGES, RIVER, COAST, riverX } from './geography.js';
+import { BRIDGES, RIVER, COAST, WATER_PLAY, riverX } from './geography.js';
+import { createWaterBall, createWaterBallState, stepWaterBall, pickUpWaterBall, updateHeldWaterBall, throwWaterBall, releaseWaterBall, resetWaterBall } from './water-ball.js';
 import { mountTownMap } from './town-map.js';
 import { SUMMIT, SUMMIT_DECK, MOUNTAIN_TRAIL, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, mountainHeight, isOnMountainRoute, nearestTrailPoint, mountainProgress } from './mountain-route.js';
 
 const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TERRAIN_OBSTACLES];
-const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK];
-const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains'].includes(p.id))});
+const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK];
+const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,shouldStay:shouldStayAtScenicSpot,destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains','water-play'].includes(p.id))});
 const BRIDGE_IDS=new Set(BRIDGE_LANDMARKS.map(p=>p.id));
 const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
@@ -61,8 +63,10 @@ sunlight.shadow.normalBias = .035;
 scene.add(sunlight, sunlight.target);
 const fillLight = new THREE.DirectionalLight('#d8eaf5', .8); fillLight.position.set(85,25,10); scene.add(fillLight);
 const town = createTown(), landscape=createLandscape(), park=createPark(), football=createFootball(), ballState=createBallState();
-scene.add(town.root,landscape.root,park.root,football.root);
+const waterBall=createWaterBall(), waterBallState=createWaterBallState();
+scene.add(town.root,landscape.root,park.root,football.root,waterBall.root);
 football.update(ballState,0);
+waterBall.update(waterBallState,0);
 
 const players = CHARACTERS.map((definition,index) => {
   const model = createCharacter(definition.number);
@@ -88,7 +92,7 @@ const selectionShadow = new THREE.Mesh(new THREE.CircleGeometry(1,40),new THREE.
 selectionShadow.rotation.x=-Math.PI/2;selectionShadow.position.y=.13;scene.add(selectionShadow);
 
 let time=0, lastTime=0, muted=true, nextRemark=9, currentPlace=null, audioContext;
-let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, activityUntil=0, activityMessage='';
+let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, throwCount=0, activityUntil=0, activityMessage='';
 let guidedWalk=null,trailNoticeUntil=0;
 const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
 let drag=null, pinchDistance=0, suppressClick=false;
@@ -123,7 +127,9 @@ for(const definition of CHARACTERS){
 }
 function focusGame(){canvas.focus({preventScroll:true});}
 function selectFriend(number, initial=false){
-  cancelVoice();active=players.find(p=>p.number===number)||players.find(p=>p.number===1);clearInput();roaming.pause(active,time);active.yaw=orbit.yaw-(active.number===27&&active.formId==='original'?.45:0);
+  const next=players.find(p=>p.number===number)||players.find(p=>p.number===1);
+  if(next!==active)releaseWaterBall(waterBallState,active);
+  cancelVoice();active=next;clearInput();roaming.select(active,time);active.yaw=orbit.yaw-(active.number===27&&active.formId==='original'?.45:0);
   document.querySelectorAll('.friend-card').forEach(button=>button.setAttribute('aria-pressed',String(+button.dataset.number===active.number)));
   $('#friend-name').textContent=active.name;$('#friend-description').textContent=active.description;
   $('#block-count').textContent=`${active.number} ${active.number===1?'cube':'cubes'}`;
@@ -201,6 +207,7 @@ for(const id of ['town-square','pond','park','football','hill','river','beach','
 }
 function walkingObstacles(player){return [...ALL_OBSTACLES,...players.filter(p=>p!==player).map(p=>({x:p.x,z:p.z,radius:p.radius+.08}))];}
 function visit(place){
+  releaseWaterBall(waterBallState,active);
   clearInput();closeMood();
   const obstacles=walkingObstacles(active);
   const arrival=place.id==='mountain-trail'?(MOUNTAIN_TRAIL.find(p=>!collides(p.x,p.z,obstacles,WORLD,active.radius))||place.arrival):place.arrival;
@@ -208,7 +215,7 @@ function visit(place){
   roaming.pause(active,time);active.jump=0;active.jumpVelocity=0;currentPlace=place;
   const presets={
     'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
-    hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],mountains:[0,.43,180],
+    hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],'water-play':[Math.PI,.55,44],mountains:[0,.43,180],
     'mountain-trail':[.25,.59,180],summit:[Math.PI,.5,100],
   };
   const preset=presets[place.id]||(BRIDGE_IDS.has(place.id)?[0,.64,100]:[.26,.64,55]);
@@ -220,12 +227,16 @@ function visit(place){
   setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:BRIDGE_IDS.has(place.id)?'river':place.id});updateLocation();focusGame();
 }
 function findPlace(player){
+  if(inWaterPlayArea(player))return player.z>=WATER_PLAY.shoreZ-1?WATER_PLAY_LANDMARK:BEACH_LANDMARK;
   if(isOnMountainRoute(player.x,player.z)){
     if(Math.abs(player.x-SUMMIT_DECK.x)<=SUMMIT_DECK.width/2&&Math.abs(player.z-SUMMIT_DECK.z)<=SUMMIT_DECK.depth/2)return SUMMIT_LANDMARK;
     return MOUNTAIN_TRAIL_LANDMARK;
   }
-  return ALL_PLACES.filter(place=>!['mountain-trail','summit'].includes(place.id)&&Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;
+  return ALL_PLACES.filter(place=>!['mountain-trail','summit','water-play'].includes(place.id)&&Math.hypot(player.x-place.x,player.z-place.z)<place.radius).sort((a,b)=>Math.hypot(player.x-a.x,player.z-a.z)-Math.hypot(player.x-b.x,player.z-b.z))[0]||null;
 }
+function inWaterPlayArea(player){return player.x>=WATER_PLAY.xMin&&player.x<=WATER_PLAY.xMax&&player.z>=WATER_PLAY.beachZ&&player.z<=WATER_PLAY.deepZ;}
+function isWaterActivity(player,place){return inWaterPlayArea(player)||place?.id==='beach'||waterBallState.heldBy===player.number;}
+function carrierPose(player){return {...player,groundY:groundHeight(player.x,player.z)};}
 function updateLocation(){
   const place=findPlace(active);
   if(place?.id!==currentPlace?.id){currentPlace=place;}
@@ -294,7 +305,7 @@ addEventListener('keydown',event=>{
   if(!event.repeat&&key==='e'){const index=EMOTIONS.findIndex(m=>m.id===active.emotion);setEmotion(active,EMOTIONS[(index+1)%EMOTIONS.length].id,25);remark(active);}
   if(key==='q'||key==='r'){event.preventDefault();if(guidedWalk)guidedWalk.autoCamera=false;keys.add(key);if(!event.repeat)orbit.yaw+=(key==='q'?-.12:.12);}
   if(!event.repeat&&key==='c')resetCamera();
-  if(!event.repeat&&key==='f'){event.preventDefault();kick();}
+  if(!event.repeat&&key==='f'){event.preventDefault();playBall();}
   if(!event.repeat&&(key==='+'||key==='='))zoom(-3);
   if(!event.repeat&&(key==='-'||key==='_'))zoom(3);
   if(!event.repeat&&key==='[')adjacentFriend(-1);
@@ -363,8 +374,22 @@ function kick(){
   else{activityMessage='Walk closer to the ball, then press F to kick.';activityUntil=time+2.5;}
   updateActivity(findPlace(active));focusGame();
 }
+function playBall(){
+  if(modalOpen()||active.jump>.3)return;
+  if(!isWaterActivity(active,findPlace(active))){kick();return;}
+  const pose=carrierPose(active);
+  if(waterBallState.heldBy===active.number){
+    if(throwWaterBall(waterBallState,pose)){throwCount++;tone();activityMessage='Splash! The waves will bring the ball back toward the beach.';}
+  }else if(pickUpWaterBall(waterBallState,pose)){
+    tone();activityMessage='Got it! Face a direction with WASD, then press F to throw.';
+  }else activityMessage='Walk closer to the beach ball, then press F to pick it up.';
+  activityUntil=time+3.5;updateActivity(findPlace(active));focusGame();
+}
 $('#kick-ball').addEventListener('click',kick);
 $('#reset-ball').addEventListener('click',()=>{resetBall(ballState);activityMessage='Ball back at the center. Ready to play!';activityUntil=time+3;updateActivity(findPlace(active));focusGame();});
+$('#water-ball-action').addEventListener('click',playBall);
+$('#reset-water-ball').addEventListener('click',()=>{resetWaterBall(waterBallState);activityMessage='The beach ball is back in the shallows.';activityUntil=time+3;updateActivity(findPlace(active));focusGame();});
+$('#enter-water').addEventListener('click',()=>visit(WATER_PLAY_LANDMARK));
 $('#view-sea').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw=Math.PI;orbit.elevation=.35;orbit.targetDistance=currentPlace?.id==='summit'?210:95;zoom(0);focusGame();});
 $('#view-town').addEventListener('click',()=>{if(guidedWalk)guidedWalk.autoCamera=false;orbit.yaw=currentPlace?.id==='summit'?Math.PI:0;orbit.elevation=.44;orbit.targetDistance=currentPlace?.id==='summit'?140:100;zoom(0);focusGame();});
 function followTrail(direction){
@@ -377,9 +402,12 @@ function followTrail(direction){
 $('#follow-trail').addEventListener('click',()=>followTrail(1));
 $('#descend-trail').addEventListener('click',()=>followTrail(-1));
 function updateActivity(place){
-  const id=place?.id,isFootball=id==='football',isLookout=id==='lookout'||id==='summit',isTrail=id==='mountain-trail'||id==='summit';
-  $('#activity').hidden=!['park','football','hill','lookout','beach','mountains','town-square','pond','mountain-trail','summit'].includes(id)&&!BRIDGE_IDS.has(id);
+  const id=place?.id,isFootball=id==='football',isLookout=id==='lookout'||id==='summit',isTrail=id==='mountain-trail'||id==='summit',isWater=isWaterActivity(active,place);
+  $('#activity').hidden=!isWater&&!['park','football','hill','lookout','beach','water-play','mountains','town-square','pond','mountain-trail','summit'].includes(id)&&!BRIDGE_IDS.has(id);
   $('#football-actions').hidden=!isFootball;$('#lookout-actions').hidden=!isLookout;
+  $('#water-actions').hidden=!isWater;$('#enter-water').hidden=id==='water-play';
+  $('#water-ball-action').innerHTML=`${waterBallState.heldBy===active.number?'Throw':'Pick up'} <kbd>F</kbd>`;
+  $('#water-ball-action').setAttribute('aria-label',waterBallState.heldBy===active.number?'Throw beach ball':'Pick up beach ball');
   $('#trail-actions').hidden=!isTrail;$('#trail-progress').hidden=!isTrail;
   $('#trail-progress').value=isTrail?mountainProgress(active.x,active.z)*100:0;
   $('#follow-trail').hidden=id==='summit'&&!guidedWalk;$('#follow-trail').textContent=guidedWalk?'Pause walk':'Follow trail';
@@ -387,13 +415,13 @@ function updateActivity(place){
   let title='',detail='';
   if(isFootball){title=`Football · ${ballState.goals} ${ballState.goals===1?'goal':'goals'}`;detail=time<activityUntil?activityMessage:'Walk into the ball to dribble · F to kick in your walking direction';}
   if(id==='park'){title='Wheel Park · 18 cabins';detail='Count the colorful cabins as they turn. Take a stroll through the park.';}
-  if(id==='hill'){title=`Sunny Hill · ${Math.round(groundHeight(active.x,active.z))} / 12 m`;detail='Follow the cream trail up to the scenic deck. WASD to climb.';}
-  if(isLookout){title='You made it! · Scenic deck';detail='A long beach and open sea to the south. Drag to enjoy the view.';}
+  if(id==='hill'){title=`Sunny Hill · ${Math.round(groundHeight(active.x,active.z))} / 12 m`;detail='WASD to follow the cream trail. Your friend stays on the hill when you switch away.';}
+  if(isLookout){title='You made it! · Scenic deck';detail='Enjoy the view. Your friend stays here, even when you choose another number. WASD to leave.';}
   if(BRIDGE_IDS.has(id)){title=place.name;detail='Follow the river from the mountains to the sea. Three bridges join the banks.';}
-  if(id==='beach'){title='Long Beach · Southern Sea';detail='Take a walk along the sand. The river meets the sea just along the shore.';}
+  if(isWater){title=id==='water-play'?'Water play · Beach ball':'Long Beach · Southern Sea';detail=time<activityUntil?activityMessage:waterBallState.heldBy===active.number?'Face a direction with WASD, then F to throw. The waves carry the ball toward shore.':'Wade between the buoys. F picks up or throws the beach ball; waves bring it toward the sand.';}
   if(id==='mountains'){title='The northern mountains';detail='A paved path winds around one peak. Visit Mountain trail to begin the climb.';}
   if(id==='mountain-trail'){title=`Summit Walk · ${Math.round(groundHeight(active.x,active.z))} / ${SUMMIT_DECK.height} m`;detail=time<trailNoticeUntil?'A friend is on the path. Use WASD to walk around them.':guidedWalk?'Enjoy the climb. WASD takes over whenever you like.':'Follow the paved bends with WASD, or take a guided walk to the top.';}
-  if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Look across NumberTown, the river, and the sea. Drag to enjoy the panorama.';}
+  if(id==='summit'){title=`You made it! · ${SUMMIT_DECK.height} m summit deck`;detail='Your friend stays here when you switch away. Drag to look around; Walk down when you are ready.';}
   if(id==='town-square'){title="Cube Square · Rubik’s cube statue";detail='A colorful cube balances on one corner, spinning at 50° per second.';}
   if(id==='pond'){title='The big duck pond';detail='Follow the shore and say hello to the ducks.';}
 
@@ -469,18 +497,25 @@ function animate(timestamp){
     if(active.jump<.3)updateBallContact(ballState,active,dt);
     const goal=stepBall(ballState,dt);football.update(ballState,time);
     if(goal){activityMessage=`Goal! ${ballState.goals} scored. Back to the center!`;activityUntil=time+4;setEmotion(active,'excited',8);tone();}
+    if(waterBallState.heldBy!==null){
+      const carrier=players.find(player=>player.number===waterBallState.heldBy);
+      if(!carrier||!inWaterPlayArea(carrier))releaseWaterBall(waterBallState,carrier);
+      else updateHeldWaterBall(waterBallState,carrierPose(carrier),time);
+    }
+    stepWaterBall(waterBallState,dt,time);waterBall.update(waterBallState,reducedMotion?0:time);
 
   }else active.moving=false;
   updateCamera(dt);
-  const radiusX=Math.max(.9,active.width*.57),radiusZ=Math.max(.85,(active.depth||1)*.65);selectedRing.scale.set(radiusX,radiusZ,1);selectedRing.rotation.set(-Math.PI/2,0,active.yaw);selectedRing.position.x=active.x;selectedRing.position.z=active.z;selectedRing.position.y=groundHeight(active.x,active.z)+.16;
+  const radiusX=Math.max(.9,active.width*.57),radiusZ=Math.max(.85,(active.depth||1)*.65);selectedRing.scale.set(radiusX,radiusZ,1);selectedRing.rotation.set(-Math.PI/2,0,active.yaw);selectedRing.position.x=active.x;selectedRing.position.z=active.z;selectedRing.position.y=Math.max(groundHeight(active.x,active.z)+.16,inWaterPlayArea(active)&&active.z>=WATER_PLAY.shoreZ?WATER_PLAY.waterY+.055:-Infinity);
   selectionShadow.scale.set(radiusX*.9,radiusZ*.85,1);selectionShadow.rotation.set(-Math.PI/2,0,active.yaw);selectionShadow.position.x=active.x;selectionShadow.position.z=active.z;selectionShadow.position.y=groundHeight(active.x,active.z)+.13;
+  selectionShadow.visible=!(inWaterPlayArea(active)&&active.z>=WATER_PLAY.shoreZ);
   sunlight.target.position.set(active.x,groundHeight(active.x,active.z),active.z);sunlight.position.set(active.x-24,groundHeight(active.x,active.z)+63,active.z-2);
   updateBubbles();renderer.render(scene,camera);
   frameCount++;
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();if(active.number===21)updateBackpackButton();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+groundHeight(active.x,active.z).toFixed(2),staying:shouldStayAtScenicSpot(active)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

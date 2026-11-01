@@ -12,6 +12,7 @@ export const HILL = Object.freeze({x:130,z:341,radius:32,plateau:9,height:12});
 export const DECK = Object.freeze({x:130,z:341,width:14,depth:12,height:12.28});
 export const HILL_TRAIL = [[130,307],[121,313],[112,324],[113,330],[121,330],[130,331],[130,337],[130,341]];
 export const COAST = Object.freeze({beachStart:377,seaStart:398,seaEnd:1000});
+export const WATER_PLAY = Object.freeze({xMin:90,xMax:205,shoreZ:398,deepZ:438,beachZ:379,spawn:Object.freeze({x:160,z:410}),waterY:.045});
 export const MOUNTAINS = Object.freeze({minZ:-65,maxZ:68,ridgeZ:18,height:74});
 export const PARK_OFFSET = Object.freeze({x:112,z:70});
 export const FIELD_OFFSET = Object.freeze({x:112,z:70});

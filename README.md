@@ -42,7 +42,7 @@ Source: [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/Number
 
 Use **WASD** or the arrow keys to walk. Drag to turn the camera and scroll to zoom. Select a numbered thumbnail, or press **Tab**, type **0–30**, then press **Enter**. Press **M** for the town map.
 
-The town has 70 homes, 10 stores, a library, school, and town hall. Visit the spinning cube statue, duck pond, 18-cabin Ferris wheel, football pitch, seaside hill, and mountain summit. One through Thirty contain 465 unit cubes in total; Zero is a floating smile with no blocks.
+The town has 70 homes, 10 stores, a library, school, and town hall. Visit the spinning cube statue, duck pond, 18-cabin Ferris wheel, football pitch, seaside hill, and mountain summit. Hill and mountain visitors stay put when you switch characters. At the beach, choose **Water play** to wade into the sea; **F** picks up and throws a beach ball that the waves carry toward shore. One through Thirty contain 465 unit cubes in total; Zero is a floating smile with no blocks.
 
 - [Playing guide](docs/PLAYING.md): all controls, activities, shapes, and math speech.
 - [Development guide](docs/DEVELOPMENT.md): source layout, tests, and browser debugging.

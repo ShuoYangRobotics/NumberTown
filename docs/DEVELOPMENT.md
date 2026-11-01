@@ -32,9 +32,11 @@ Paths below are relative to the repository root.
 | `dist/mountain-summit.js` | Mountain surfaces, paving, summit deck, and scenery |
 | `dist/park.js` | Ferris wheel, upright cabins, and park scenery |
 | `dist/football.js` | Pitch and ball geometry, kicks, dribbling, physics, scoring, and reset |
+| `dist/water-ball.js` | Beach ball geometry, pickup, carrying, throw arcs, buoyancy, shoreward current, and sand drag |
 | `dist/town-map.js` | Map geometry, destination buttons, and player marker |
 | `dist/navigation.js` | Camera-relative movement, collision checks, and safe positions |
 | `dist/roaming.js` | Destination choice, route planning, and unselected character movement |
+| `dist/scenic-stay.js` | Hill and mountain regions where user-controlled friends retain their position |
 | `dist/personalities.js` | Emotions, contextual dialogue, and truthful math facts for the current form |
 | `dist/speech.js` | Conversion of written equations into spoken operator words |
 | `dist/vendor/` | Pinned Three.js modules and license |
@@ -64,7 +66,7 @@ The equivalent command without npm is:
 node --test --test-concurrency=1 tests/*.test.js
 ```
 
-Tests cover character geometry and arrangements, counts, controls, collision and terrain behavior, roaming, football, park animation, math facts, and speech conversion. Test files run sequentially so CPU-heavy suites do not compete with roaming frame-budget checks.
+Tests cover character geometry and arrangements, counts, controls, collision and terrain behavior, roaming and scenic stays, football, beach ball physics, shallow-water boundaries, park animation, math facts, and speech conversion. Test files run sequentially so CPU-heavy suites do not compete with roaming frame-budget checks.
 
 Run the Python launcher tests with Python 3.9+:
 
@@ -74,7 +76,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 ## Browser checks
 
-Open [http://127.0.0.1:5181/?debug=1](http://127.0.0.1:5181/?debug=1) for coordinates, camera angles, shape and cube counts, rendering statistics, roaming state, and runtime errors. Adjust the port in the URL if you started a different one.
+Open [http://127.0.0.1:5181/?debug=1](http://127.0.0.1:5181/?debug=1) for coordinates, camera angles, shape and cube counts, rendering statistics, roaming/staying state, beach ball position and carrier, and runtime errors. Adjust the port in the URL if you started a different one.
 
 For interface or rendering changes, check the affected behavior in the browser as well as the relevant tests. Useful checks include Zero and a wide transformed character, number entry and keyboard focus, touch controls at a narrow viewport, collision near scenery, and the map’s destination buttons. Changes to character speech should keep the displayed equation intact and stop the previous voice when switching friends.
 

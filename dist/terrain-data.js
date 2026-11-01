@@ -1,7 +1,7 @@
 /** Rendering and walking share the immutable geographic plan. */
-import { WORLD, HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, MOUNTAINS, riverX, riverWidth } from './geography.js';
+import { WORLD, HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, riverX, riverWidth } from './geography.js';
 import { mountainWalkHeight, isOnMountainRoute, SUMMIT_OBSTACLES } from './mountain-route.js';
-export { HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, MOUNTAINS, riverX, riverWidth } from './geography.js';
+export { HILL, DECK, HILL_TRAIL, RIVER, BRIDGES, COAST, WATER_PLAY, MOUNTAINS, riverX, riverWidth } from './geography.js';
 
 const smoothstep = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 export function hillHeight(x, z) {
@@ -14,6 +14,11 @@ export function bridgeHeight(bridge, x) {
   const distanceToEnd = bridge.span / 2 - Math.abs(x - bridge.x);
   return bridge.height * smoothstep(distanceToEnd / 6);
 }
+/** A gentle sand shelf, shallow enough that even Zero's smile clears the water. */
+export function waterPlayHeight(x, z) {
+  const across = smoothstep((x - WATER_PLAY.xMin) / 8) * smoothstep((WATER_PLAY.xMax - x) / 8);
+  return -.2 * across * smoothstep((z - WATER_PLAY.shoreZ) / 18);
+}
 export function groundHeight(x, z) {
   const mountain = mountainWalkHeight(x, z);
   if (mountain !== null) return mountain;
@@ -22,7 +27,7 @@ export function groundHeight(x, z) {
   for (const bridge of BRIDGES) {
     if (Math.abs(z - bridge.z) <= bridge.width / 2 && Math.abs(x - bridge.x) < bridge.span / 2) height = Math.max(height, bridgeHeight(bridge, x));
   }
-  return height;
+  return height + waterPlayHeight(x, z);
 }
 
 export const HILL_LANDMARK = Object.freeze({ id: 'hill', name: 'Hill trail', description: 'Follow the winding path up to the seaside lookout.', x: HILL.x, z: HILL.z - 7, radius: 37, arrival: Object.freeze({ x: HILL_TRAIL[0][0], z: HILL_TRAIL[0][1] }) });
@@ -35,9 +40,14 @@ export const BRIDGE_LANDMARKS = Object.freeze(BRIDGES.map((bridge, index) => Obj
 })));
 export const RIVER_LANDMARK = BRIDGE_LANDMARKS[1];
 export const BEACH_LANDMARK = Object.freeze({ id: 'beach', name: 'Seaside beach', description: 'Walk along the sand and watch the rolling waves.', x: 160, z: 385, radius: 36, arrival: Object.freeze({ x: 160, z: 385 }) });
+export const WATER_PLAY_LANDMARK = Object.freeze({ id: 'water-play', name: 'Water play', description: 'Wade into the shallow turquoise bay and play with the floating beach ball.', x: 160, z: 410, radius: 31, arrival: Object.freeze({ x: 160, z: 403 }) });
 export const MOUNTAIN_LANDMARK = Object.freeze({ id: 'mountains', name: 'Mountain view', description: 'Look up at the rugged peaks and the river gorge.', x: 130, z: 79, radius: 34, arrival: Object.freeze({ x: 130, z: 79 }) });
 export const HILL_TREES = Object.freeze([.12, .75, 1.24, 1.98, 2.65, 3.35, 4.55, 5.5].map((angle, index) => Object.freeze({ x: HILL.x + Math.cos(angle) * (25 + index % 3), z: HILL.z + Math.sin(angle) * (25 + index % 3), height: 4.5 + index % 3 * .6, radius: 1.8 })));
 export const BEACH_UMBRELLAS = Object.freeze([[54, 384], [104, 386], [189, 384], [294, 385], [350, 384], [405, 386]].map(([x, z], index) => Object.freeze({ x, z, index, radius: 2.9 })));
+export const WATER_PLAY_BUOYS = Object.freeze([
+  ...[WATER_PLAY.xMin, WATER_PLAY.xMax].flatMap(x => [407, 422].map(z => ({ x, z }))),
+  ...Array.from({ length: 9 }, (_, index) => ({ x: WATER_PLAY.xMin + (WATER_PLAY.xMax - WATER_PLAY.xMin) * index / 8, z: WATER_PLAY.deepZ })),
+].map((point, index) => Object.freeze({ ...point, radius: .6, index })));
 
 const water = [];
 for (let z = Math.floor(RIVER.startZ); z < RIVER.endZ; z++) {
@@ -54,7 +64,11 @@ export const TERRAIN_OBSTACLES = Object.freeze([
   { id: 'mountain-range', kind: 'mountain', x: -100, z: RIVER.startZ - 40, w: WORLD.width + 200, d: MOUNTAINS.maxZ - RIVER.startZ + 40,
     blocks: (x, z, radius) => z - radius < MOUNTAINS.maxZ && !isOnMountainRoute(x, z, radius) },
   ...SUMMIT_OBSTACLES,
-  { id: 'open-sea', kind: 'sea', x: -500, z: COAST.seaStart, w: WORLD.width + 1000, d: COAST.seaEnd - COAST.seaStart + 100 },
+  // The beach opens into one shallow bay. Ordinary rectangle collisions keep
+  // the whole character footprint inside its side and deep-water boundaries.
+  { id: 'open-sea-west', kind: 'sea', x: -500, z: COAST.seaStart, w: WATER_PLAY.xMin + 500, d: WATER_PLAY.deepZ - COAST.seaStart },
+  { id: 'open-sea-east', kind: 'sea', x: WATER_PLAY.xMax, z: COAST.seaStart, w: WORLD.width + 500 - WATER_PLAY.xMax, d: WATER_PLAY.deepZ - COAST.seaStart },
+  { id: 'open-sea', kind: 'sea', x: -500, z: WATER_PLAY.deepZ, w: WORLD.width + 1000, d: COAST.seaEnd - WATER_PLAY.deepZ + 100 },
   { id: 'deck-west', kind: 'rail', x: west - .1, z: north - .1, w: .2, d: DECK.depth + .2 },
   { id: 'deck-east', kind: 'rail', x: east - .1, z: north - .1, w: .2, d: DECK.depth + .2 },
   { id: 'deck-south', kind: 'rail', x: west - .1, z: south - .1, w: DECK.width + .2, d: .2 },
@@ -64,4 +78,5 @@ export const TERRAIN_OBSTACLES = Object.freeze([
   ...BRIDGES.flatMap(bridge => [-1, 1].map(side => ({ id: `${bridge.id}-${side < 0 ? 'north' : 'south'}-rail`, kind: 'rail', x: bridge.x - (bridge.span - 14) / 2 - .1, z: bridge.z + side * (bridge.width / 2 + .2) - .1, w: bridge.span - 14 + .2, d: .2 }))),
   ...HILL_TREES.map((tree, index) => ({ ...tree, id: `hill-tree-${index}`, kind: 'tree' })),
   ...BEACH_UMBRELLAS.map(umbrella => ({ ...umbrella, id: `beach-umbrella-${umbrella.index}`, kind: 'umbrella' })),
+  ...WATER_PLAY_BUOYS.map(buoy => ({ ...buoy, id: `water-play-buoy-${buoy.index}`, kind: 'buoy' })),
 ].map(obstacle => Object.freeze(obstacle)));

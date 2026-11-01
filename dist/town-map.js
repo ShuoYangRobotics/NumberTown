@@ -1,5 +1,6 @@
 import {WORLD,BUILDINGS,ROAD_SEGMENTS,POND,SQUARE} from './world-data.js';
-import {HILL,DECK,BRIDGES,HILL_TRAIL,COAST,riverX,riverWidth} from './geography.js';
+import {HILL,DECK,BRIDGES,HILL_TRAIL,COAST,WATER_PLAY,riverX,riverWidth} from './geography.js';
+import {WATER_PLAY_BUOYS} from './terrain-data.js';
 import {FIELD} from './football.js';
 import {PARK} from './park.js';
 import {MOUNTAIN_TRAIL,SUMMIT_DECK} from './mountain-route.js';
@@ -15,10 +16,13 @@ export function mountTownMap(container,places,onVisit){
   const ridges=[...Array(9)].map((_,i)=>{const x=10+i*50;if(Math.abs(x-240)<30)return '';return `<path d="M${x-37} 66L${x} ${-66+i%3*8}L${x+37} 66Z" fill="${i%2?'#9caeb1':'#b0bfc0'}"/><path d="M${x-8} ${-42+i%3*8}L${x} ${-66+i%3*8}L${x+8} ${-42+i%3*8}L${x+2} ${-46+i%3*8}L${x-3} ${-39+i%3*8}Z" fill="#eff3e8"/>`;}).join('');
   const bridgePaths=BRIDGES.map(b=>`<path d="M${b.x-b.span/2} ${b.z}h${b.span}" stroke="#bd9668" stroke-width="${b.width}"/><path d="M${b.x-b.span/2} ${b.z}h${b.span}" stroke="#ead1a1" stroke-width="${b.width-3}"/>`).join('');
   const cube=['#ed7268','#f0c95d','#79b8a2','#f3ebd4','#78a3c9','#e9a867','#7fa8c9','#e9aa62','#e77d76'].map((c,i)=>`<rect x="${SQUARE.x-6+(i%3)*4}" y="${SQUARE.z-6+Math.floor(i/3)*4}" width="3.6" height="3.6" rx=".4" fill="${c}"/>`).join('');
-  container.innerHTML=`<svg viewBox="0 ${WORLD.minZ} ${WORLD.width} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: fifty west-bank houses, twenty east-bank houses, three river bridges, eastern park and football, a winding path to a northern summit deck, and a southern beach and sea.">
+  container.innerHTML=`<svg viewBox="0 ${WORLD.minZ} ${WORLD.width} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: fifty west-bank houses, twenty east-bank houses, three river bridges, eastern park and football, a winding path to a northern summit deck, and a southern beach with a shallow water-play bay.">
     <rect y="${WORLD.minZ}" width="${WORLD.width}" height="${WORLD.depth-WORLD.minZ}" rx="8" fill="#dce6c9"/>
     <rect x="0" y="${COAST.beachStart}" width="${WORLD.width}" height="${WORLD.depth-COAST.beachStart}" fill="#efdeb0"/>
     <rect x="0" y="${COAST.seaStart}" width="${WORLD.width}" height="${WORLD.depth-COAST.seaStart}" fill="#87bfcb"/>
+    <rect x="${WATER_PLAY.xMin}" y="${WATER_PLAY.shoreZ}" width="${WATER_PLAY.xMax-WATER_PLAY.xMin}" height="${WATER_PLAY.deepZ-WATER_PLAY.shoreZ}" fill="#b1e1d5"/>
+    <path d="M${WATER_PLAY.xMin} ${WATER_PLAY.shoreZ}V${WATER_PLAY.deepZ}H${WATER_PLAY.xMax}V${WATER_PLAY.shoreZ}" fill="none" stroke="#f8efca" stroke-width="1" stroke-dasharray="2 3"/>
+    ${WATER_PLAY_BUOYS.map(buoy=>`<circle cx="${buoy.x}" cy="${buoy.z}" r="1.5" fill="${['#ed9a77','#f0d37a','#9cc4b7'][buoy.index%3]}"/>`).join('')}
     <path d="M0 ${COAST.seaStart+2}H${WORLD.width}" stroke="#eaf4dd" stroke-width="3"/>
     <g fill="none" stroke="#f6efd8" stroke-linecap="round">${roads}</g>
     <rect x="${SQUARE.x-SQUARE.w/2}" y="${SQUARE.z-SQUARE.d/2}" width="${SQUARE.w}" height="${SQUARE.d}" rx="4" fill="#f0dfbf"/>
@@ -46,7 +50,7 @@ export function mountTownMap(container,places,onVisit){
     <text class="map-area" x="112" y="74">WEST BANK · 50 HOMES</text>
     <text class="map-area" x="343" y="74">EAST BANK · 20 HOMES</text>
     <text x="340" y="-49">HIGH MOUNTAINS</text>
-    <text x="220" y="389">LONG BEACH</text><text class="map-sea" x="220" y="430">THE SOUTHERN SEA</text>
+    <text x="220" y="389">LONG BEACH</text><text x="${(WATER_PLAY.xMin+WATER_PLAY.xMax)/2}" y="421">WATER PLAY</text><text class="map-sea" x="316" y="437">THE SOUTHERN SEA</text>
     <g id="map-player" transform="translate(${SQUARE.x} ${SQUARE.z})"><circle r="5.8" fill="#fdf6d9"/><circle r="3.6" fill="#d96658" stroke="#fff" stroke-width=".9"/></g>
   </svg><p class="map-key"><span class="map-dot"></span> You are here <span>Choose a place to visit ↓</span></p><div class="map-places"></div>`;
   for(const place of places.filter(p=>p.id!=='lookout')){
