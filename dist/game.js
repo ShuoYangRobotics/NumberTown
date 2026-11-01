@@ -115,7 +115,7 @@ function miniSVG(definition) {
   return `<svg viewBox="-.2 ${-.1-(depth-1)*.25} ${w+.4+(depth-1)*.4} ${h+.4+(depth-1)*.25}" aria-hidden="true">${depthFaces}${cubes}${face}<path d="M ${cx-.22} ${mouthY} q .22 .2 .44 0" fill="none" stroke="#854352" stroke-width=".07" stroke-linecap="round"/></svg>`;
 }
 for(const definition of CHARACTERS){
-  const button=document.createElement('button');button.type='button';button.className=definition.number>20?'friend-card long-name':'friend-card';button.dataset.number=definition.number;
+  const button=document.createElement('button');button.type='button';button.className='friend-card';button.dataset.number=definition.number;
   button.title=`${definition.name} · ${definition.number} blocks`;
   button.setAttribute('aria-label',`Play as ${definition.name}, ${definition.number} blocks`);button.setAttribute('aria-pressed','false');
   button.innerHTML=`<span class="friend-number">${definition.number}</span>${definition.number===0?'<span class="new-dot" aria-hidden="true"></span>':''}<span class="mini">${miniSVG(definition)}</span><span class="friend-label">${definition.name}</span>`;
