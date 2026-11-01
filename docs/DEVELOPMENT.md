@@ -22,7 +22,7 @@ Paths below are relative to the repository root.
 | `dist/game.js` | Scene setup, camera, input, selection, game loop, and interface integration |
 | `dist/character-data.js` | Number identities, cube layouts, display dimensions, and collision sizes |
 | `dist/characters3d.js` | Character geometry, expressions, accessories, and animation |
-| `dist/arrangements.js` | Factor rectangles, original forms, and safe placement when changing shape |
+| `dist/arrangements.js` | Factor rectangles, connected irregular forms, seeded random growth, and safe shape placement |
 | `dist/character-shortcut.js` | Tab-and-number selection, validation, and focus behavior |
 | `dist/geography.js` | Shared world bounds, river course, coast, bridges, hills, and activity offsets |
 | `dist/world-data.js` | Buildings, roads, scenery obstacles, destinations, and spawn positions |
@@ -45,6 +45,8 @@ Paths below are relative to the repository root.
 | `dist/roaming.js` | Destination choice, route planning, and unselected character movement |
 | `dist/scenic-stay.js` | Hill and mountain regions where user-controlled friends retain their position |
 | `dist/personalities.js` | Emotions, contextual dialogue, and truthful math facts for the current form |
+| `dist/voice-profiles.js` | Stable per-number pitch, rate, volume and available English voice selection |
+| `references/characters/` | Available original user-supplied character references and archive index |
 | `dist/speech.js` | Conversion of written equations into spoken operator words |
 | `dist/vendor/` | Pinned Three.js modules and license |
 | `tests/` | JavaScript behavior and geometry checks; Python launcher checks |
@@ -53,9 +55,9 @@ Paths below are relative to the repository root.
 
 World coordinates use **+x east, +z south, and y up**. The world is 840 units wide; z runs from −90 to 690, making its full north–south span 780 units. Shared geographic data drives rendering, collision boundaries, and the map. Keep these representations aligned when changing a place. The town island ends at the coastline; the bay has its own sloping sand geometry and a transparent water surface. The seabed uses the same height function as walking and wildlife, reaching −18 beyond the 120-unit descent.
 
-Characters are identified by their **number**, from 0 through 30. The cast has 31 entries, so its length is not its highest number. Zero has no occupied cube cells but has finite display and navigation dimensions. One through Thirty have exactly their number of unit cubes.
+Characters are identified by their **number**, from 0 through 40. The cast has 41 entries, so its length is not its highest number. Zero has no occupied cube cells but has finite display and navigation dimensions. One through Forty have exactly their number of unit cubes.
 
-Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits spoken dialogue and bubbles to the selected character. Animal encounters share the same speech pipeline, with global and per-species cooldowns. Swimming stores the absolute feet height in `swimY`; camera, carrying, immersion and character rendering all use that height. Empty trains never advance their motion clock. Switching characters and fast travel disembark before changing the active friend or position.
+Arrangement changes preserve number identity, exact cube count and the color/outline multiset. Every arrangement uses unique integer grid cells connected through cube faces. `createCrazyArrangement(number, seed)` generates a deterministic bounded random form; Shift + T supplies a fresh seed. Shape metadata labels irregular bodies without treating their bounding rectangle as a filled body. Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits spoken dialogue and bubbles to the selected character. Animal encounters share the same speech pipeline, with global and per-species cooldowns. Swimming stores the absolute feet height in `swimY`; camera, carrying, immersion and character rendering all use that height. Empty trains never advance their motion clock. Switching characters and fast travel disembark before changing the active friend or position.
 
 ## Tests
 

@@ -81,8 +81,39 @@ test('friends yield around one another without overlapping or becoming permanent
   for (const player of players) assert.ok(controller.stateFor(player).visits >= 1, 'A friend remained trapped behind another visitor');
 });
 
-test('all thirty unselected friends keep exploring the assembled town within a frame budget', () => {
-  assert.equal(CHARACTERS.length, 31);
+test('a wide friend backs out of an occupied narrow crossing and takes a clear detour', () => {
+  const world = { width: 100, depth: 100, margin: 1 };
+  const obstacles = [{ x: 35, z: 0, w: 30, d: 24 }, { x: 35, z: 36, w: 30, d: 29 }];
+  const player = friend(34, 15, 30, 3.0413812651491092);
+  const active = Object.freeze(friend(31, 50, 30, 3.5355339059327378));
+  const controller = createRoamingController({ obstacles, world, destinations: [place('west', 15, 30), place('east', 85, 30)], random: seeded(19) });
+  let approached = false, detoured = false, reachedEast = false, visits = 0, frame = 0;
+  for (; frame < 1600 && !reachedEast; frame++) {
+    const previous = { x: player.x, z: player.z };
+    controller.update([player, active], active, .1, frame / 10);
+    const status = controller.stateFor(player);
+    reachedEast ||= status.visits > visits && status.id === 'east'; visits = status.visits;
+    approached ||= player.x > 38 && player.z < 36;
+    detoured ||= player.x > 35 && player.x < 65 && player.z >= 65 + player.radius;
+    assert.ok(Math.hypot(player.x - previous.x, player.z - previous.z) <= .28, 'backtracking must remain ordinary walking');
+    assert.equal(collides(player.x, player.z, obstacles, world, player.radius), false);
+    assert.ok(Math.hypot(player.x - active.x, player.z - active.z) >= player.radius + active.radius, 'the detour must never pass through the selected friend');
+  }
+  assert.ok(approached, 'exercise the blocked shorter crossing before rerouting');
+  assert.ok(detoured, 'the route must go around the wall rather than wait forever at the visitor');
+  assert.ok(reachedEast, 'a stationary friend in a narrow crossing must not prevent reaching the opposite side');
+  const visitsBeforeReturn = controller.stateFor(player).visits;
+  let returnedThroughCrossing = false;
+  for (let step = 0; step < 800 && controller.stateFor(player).visits === visitsBeforeReturn; step++) {
+    controller.update([player], null, .1, (frame + step) / 10);
+    returnedThroughCrossing ||= player.x > 45 && player.x < 55 && player.z > 24 && player.z < 36;
+    assert.equal(collides(player.x, player.z, obstacles, world, player.radius), false);
+  }
+  assert.ok(returnedThroughCrossing && controller.stateFor(player).visits > visitsBeforeReturn, 'the temporary visitor snapshot must not poison cached routes after the crossing clears');
+});
+
+test('all forty unselected friends keep exploring the assembled town within a frame budget', () => {
+  assert.equal(CHARACTERS.length, 41);
   const players = CHARACTERS.map((character, index) => friend(character.number, FRIEND_STARTS[index].x, FRIEND_STARTS[index].z, getCharacterMetrics(character.number).radius));
   const active = players.find(p=>p.number===11), original = { ...active }, times = [], choices = players.map(() => new Set());
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
@@ -105,7 +136,7 @@ test('all thirty unselected friends keep exploring the assembled town within a f
   assert.deepEqual(active, original);
   for (let index = 0; index < players.length; index++) {
     if (players[index] === active) continue;
-    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${players[index].number} did not keep exploring`);
+    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${players[index].number} did not keep exploring: ${JSON.stringify(controller.stateFor(players[index]))}`);
     assert.ok(choices[index].size >= 3, `Friend ${players[index].number} repeated only one destination`);
   }
   times.sort((a, b) => a - b);

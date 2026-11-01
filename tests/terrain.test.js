@@ -12,6 +12,7 @@ import { collides, moveWithCollisions } from '../dist/navigation.js';
 import { createLandscape } from '../dist/terrain.js';
 import { createWaterBall } from '../dist/water-ball.js';
 import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
+const widest = Math.max(...CHARACTERS.map(character=>getCharacterMetrics(character).radius));
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
 
  test('the relocated hill rises continuously and has a level deck above the sea',()=>{
@@ -27,7 +28,7 @@ const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
 });
 
 test('a wide friend can follow the entire winding trail through the deck entrance',()=>{
-  const player={x:HILL_TRAIL[0][0],z:HILL_TRAIL[0][1],radius:2.7};
+  const player={x:HILL_TRAIL[0][0],z:HILL_TRAIL[0][1],radius:widest};
   const curve=new THREE.CatmullRomCurve3(HILL_TRAIL.map(([x,z])=>new THREE.Vector3(x,0,z)),false,'centripetal');
   let highest=0;
   for(const next of curve.getPoints(600)){
@@ -96,9 +97,9 @@ test('all original footprints fit the expanded bay and the widest walks from sho
     for(const destination of [WATER_PLAY_LANDMARK.arrival,WATER_PLAY.spawn,UNDERWATER_LANDMARK.arrival]){
       assert.equal(collides(destination.x,destination.z,TERRAIN_OBSTACLES,WORLD,player.radius),false,`${character.name} cannot enter the bay`);
     }
-    assert.ok(player.radius<=2.7,'the continuous widest route must cover every original footprint');
+    assert.ok(player.radius<=widest,'the continuous widest route must cover every original footprint');
   }
-  const player={...BEACH_LANDMARK.arrival,radius:2.7};
+  const player={...BEACH_LANDMARK.arrival,radius:widest};
   for(const destination of [WATER_PLAY_LANDMARK.arrival,WATER_PLAY.spawn,{x:160,z:460},UNDERWATER_LANDMARK.arrival,{x:160,z:640}]){
       moveWithCollisions(player,destination.x-player.x,destination.z-player.z,TERRAIN_OBSTACLES,WORLD);
       close(player.x,destination.x);close(player.z,destination.z);

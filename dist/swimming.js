@@ -31,3 +31,9 @@ export function bodiesOverlap(a, b) {
   const ay=bodyHeight(a),by=bodyHeight(b);
   return ay < by + Math.max(.3,b.height||1) + .08 && by < ay + Math.max(.3,a.height||1) + .08;
 }
+
+/** Check a proposed body at its actual depth, including a newly taller shape. */
+export function hasBodyClearance(player, others) {
+  return others.every(other => !bodiesOverlap(player, other) ||
+    Math.hypot(player.x-other.x,player.z-other.z) >= (player.radius??.6)+(other.radius??.6)+.08);
+}

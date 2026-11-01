@@ -81,7 +81,7 @@ test('arc-length travel has constant speed and holding boost doubles it exactly'
 
 test('ellipse normals point outside and safe exits stay local at every part of the loop', () => {
   const radii = [...new Set(CHARACTERS.flatMap(character => getCharacterArrangements(character.number).map(form => getCharacterMetrics(form).radius)))];
-  assert.ok(Math.max(...radii) >= 15, 'the audit must include the thirty-wide form');
+  assert.ok(Math.max(...radii) >= 20, 'the audit must include the forty-wide form');
   for (let i = 0; i < 1024; i++) {
     const progress = i / 1024, pose = trainPose(progress);
     close(ellipseLevel(pose.x, pose.z), 1, 1e-10);
@@ -91,7 +91,7 @@ test('ellipse normals point outside and safe exits stay local at every part of t
       const point = boardingPoint({ progress, riderRadius: radius });
       assert.ok(ellipseLevel(point.x, point.z) > 1, 'exit is inside the moving railway');
       assert.equal(collides(point.x, point.z, allObstacles, WORLD, radius), false, `blocked exit at ${progress}, radius ${radius}`);
-      assert.ok(Math.hypot(point.x - pose.x, point.z - pose.z) <= radius + 22, 'leaving jumps to a distant stop');
+      assert.ok(Math.hypot(point.x - pose.x, point.z - pose.z) <= radius + 42, 'leaving jumps beyond the nearby bend');
       // Its entire circular footprint stays beyond the rail and the train body.
       for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
         assert.ok(ellipseLevel(point.x + Math.cos(angle) * radius, point.z + Math.sin(angle) * radius) > 1.006, 'exiting character overlaps the train track');

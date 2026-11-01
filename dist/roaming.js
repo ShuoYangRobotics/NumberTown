@@ -69,7 +69,15 @@ export function createRoamingController({ obstacles, world, destinations, random
     ? collides(x, z, obstacles, world, radius)
     : collides(x, z, globalObstacles, world, radius) || collides(x, z, cells.get(cellKey(x, z)) ?? [], world, radius);
   const staticCollider = { blocks: blocked };
-  function clearSegment(a, b, radius = CLEARANCE) {
+  function visitorsClear(a, b, radius, visitors) {
+    const dx = b.x - a.x, dz = b.z - a.z, lengthSquared = dx * dx + dz * dz;
+    return visitors.every(visitor => {
+      const t = lengthSquared ? Math.max(0, Math.min(1, ((visitor.x - a.x) * dx + (visitor.z - a.z) * dz) / lengthSquared)) : 0;
+      return Math.hypot(a.x + dx * t - visitor.x, a.z + dz * t - visitor.z) >= radius + visitor.radius;
+    });
+  }
+  function clearSegment(a, b, radius = CLEARANCE, visitors = []) {
+    if (!visitorsClear(a, b, radius, visitors)) return false;
     const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / .3));
     for (let i = 0; i <= count; i++) {
       const t = i / count;
@@ -85,7 +93,7 @@ export function createRoamingController({ obstacles, world, destinations, random
     if (!occupancy[id]) { const p = pointAt(id); occupancy[id] = blocked(p.x, p.z, clearance) ? 2 : 1; }
     return occupancy[id] === 1;
   }
-  function gridJoin(point, radius, grid) {
+  function gridJoin(point, radius, grid, visitors = []) {
     const candidates = [];
     for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
       const x = Math.round(point.x) + dx, z = Math.round(point.z) + dz;
@@ -95,7 +103,8 @@ export function createRoamingController({ obstacles, world, destinations, random
     candidates.sort((a, b) => a.distance - b.distance);
     for (const candidate of candidates) {
       const id = idAt(candidate.x, candidate.z);
-      if (open(id, grid) && clearSegment(point, candidate, radius)) return id;
+      if (open(id, grid) && visitorsClear(candidate, candidate, grid.clearance, visitors)
+        && clearSegment(point, candidate, radius, visitors)) return id;
     }
     return null;
   }
@@ -161,7 +170,7 @@ export function createRoamingController({ obstacles, world, destinations, random
       if (clearSegment(place, point, clearance)) { target = point; break; }
     }
     s.destination = Object.freeze({ ...place, ...target }); s.status = 'planning'; s.version++;
-    queue.push({ player, s, version: s.version, target });
+    queue.push({ player, s, version: s.version, target, visitors: [] });
   }
   function finish(current, path) {
     const s = current.s;
@@ -179,8 +188,8 @@ export function createRoamingController({ obstacles, world, destinations, random
     if (request.s.version !== request.version || request.s.selected) return null;
     const start = { x: request.player.x, z: request.player.z }, radius = request.player.radius ?? .6;
     const grid = gridFor(radius);
-    if (clearSegment(start, request.target, grid.clearance)) { finish(request, [request.target]); return null; }
-    const from = gridJoin(start, radius, grid), to = gridJoin(request.target, grid.clearance, grid);
+    if (clearSegment(start, request.target, grid.clearance, request.visitors)) { finish(request, [request.target]); return null; }
+    const from = gridJoin(start, radius, grid, request.visitors), to = gridJoin(request.target, grid.clearance, grid, request.visitors);
     if (from === null || to === null) { fail(request.s, time); return null; }
     const heap = new MinHeap(), records = new Map();
     records.set(from, { cost: 0, parent: -1, closed: false });
@@ -213,7 +222,8 @@ export function createRoamingController({ obstacles, world, destinations, random
         const [dx, dz] = DIRECTIONS[direction], x = point.x + dx, z = point.z + dz;
         if (x < originX || z < originZ || x > world.width || z > world.depth) continue;
         const next = idAt(x, z), cost = record.cost + (dx && dz ? Math.SQRT2 : 1), known = job.records.get(next);
-        if (known?.closed || (known && known.cost <= cost) || !edgeOpen(item.id, direction, next, job.grid)) continue;
+        if (known?.closed || (known && known.cost <= cost) || !edgeOpen(item.id, direction, next, job.grid)
+          || !visitorsClear(point, { x, z }, job.grid.clearance, job.visitors)) continue;
         job.records.set(next, { cost, parent: item.id, closed: false });
         job.heap.push({ id: next, cost, priority: cost + Math.hypot(goal.x - x, goal.z - z) * 1.12 });
       }
@@ -234,7 +244,18 @@ export function createRoamingController({ obstacles, world, destinations, random
     }
     const target = s.path[s.cursor], distance = Math.hypot(target.x - player.x, target.z - player.z);
     if (distance < s.bestDistance - .08) { s.bestDistance = distance; s.stalled = 0; } else s.stalled += dt;
-    if (s.stalled > 4.5) { fail(s, time); player.moving = false; return; }
+    if (s.stalled > 4.5) {
+      // A pair of wide friends cannot always pass on a bridge. Static-only
+      // replanning sends them through the same jam forever; a local snapshot
+      // lets the next search back out or take another crossing. Keep these
+      // temporary circles out of the shared, persistent static routing grids.
+      const visitors = nearby(player, players);
+      if (visitors.length) {
+        cancel(s); s.status = 'planning';
+        queue.push({ player, s, version: s.version, target: { x: s.destination.x, z: s.destination.z }, visitors });
+      } else fail(s, time);
+      player.moving = false; return;
+    }
     const surroundings = nearby(player, players), movementObstacles = [staticCollider, ...surroundings];
     const heading = Math.atan2(target.x - player.x, target.z - player.z), amount = Math.min(distance, s.speed * dt);
     let moved = 0;

@@ -143,7 +143,7 @@ export function createLandscape() {
   box(DECK.x,DECK.height-.18,DECK.z,DECK.width,.36,DECK.depth,'#b78d5c');
   for (let x = DECK.x-DECK.width/2+.25; x < DECK.x+DECK.width/2; x += .5) box(x,DECK.height+.008,DECK.z,.465,.016,DECK.depth-.15,Math.round(x*2)%3===0?'#d5b785':'#dfc293');
   const west=DECK.x-DECK.width/2, east=DECK.x+DECK.width/2, north=DECK.z-DECK.depth/2, south=DECK.z+DECK.depth/2;
-  const deckRails=[[[west,north],[west,south]],[[east,north],[east,south]],[[west,south],[east,south]],[[west,north],[DECK.x-3.5,north]],[[DECK.x+3.5,north],[east,north]]];
+  const deckRails=[[[west,north],[west,south]],[[east,north],[east,south]],[[west,south],[east,south]],[[west,north],[DECK.x-4.3,north]],[[DECK.x+4.3,north],[east,north]]];
   for (const [[ax,az],[bx,bz]] of deckRails) {
     beam([ax,DECK.height+1.12,az],[bx,DECK.height+1.12,bz],.1,'#a57c51'); beam([ax,DECK.height+.5,az],[bx,DECK.height+.5,bz],.055,'#c3a06f');
     const count=Math.ceil(Math.hypot(ax-bx,az-bz)/2);

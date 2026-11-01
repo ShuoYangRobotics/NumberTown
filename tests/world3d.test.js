@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS, SQUARE, STATUE, POND } from '../dist/world-data.js';
 import { BRIDGES, riverX, riverWidth } from '../dist/geography.js';
 import { createTown } from '../dist/world3d.js';
-import { CHARACTERS } from '../dist/character-data.js';
+import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
 import { Matrix4, Vector3 } from '../dist/vendor/three.module.js';
 
 // The widest friend needs a 5.4-unit corridor. The route check uses a separate
 // occupancy grid, so a safe-looking destination cannot conceal a sealed route.
 const radius = 2.7;
-function blocked(x, z) {
+function blocked(x, z, footprint = radius) {
+  const radius = footprint;
   if (x < WORLD.margin + radius || z < WORLD.margin + radius ||
       x > WORLD.width - WORLD.margin - radius || z > WORLD.depth - WORLD.margin - radius) return true;
   // Prevent a route check from accidentally walking across the river, or
@@ -28,9 +29,11 @@ function blocked(x, z) {
 test('all selectable friends start clear of scenery and each other, including wide friends', () => {
   assert.equal(FRIEND_STARTS.length, CHARACTERS.length);
   for (const [i, p] of FRIEND_STARTS.entries()) {
-    assert.ok(!blocked(p.x, p.z), `Friend ${CHARACTERS[i].number} starts inside scenery`);
-    for (const q of FRIEND_STARTS.slice(i + 1)) {
-      assert.ok(Math.hypot(p.x - q.x, p.z - q.z) >= radius * 2, `Friends overlap near ${p.x},${p.z}`);
+    const ownRadius = getCharacterMetrics(CHARACTERS[i]).radius;
+    assert.ok(!blocked(p.x, p.z, ownRadius), `Friend ${CHARACTERS[i].number} starts inside scenery`);
+    for (let j = i + 1; j < FRIEND_STARTS.length; j++) {
+      const q = FRIEND_STARTS[j], otherRadius = getCharacterMetrics(CHARACTERS[j]).radius;
+      assert.ok(Math.hypot(p.x - q.x, p.z - q.z) >= ownRadius + otherRadius, `Friends overlap near ${p.x},${p.z}`);
     }
   }
 });

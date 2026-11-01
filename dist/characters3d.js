@@ -108,7 +108,7 @@ function goldenGrid(body, data) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalData, 3));
   geometry.setIndex(indices);
-  const grid = mesh(geometry, '#b47a2e', 'raised golden unit grid');
+  const grid = mesh(geometry, data.number===40?'#5da556':data.number>=31?'#b7a63f':'#b47a2e', 'raised golden unit grid');
   grid.castShadow = false; body.add(grid);
 }
 function outlineBody(body, data) {
@@ -129,7 +129,10 @@ function outlineBody(body, data) {
   }
   if (data.number >= 20) goldenGrid(body, data);
   const framed=data.cells.filter(cell=>cell.outline==='#d9384a');
-  if (framed.length) {
+  // The raised ten-frame traces a planar silhouette. Layered arrangements
+  // already retain their per-cube red edges; a flattened silhouette would
+  // cut through those layers or bridge empty space.
+  if (framed.length && bodyDepth(data) === 1) {
     // Follow the actual ten-part outline, including offset rectangles and
     // notches. Twenty's golden outline deliberately has no red ten-frame.
     const occupied=new Set(framed.map(cell=>`${cell.x},${cell.y}`)),edges=[];
@@ -375,18 +378,71 @@ function faceLayout(data) {
   if (n === 28) Object.assign(result, { eyeY: FEET+2.59, mouthY: FEET+2.24, gap:.36, size:.19, mouth:.48 });
   if (n === 29) Object.assign(result, { eyeY: FEET+1.69, mouthY: FEET+.72, gap:.34, size:.24, mouth:.55 });
   if (n === 30) Object.assign(result, { eyeY: FEET+8.96, mouthY: FEET+8.26, gap:.48, size:.29, mouth:.91 });
+  if (n === 31) Object.assign(result, { x:.5, eyeY:FEET+2.62, mouthY:FEET+2.02, gap:.39, size:.28, mouth:.76 });
+  if (n === 32) Object.assign(result, { eyeY:FEET+3.55, mouthY:FEET+2.88, gap:.43, size:.30, mouth:.65 });
+  if (n === 33) Object.assign(result, { x:-.18, eyeY:FEET+1.82, mouthY:FEET+1.13, gap:.43, size:.27, mouth:.82 });
+  if (n === 34) Object.assign(result, { eyeY:FEET+1.75, mouthY:FEET+1.03, gap:.4, size:.31, mouth:.8 });
+  if (n === 35) Object.assign(result, { eyeY:FEET+1.73, mouthY:FEET+1.12, gap:.35, size:.25, mouth:.7 });
+  if (n === 36) Object.assign(result, { eyeY:FEET+2.55, mouthY:FEET+1.94, gap:.4, size:.27, mouth:.7 });
+  if (n === 37) Object.assign(result, { eyeY:FEET+8.82, mouthY:FEET+8.17, gap:.43, size:.29, mouth:.86 });
+  if (n === 38) Object.assign(result, { eyeY:FEET+1.48, mouthY:FEET+.77, gap:.42, size:.3, mouth:.86 });
+  if (n === 39) Object.assign(result, { eyeY:FEET+8.45, mouthY:FEET+7.4, gap:.44, size:.30, mouth:.94 });
+  if (n === 40) Object.assign(result, { eyeY:FEET+8.55, mouthY:FEET+7.77, gap:.52, size:.37, mouth:.97 });
   return result;
+}
+const faceTransforms = new WeakMap();
+function frontCells(data) {
+  const front = new Map();
+  for (const cell of data.cells) {
+    const key = `${cell.x},${cell.y}`, previous = front.get(key);
+    if (!previous || (cell.z ?? 0) > (previous.z ?? 0)) front.set(key, cell);
+  }
+  return [...front.values()];
+}
+function topAttachment(data) {
+  const top = Math.max(...data.cells.map(cell => cell.y));
+  const cells = frontCells(data).filter(cell => cell.y === top);
+  const chosen = cells.reduce((best, cell) => Math.abs(cell.x + .5 - data.width / 2) < Math.abs(best.x + .5 - data.width / 2) ? cell : best);
+  const row = new Set(cells.filter(cell => (cell.z ?? 0) === (chosen.z ?? 0)).map(cell => cell.x));
+  let left = chosen.x, right = chosen.x;
+  while (row.has(left - 1)) left--; while (row.has(right + 1)) right++;
+  return { x:(left + right + 1)/2-data.width/2, y:FEET+top+1, z:(chosen.z??0)-(bodyDepth(data)-1)/2, width:right-left+1, cell:chosen };
 }
 function faceTransform(data) {
   const original=getCharacterDefinition(data.number),source=faceLayout(original);
   if(!isTransformed(data))return{source,scale:1,x:0,y:0,z:(bodyDepth(data)-1)/2};
+  if(faceTransforms.has(data))return faceTransforms.get(data);
   const halfWidth=Math.max(source.gap+Math.max(source.size*1.6,.5),source.mouth*.6);
-  const above=original.number===25?1.2:original.number===21?.92:source.size*1.9+.15;
+  const above=original.number===25?1.2:original.number===40?1.1:[21,36].includes(original.number)?.98:source.size*1.9+.15;
   const lower=source.mouthY-source.mouth*.5-.07,upper=source.eyeY+above;
-  const windowHeight=Math.min(2.5,data.height*.86);
-  const scale=Math.min(1,(data.width-.16)/(halfWidth*2),windowHeight/(upper-lower));
-  const center=FEET+Math.max(windowHeight/2+.02,data.height/3);
-  return{source,scale,x:-source.x*scale,y:center-(upper+lower)/2*scale,z:bodyDepth(data)/2-.5*scale+.015};
+  const visible=frontCells(data),front=new Map(visible.map(cell=>[`${cell.x},${cell.y}`,cell.z??0]));
+  let best=null;
+  for(const cell of visible)for(let height=1;height<=3;height++)for(let width=1;width<=Math.min(4,data.width);width++){
+    let filled=true;
+    for(let y=cell.y;y<cell.y+height&&filled;y++)for(let x=cell.x;x<cell.x+width;x++)if(front.get(`${x},${y}`)!==(cell.z??0)){filled=false;break;}
+    if(!filled)continue;
+    const scale=Math.min(1,(width-.16)/(halfWidth*2),Math.min(2.5,height*.86)/(upper-lower));
+    const halfX=halfWidth*scale,halfY=(upper-lower)*scale/2;
+    const cx=Math.max(cell.x+halfX+.06,Math.min(cell.x+width-halfX-.06,data.width/2));
+    const cy=Math.max(cell.y+halfY+.06,Math.min(cell.y+height-halfY-.06,data.height/3));
+    const score=scale*4-Math.abs(cy-data.height/3)*.6-Math.abs(cx-data.width/2)*.22+(cell.z??0)*.025;
+    if(!best||score>best.score)best={score,scale,cx,cy,patch:{x:cell.x,y:cell.y,z:cell.z??0,width,height}};
+  }
+  const {scale,cx,cy,patch}=best;
+  const result={source,scale,x:cx-data.width/2-source.x*scale,y:FEET+cy-(upper+lower)/2*scale,
+    z:patch.z-(bodyDepth(data)-1)/2+.5-.5*scale+.015,patch};
+  const faceX=source.x*scale+result.x+data.width/2,faceY=(source.eyeY+source.mouthY)/2*scale+result.y-FEET;
+  result.cell={x:Math.min(patch.x+patch.width-1,Math.max(patch.x,Math.floor(faceX))),y:Math.min(patch.y+patch.height-1,Math.max(patch.y,Math.floor(faceY))),z:patch.z};
+  faceTransforms.set(data,result);return result;
+}
+function armAttachment(data, side, desiredY, face) {
+  const occupied=new Set(data.cells.map(cell=>`${cell.x},${cell.y},${cell.z??0}`));
+  const candidates=frontCells(data).filter(cell=>!occupied.has(`${cell.x+side},${cell.y},${cell.z??0}`));
+  const desiredX=face.x+data.width/2+side*.6;
+  const rank=cell=>Math.abs(cell.y+.5+FEET-desiredY)*3+Math.abs(cell.x+.5-desiredX)*.12+Math.abs((cell.z??0)-(face.cell?.z??0))*.15;
+  const cell=candidates.reduce((best,cell)=>rank(cell)<rank(best)?cell:best);
+  return {cell:{x:cell.x,y:cell.y,z:cell.z??0},x:cell.x+(side>0?1:0)-data.width/2,
+    y:Math.max(FEET+cell.y+.15,Math.min(FEET+cell.y+.85,desiredY)),z:(cell.z??0)-(bodyDepth(data)-1)/2};
 }
 export function getCharacterFaceLayout(number,definition){
   if((definition??getCharacterDefinition(number)).number===0)return{x:0,eyeY:.44,mouthY:.44,gap:0,size:0,mouth:.76};
@@ -437,6 +493,17 @@ function eyeDecorations(parent, data, f) {
       rectangleRing(parent,x,f.eyeY,.59,.43,.5,.027,'#356da6');
     }
     if(n===29||n===30)ring(parent,x,f.eyeY,.59,f.size*1.2,f.size*1.21,.04,n===29?'#5e6260':'#c19d26');
+    if([31,33,34,35,37,38,39].includes(n)){
+      const color={31:'#9c4033',33:'#df8c31',34:'#358e42',35:'#247f91',37:'#d6b342',38:'#b38743',39:'#576777'}[n];
+      const size=f.size*(n===33&&index===1?.74:1);
+      ring(parent,x,f.eyeY,.591,size*1.18,size*1.2,n===34||n===39?.055:.04,color);
+    }
+    if(n===32||n===40)rectangleRing(parent,x,f.eyeY,.592,n===40?1.0:.76,n===40?1.43:1.1,.05,n===40?'#2c8b4a':'#d8922e');
+    if(n===36){
+      const side=index?1:-1;
+      polygon(parent,side<0?[[-.4,-.36],[.4,-.36],[.4,.28],[-.42,.98],[-.4,.18]]:[[-.4,-.36],[.4,-.36],[.4,.18],[.42,.98],[-.4,.28]],.045,'#ec2696',x,f.eyeY,.516,'magenta superhero mask');
+      rectangleRing(parent,x,f.eyeY,.59,.63,.65,.038,'#a11a74');
+    }
     if (n === 16) {
       const side=index?1:-1;
       box(parent,x+side*.34,f.eyeY+.12,.6,.10,.49,.09,'#242231','bold square eyelash');
@@ -460,6 +527,8 @@ function eyeDecorations(parent, data, f) {
     polygon(parent,[[0,.18],[.19,0],[0,-.18],[-.19,0]],.05,'#fff6c4',0,f.eyeY+.6,.52,'golden cube badge');
     polygon(parent,[[0,.1],[.1,0],[0,-.1],[-.1,0]],.04,'#c4a13a',0,f.eyeY+.6,.575,'cube badge inset');
   }
+  if(n===35)tube(parent,[[f.x-.1,f.eyeY+.02,.61],[f.x,f.eyeY+.08,.63],[f.x+.1,f.eyeY+.02,.61]],.034,'#247f91',false,'blue flower glasses bridge');
+  if(n===39)ball(parent,f.x,f.eyeY-.52,.76,.3,.31,.3,'#a6ada7','round gray nose');
   if (n === 15) {
     for (const side of [-1, 1]) polygon(parent, [[0, 0], [side * .65, .05], [side * .65, .85], [side * .51, .85], [side * .51, .69], [side * .38, .69], [side * .38, .54], [side * .25, .54], [side * .25, .39], [side * .12, .39], [side * .12, .23]], .055, '#244583', f.x, f.eyeY + .04, .505, 'stepped superhero mask');
   }
@@ -484,7 +553,7 @@ function eye(parent, x, y, size, emotion, color) {
   }
 }
 function mouth(parent, x, y, width, emotion, number) {
-  const lip = number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : number===16?'#46215f':number===17?'#7431a3':number===18?'#8b256f':number===19?'#4b5251':number===20?'#9b4b88':number===23?'#8c4688':number===24?'#226d42':number===25?'#246e8c':'#713549';
+  const lip = ({31:'#9c4033',32:'#cc9433',33:'#cd3e57',34:'#378b43',35:'#247f91',36:'#a72e7a',37:'#a64341',38:'#dc9a30',39:'#677987',40:'#378e4b'})[number] ?? (number === 6 || number === 10 || number === 15 ? '#d7318b' : number === 7 ? '#f2d529' : number === 13 ? '#793c7d' : number === 14 ? '#36802b' : number===16?'#46215f':number===17?'#7431a3':number===18?'#8b256f':number===19?'#4b5251':number===20?'#9b4b88':number===23?'#8c4688':number===24?'#226d42':number===25?'#246e8c':'#713549');
   if(number===25&&emotion==='happy'){
     tube(parent,[[x-width*.34,y+.05,.62],[x,y-width*.16,.64],[x+width*.34,y+.05,.62]],.026,lip,false,'gentle blue smile');
     return;
@@ -517,10 +586,16 @@ function expression(data, f, emotion) {
   const positions = data.number === 1 ? [f.x] : [f.x - f.gap, f.x + f.gap];
   for (let i = 0; i < positions.length; i++) {
     const x = positions[i], side = positions.length === 1 ? 0 : i ? 1 : -1;
-    const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number===21?'#3f256e':data.number===23?'#edcd40':data.number===24?'#77c627':data.number>=22?'#ffd58b':data.number>=10?'#fffaf1':data.color;
-    if(data.number!==26)eye(group, x, f.eyeY, f.size*(data.number===22&&i===1?.72:1), emotion, eyelidColor);
-    if (emotion === 'happy' && ![4, 9, 12, 13, 14,18,19,20,23,24,25,26,29].includes(data.number)) continue;
-    const y = f.eyeY + f.size * (emotion === 'surprised' ? 1.65 : 1.4);
+    const eyelidColor=data.number===8?'#955d41':data.number===16?'#7541c2':data.number===19&&i===1?'#b4bcba':data.number===20?'#e8b76b':data.number===21?'#3f256e':data.number===23?'#edcd40':data.number===24?'#77c627':data.number===36?'#ec2696':data.number===40?'#a9e888':data.number>=31?'#fff387':data.number>=22?'#ffd58b':data.number>=10?'#fffaf1':data.color;
+    if(data.number!==26){
+      const size=f.size*(i===1?(data.number===22?.72:data.number===33?.74:1):1);
+      if([32,40].includes(data.number)){
+        const tallEye=new THREE.Group();tallEye.position.y=f.eyeY;tallEye.scale.y=1.45;group.add(tallEye);eye(tallEye,x,0,size,emotion,eyelidColor);
+      }else eye(group,x,f.eyeY,size,emotion,eyelidColor);
+    }
+    if (emotion === 'happy' && data.number<31 && ![4, 9, 12, 13, 14,18,19,20,23,24,25,26,29].includes(data.number)) continue;
+    if(data.number===36&&emotion==='happy')continue;
+    const y = f.eyeY + f.size * ([32,40].includes(data.number)?2.1:emotion === 'surprised' ? 1.65 : 1.4);
     const tilt = emotion === 'sad' ? side * f.size * .45 : emotion === 'curious' ? f.size * .3 : 0;
     const lift = emotion === 'curious' && i === 1 ? f.size * .4 : 0;
     const points = [[x - f.size * .83, y + tilt + lift, .635], [x, y + f.size * .12 + lift, .65], [x + f.size * .83, y - tilt + lift, .635]];
@@ -533,9 +608,16 @@ function expression(data, f, emotion) {
     } else if(data.number===25){
       const crown=polygon(group,[[-.45,0],[-.51,.35],[-.29,.2],[-.24,.55],[-.08,.26],[.07,.62],[.16,.24],[.36,.48],[.31,.13],[.51,.23],[.43,-.02]],.045,'#285e85',x,y+lift,.53,'blue crown eyebrow');
       crown.rotation.z=emotion==='sad'?side*.22:emotion==='curious'?(i?.17:-.08):0;
+    } else if(data.number===40){
+      const brow=new THREE.Group();brow.name='green checkered eyebrow';brow.position.set(x,y+lift,.56);brow.rotation.z=emotion==='sad'?side*.2:emotion==='curious'?(i?.14:-.1):side*-.06;group.add(brow);
+      for(let row=0;row<2;row++)for(let col=0;col<4;col++)box(brow,(col-1.5)*.205,(row-.5)*.16-Math.abs(col-1.5)*.025,0,.204,.158,.075,(col+row)%2?'#55a54e':'#308d44','eyebrow checker');
+    } else if(data.number===38){
+      tube(group,[[x-f.size*.88,y+tilt,.64],[x-f.size*.35,y+.13+lift,.65],[x+f.size*.3,y-.02+lift,.65],[x+f.size*.85,y+.11-tilt,.64]],.044,'#af4c94',false,'magenta zigzag eyebrow');
+    } else if(data.number===39){
+      const brow=box(group,x,y+lift,.62,f.size*1.9,.115,.09,'#607181','gray thoughtful eyebrow');brow.rotation.z=emotion==='sad'?side*.2:emotion==='curious'?(i?.14:-.08):0;
     } else if(data.number===19){
       tube(group,[[x-f.size*.95,y+tilt,.64],[x-f.size*.48,y+.12+lift,.65],[x+f.size*.15,y+.015+lift,.65],[x+f.size*.8,y+.17-tilt,.64]],.049,'#485052',false,'zigzag eyebrow');
-    } else tube(group, points, [4,9,18,20,23,24,26,29].includes(data.number) ? .055 : .034, data.number===23?'#633287':data.number >= 11 ? data.dark : '#344d56');
+    } else tube(group, points, [4,9,18,20,23,24,26,29,31,32,34,35].includes(data.number) ? .055 : .034, data.number===23?'#633287':data.number >= 11 ? data.dark : '#344d56');
   }
   mouth(group, f.x + (data.number === 11 ? .24 : 0), f.mouthY, f.mouth, emotion, data.number);
   return group;
@@ -555,8 +637,9 @@ const DIGITS = {
 };
 function numberPlaque(root, data) {
   const label = new THREE.Group(); label.name = `number ${data.number}`;
-  const extra = data.number === 7 ? .6 : data.number === 21 ? .72 : data.number===26?.57:data.number===30?1.03:data.number === 3 || data.number === 14 ? .46 : 0;
-  label.position.set(data.number===20?.55:0, data.height + FEET + (data.number===20?.54:.47) + extra, .03);
+  const extra = data.number === 7 ? .6 : data.number === 21 ? .72 : data.number===26?.57:data.number===30?1.03:[31,34].includes(data.number)?.48:data.number===37?.95:data.number === 3 || data.number === 14 ? .46 : 0;
+  const anchor=isTransformed(data)?topAttachment(data):null;
+  label.position.set(anchor?.x??(data.number===20?.55:0), data.height + FEET + (data.number===20?.54:.47) + extra, (anchor?.z??0)+.03);
   const digits = String(data.number), width = digits.length === 2 ? .65 : .43;
   ball(label, 0, 0, 0, width, .43, .055, '#fffcf1', 'number plaque');
   for (let i = 0; i < digits.length; i++) {
@@ -588,6 +671,72 @@ function thirtyCrown(root, top) {
   for(const[x,y]of[[-1.12,.68],[0,1.12],[1.12,.68]])ball(root,x,top+y,.02,.095,.095,.095,'#cf3433','red crown jewel');
   box(root,0,top+.1,.34,1.99,.12,.07,'#f9e05b','crown band');
 }
+function paintRoller(parent) {
+  const roller=new THREE.Group();roller.name='green paint roller';parent.add(roller);
+  cylinder(roller,0,.23,0,.055,.65,'#bd9451','wooden roller handle');
+  tube(roller,[[0,.53,0],[0,.85,0],[-.25,.85,0],[-.25,1.12,0]],.035,'#91a29a',false,'roller metal arm');
+  cylinder(roller,-.3,1.12,0,.16,.72,'#5ecd4a','green roller cover','x');
+  for(const side of[-1,1])cylinder(roller,-.3+side*.37,1.12,0,.115,.035,'#b9e78b','roller end cap','x');
+}
+function frontDecoration(root,data,cell,name){
+  const group=new THREE.Group();group.name=name;group.position.set(cell.x+.5-data.width/2,FEET+cell.y+.5,(cell.z??0)-(bodyDepth(data)-1)/2+.515);
+  group.userData.attachedCell={x:cell.x,y:cell.y,z:cell.z??0};root.add(group);return group;
+}
+function laterDecorations(root,data) {
+  const n=data.number,transformed=isTransformed(data),anchor=transformed?topAttachment(data):{x:0,y:FEET+data.height,z:0,width:data.width};
+  const visible=frontCells(data),face=faceTransform(data);
+  if(n===31){
+    const binding=new THREE.Group();binding.name='red calendar binding';binding.position.set(anchor.x,anchor.y+.05,anchor.z);root.add(binding);
+    const width=Math.max(.7,Math.min(6.75,anchor.width-.22)),ringScale=Math.min(1,width/6.75);
+    box(binding,0,.035,0,width,.14,.69,'#ec403f','calendar red header');
+    for(let index=0;index<7;index++){
+      const loop=mesh(new THREE.TorusGeometry(.22,.038,8,22),'#bdc5c3','silver calendar ring');
+      loop.rotation.y=Math.PI/2;loop.scale.set(.72*ringScale,ringScale,ringScale);loop.position.set((index-3)*width/6.3,.18*ringScale,.01);binding.add(loop);
+    }
+  }
+  if(n===33){
+    const cell=visible.filter(cell=>cell.y===0).sort((a,b)=>b.x-a.x)[0]??visible[0];
+    const badge=frontDecoration(root,data,cell,'sports badge');
+    polygon(badge,[[-.24,.29],[.24,.29],[.22,-.1],[0,-.29],[-.22,-.1]],.06,'#4c8d39',0,0,0,'green team shield');
+    const emblem=new THREE.Group();emblem.name='badge football';emblem.scale.setScalar(.39);emblem.position.set(0,.01,.11);badge.add(emblem);soccerBall(emblem);
+  }
+  if(n===34){
+    const cap=new THREE.Group();cap.name='green painter cap';cap.position.set(anchor.x,anchor.y+.02,anchor.z);cap.scale.setScalar(Math.min(1,anchor.width/1.9));root.add(cap);
+    const crown=mesh(new THREE.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),'#8bb951','painter cap crown');crown.scale.set(.85,.27,.49);cap.add(crown);
+    ball(cap,0,.04,.45,.88,.075,.34,'#d8c66a','painter cap brim');
+    const cellPoints=transformed?visible.filter(cell=>Math.abs(cell.x-(face.cell?.x??0))+Math.abs(cell.y-(face.cell?.y??0))>1).slice(0,5):[[1,1],[1,2],[4,1],[4,2],[3,3]].map(([x,y])=>data.cells.find(cell=>cell.x===x&&cell.y===y));
+    for(const [index,cell]of cellPoints.entries())if(cell){
+      const splash=frontDecoration(root,data,cell,'green paint splash');splash.rotation.z=index*.9;
+      for(const[x,y,r]of[[0,0,.13],[-.12,.13,.08],[.14,.02,.075],[-.04,-.16,.08],[.12,.2,.045]])ball(splash,x,y,.01,r,r*.9,.022,'#76bc4e','paint droplet');
+    }
+  }
+  if(n===35){
+    let cells;
+    if(transformed){
+      cells=[];
+      for(const cell of [...visible].sort((a,b)=>b.y-a.y||a.x-b.x)){
+        if(cells.every(other=>Math.hypot(cell.x-other.x,cell.y-other.y)>1.05))cells.push(cell);
+        if(cells.length===5)break;
+      }
+    }else cells=[[0,5],[2,5],[4,5],[1,4],[3,4]].map(([x,y])=>data.cells.find(cell=>cell.x===x&&cell.y===y));
+    cells.forEach((cell,index)=>{
+      const flower=frontDecoration(root,data,cell,'rainbow flower');
+      for(let petal=0;petal<7;petal++){
+        const angle=petal*Math.PI*2/7+index*.18;
+        const piece=ball(flower,Math.sin(angle)*.23,Math.cos(angle)*.23,.045,.095,.185,.045,RAINBOW[petal],'flower petal');piece.rotation.z=-angle;
+      }
+      ball(flower,0,0,.1,.105,.105,.055,'#fff5ce','flower center');
+    });
+  }
+  if(n===37){
+    const hat=new THREE.Group();hat.name='rainbow explorer hat';hat.position.set(anchor.x,anchor.y+.03,anchor.z);hat.scale.setScalar(Math.min(1,anchor.width/1.8));root.add(hat);
+    const brim=cylinder(hat,0,0,0,.91,.11,'#e2d181','explorer cream brim');brim.scale.z=.65;
+    const dome=mesh(new THREE.SphereGeometry(1,24,12,0,Math.PI*2,0,Math.PI/2),'#fff0ae','explorer cream crown');dome.scale.set(.62,.42,.44);dome.position.y=.05;hat.add(dome);
+    box(hat,0,.13,.42,1.07,.11,.04,'#cdb958','explorer yellow hat band');
+    cylinder(hat,0,.6,0,.022,.33,'#8e9b93','direction arrow post');
+    polygon(hat,[[-.4,-.045],[.15,-.045],[.15,-.16],[.47,0],[.15,.16],[.15,.045],[-.4,.045]],.05,'#4a72ab',0,.83,-.025,'blue direction arrow');
+  }
+}
 function decorations(root, data) {
   const n = data.number, top = data.height + FEET;
   if (n === 3) {
@@ -596,7 +745,7 @@ function decorations(root, data) {
     for (let i = 0; i < 3; i++) ball(root, 0, top - 1.18 - i * .36, .535, .09, .12, .06, '#d8463b', 'red button');
   }
   if (n === 6) {
-    for (const cell of data.cells) ball(root, cell.x + .5 - data.width / 2, cell.y + .5 + FEET, .516, .18, .18, .024, '#c1edf1', 'six spot');
+    for (const cell of data.cells) ball(root, cell.x + .5 - data.width / 2, cell.y + .5 + FEET, .516+(cell.z??0)-(bodyDepth(data)-1)/2, .18, .18, .024, '#c1edf1', 'six spot');
   }
   if (n === 7) {
     for (let i = 0; i < 7; i++) {
@@ -626,18 +775,20 @@ function decorations(root, data) {
   if(n===26)agentOutfit(root,top);
   if(n===29)numberTiles(root);
   if(n===30)thirtyCrown(root,top);
+  if(n>=31)laterDecorations(root,data);
 }
 function transformedDecorations(root,data) {
   const original=getCharacterDefinition(data.number),scale=Math.min(1,data.width/original.width,data.height/original.height);
+  const anchor=topAttachment(data);
+  if(data.number>=31){laterDecorations(root,data);return;}
   if(data.number===6||data.number===18){decorations(root,data);return;}
   if(data.number===21){
-    const pack=new THREE.Group();root.add(pack);backpack(pack);pack.scale.setScalar(scale);
-    pack.position.set(0,FEET+data.height/2-3.8*scale,-bodyDepth(data)/2+.5*scale);
-    const hat=new THREE.Group();root.add(hat);explorerHat(hat,0);hat.scale.setScalar(Math.min(1,data.width/2));hat.position.y=FEET+data.height;
+    adaptedBackpack(root,data,scale);
+    const hat=new THREE.Group();root.add(hat);explorerHat(hat,0);hat.scale.setScalar(Math.min(1,anchor.width/2));hat.position.set(anchor.x,anchor.y,anchor.z);
     return;
   }
   const props=new THREE.Group();props.name='adapted character accessories';root.add(props);decorations(props,original);
-  props.scale.setScalar(scale);props.position.set(0,FEET+data.height-(FEET+original.height)*scale,(bodyDepth(data)-scale)/2);
+  props.scale.setScalar(scale);props.position.set(anchor.x,anchor.y-(FEET+original.height)*scale,anchor.z+(1-scale)/2);
   for(const child of props.children){
     if(child.name==='white bow tie'||child.name==='secret agent tie')child.position.y=(FEET+Math.min(.4,data.height*.2)-props.position.y)/scale;
     if(data.number===14&&child.isGroup)child.position.set((data.width/2+.35)/scale,(FEET+data.height/3-props.position.y)/scale,0);
@@ -646,6 +797,40 @@ function transformedDecorations(root,data) {
     const face=getCharacterFaceLayout(data.number,data),source=faceLayout(original);
     props.position.y=(face.eyeY+face.mouthY)/2-(source.eyeY+source.mouthY)/2*scale;
   }
+}
+
+function adaptedBackpack(root,data,maxScale) {
+  const holder=new THREE.Group();holder.name='adapted explorer backpack';root.add(holder);backpack(holder);
+  const pack=holder.getObjectByName('explorer backpack');
+  const bounds=new THREE.Box3().setFromObject(pack),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  const mainBounds=new THREE.Box3().setFromObject(pack.getObjectByName('olive backpack body'));
+  const rear=new Map();
+  for(const cell of data.cells){
+    const key=`${cell.x},${cell.y}`,previous=rear.get(key);
+    if(!previous||(cell.z??0)<(previous.z??0))rear.set(key,cell);
+  }
+  // Fit the complete pack and its shoulder straps to a filled rear patch.
+  // This keeps sparse corners and layered forms from wearing a pack in air.
+  let best=null;
+  for(const cell of rear.values())for(let height=1;height<=Math.min(8,data.height);height++)for(let width=1;width<=Math.min(4,data.width);width++){
+    let filled=true;
+    for(let y=cell.y;y<cell.y+height&&filled;y++)for(let x=cell.x;x<cell.x+width;x++){
+      const rearCell=rear.get(`${x},${y}`);
+      if(!rearCell||(rearCell.z??0)!==(cell.z??0)){filled=false;break;}
+    }
+    if(!filled)continue;
+    const scale=Math.min(maxScale,(width-.12)/size.x,(height-.12)/size.y);
+    const halfX=size.x*scale/2,halfY=size.y*scale/2;
+    const cx=Math.max(cell.x+halfX+.06,Math.min(cell.x+width-halfX-.06,data.width/2));
+    const cy=Math.max(cell.y+halfY+.06,Math.min(cell.y+height-halfY-.06,data.height*.6));
+    const score=scale*10-Math.abs(cx-data.width/2)*.025-Math.abs(cy-data.height*.6)*.025;
+    if(!best||score>best.score)best={score,scale,cx,cy,patch:{x:cell.x,y:cell.y,z:cell.z??0,width,height}};
+  }
+  const {scale,cx,cy,patch}=best,rearZ=patch.z-bodyDepth(data)/2;
+  holder.scale.setScalar(scale);
+  holder.position.set(cx-data.width/2-center.x*scale,FEET+cy-center.y*scale,rearZ-(mainBounds.max.z+.01)*scale);
+  const attachment={patch,scale,rearZ};
+  holder.userData.attachment=attachment;root.userData.backpackAttachment=attachment;
 }
 
 function zeroExpression(emotion) {
@@ -742,8 +927,9 @@ export function createCharacter(number, {definition} = {}) {
   const metrics = getCharacterMetrics(data), depth=bodyDepth(data);
   const root = new THREE.Group(); root.name = `${data.name} character`;
   root.userData.number = data.number;
-  root.userData.formId=data.formId??'original';root.userData.armAttachments=[];
-  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number===21?.72:data.number===24?.45:data.number===26?.57:data.number===30?1.03:data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
+  root.userData.formId=data.formId??'original';root.userData.armAttachments=[];root.userData.footAttachments=[];
+  root.userData.visualHeight = data.height + 1.25 + (data.number === 7 ? .6 : data.number===21?.72:data.number===24?.45:data.number===26?.57:data.number===30?1.03:[31,34].includes(data.number)?.48:data.number===37?.95:data.number === 3 || data.number === 14 ? .46 : data.number===20?.2:0);
+  const facePlacement=faceTransform(data),adaptedFace={...getCharacterFaceLayout(data.number,data),cell:facePlacement.cell};
   const body = new THREE.Group(); body.name = 'unit block body'; root.add(body);
   for (const cell of data.cells) {
     const cube = mesh(CUBE, cell.color, `${data.name} block ${cell.x},${cell.y}`);
@@ -754,32 +940,42 @@ export function createCharacter(number, {definition} = {}) {
   }
   outlineBody(body, data);
   const feet = [];
+  const bottomCells=frontCells(data).filter(cell=>cell.y===0);
   for (const side of [-1, 1]) {
     const pivot = new THREE.Group();
-    const fx = !transformed&&data.number === 15 ? 1.5 + side * .3 : !transformed&&data.number===23?-.5+side*.32:side * Math.min(.65, data.width * .26);
-    pivot.position.set(fx, .38, 0); root.add(pivot); feet.push(pivot);
-    const footColor = data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.dark;
-    const legColor=data.number===20?'#d58a2f':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.number===24?'#64ac25':data.dark;
+    let fx = !transformed&&data.number === 15 ? 1.5 + side * .3 : !transformed&&data.number===23?-.5+side*.32:!transformed&&data.number===31?-1+side*.19:side * Math.min(.65, data.width * .26),fz=0,footCell;
+    if(transformed){
+      footCell=bottomCells.reduce((best,cell)=>Math.abs(cell.x+.5-data.width/2-fx)<Math.abs(best.x+.5-data.width/2-fx)?cell:best);
+      fx=Math.max(footCell.x+.16-data.width/2,Math.min(footCell.x+.84-data.width/2,fx));fz=(footCell.z??0)-(depth-1)/2;
+      root.userData.footAttachments.push({side,x:fx,y:FEET,z:fz,cell:{x:footCell.x,y:footCell.y,z:footCell.z??0}});
+    }
+    pivot.position.set(fx, .38, fz); root.add(pivot); feet.push(pivot);
+    const newFootColor=({31:'#a33730',32:'#cd8b35',33:'#498349',34:'#4f9d40',35:'#287b92',36:side<0?'#e4cf51':'#6e35ad',37:side<0?'#a99854':'#88449d',38:'#9d8641',39:'#657176',40:'#398d45'})[data.number];
+    const footColor = newFootColor ?? (data.number === 15 ? side < 0 ? '#f8efe8' : '#40c9de' : data.number===19?side<0?'#343d3e':'#727c7a':data.number===20?'#242b2d':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.dark);
+    const legColor=newFootColor??(data.number===20?'#d58a2f':data.number===21?side<0?'#d6b46a':'#c82d28':data.number===22?side<0?'#285f91':'#af342e':data.number===24?'#64ac25':data.dark);
     tube(pivot, [[0, .03, 0], [0, -.13, 0], [0, -.22, .04]], .075, legColor);
     ball(pivot, side * .015, -.24, .1, data.number === 8 ? .32 : .205, .14, .3, footColor, 'walking shoe');
     if (data.number === 11 || data.number === 15) box(pivot, 0, -.2, .345, .26, .065, .025, data.number === 11 ? '#fffdf5' : side < 0 ? '#cc3548' : '#188ab0', 'shoe stripe');
     if(data.number===20)box(pivot,0,-.12,.18,.27,.12,.27,'#fffbed','white spats');
     if(data.number===21&&side<0)for(const y of[-.14,-.21,-.28])box(pivot,0,y,.365,.25,.026,.035,'#fff0c5','hiking boot lace');
     if(data.number===22)for(const y of[-.14,-.25])box(pivot,0,y,.363,.27,.035,.025,'#fff0d2','striped trainer');
+    if(data.number===33)for(const y of[-.09,-.18])box(pivot,0,y,.22,.22,.045,.15,'#fff4ce','football sock stripe');
   }
   const arms = [];
   const lowFace = data.number >= 11;
-  const armY = transformed?FEET+Math.max(.45,data.height/3):({21:4.5,22:1.3,23:1.12,24:3.9,25:1.55,26:2.0,27:1.9,28:1.5,29:1.1,30:8.3})[data.number] ?? (lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8));
+  const armY = transformed?FEET+Math.max(.45,data.height/3):({21:4.5,22:1.3,23:1.12,24:3.9,25:1.55,26:2.0,27:1.9,28:1.5,29:1.1,30:8.3,31:1.82,32:1.7,33:1.18,34:1.65,35:1.6,36:1.18,37:6.5,38:1.45,39:7.55,40:5.8})[data.number] ?? (lowFace ? (data.number === 12 ? 1.02 : 1.0) : data.height + FEET - (data.number === 6 ? 1.12 : data.number === 9 ? 1.5 : data.number === 10 ? 1.6 : .8));
   for (const side of [-1, 1]) {
     const count = data.number === 8 ? 3 : 1;
     for (let i = 0; i < count; i++) {
       const pivot = new THREE.Group();
-      pivot.position.set(side * (!transformed&&data.number===17?1:data.width/2), data.number === 8 ? transformed?armY+(1-i)*Math.min(.3,data.height*.17):data.height + FEET - 1.28 - i : armY, 0);
-      root.userData.armAttachments.push({side,x:pivot.position.x,y:pivot.position.y,z:pivot.position.z});
+      const desiredY=data.number === 8 ? transformed?armY+(1-i)*Math.min(.3,data.height*.17):data.height + FEET - 1.28 - i : armY;
+      const attachment=transformed||data.number>=31?armAttachment(data,side,desiredY,adaptedFace):null;
+      pivot.position.set(attachment?.x??side * (!transformed&&data.number===17?1:data.width/2), attachment?.y??desiredY, attachment?.z??0);
+      root.userData.armAttachments.push({side,x:pivot.position.x,y:pivot.position.y,z:pivot.position.z,...(attachment?{cell:attachment.cell}:{})});
       pivot.userData.armAttachment=true;
       root.add(pivot);
-      const lifted = data.number === 6 && side < 0 || [7, 10].includes(data.number) && side > 0 || [16,22,25,27,30].includes(data.number);
-      const limbColor=data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.number===22?(side<0?'#285f91':'#af342e'):data.dark;
+      const lifted = data.number === 6 && side < 0 || [7,10,37,39,40].includes(data.number) && side > 0 || [16,22,25,27,30].includes(data.number);
+      const limbColor=[37,38].includes(data.number)?'#c4b65b':data.number===19?(side<0?'#414a4c':'#9ba3a1'):data.number===20?'#dd8c2c':data.number===22?(side<0?'#285f91':'#af342e'):data.dark;
       const handY = data.number===24?-.05:transformed&&data.height===1?(lifted?.22:-.25):lifted ? .48 : data.number === 8 ? .33 : data.number === 1 ? -.32 : -.49;
       const handX = side * (data.number === 8 ? .88 : data.number===24?.68:data.number===25?.55:.39);
       const points = data.number === 8
@@ -807,6 +1003,8 @@ export function createCharacter(number, {definition} = {}) {
         if(data.number===21&&side>0)hikingStaff(props);
         if(data.number===24)celestialStaff(props,side<0);
         if(data.number===28){for(let band=0;band<7;band++)box(props,0,-.12+band*.045,.02,.23,.047,.24,RAINBOW[band],'rainbow wrist band');}
+        if(data.number===34&&side<0)paintRoller(props);
+        if(data.number===40&&side>0)box(props,0,-.1,.01,.23,.12,.24,'#75bc6a','green wrist cuff');
         if(transformed){
           hand.scale.setScalar(Math.min(1,.55+data.height*.15,data.width*.65));
           props.scale.setScalar(Math.min(1,data.height/4));
@@ -822,10 +1020,11 @@ export function createCharacter(number, {definition} = {}) {
     }
   }
   if(transformed)transformedDecorations(root,data);else decorations(root, data);
-  const t=faceTransform(data),face=t.source,layout=getCharacterFaceLayout(data.number,data);
+  const t=facePlacement,face=t.source,layout=adaptedFace;
   const faceRoot=new THREE.Group();faceRoot.name='character face';root.add(faceRoot);
   faceRoot.position.set(t.x,t.y,t.z);faceRoot.scale.setScalar(t.scale);
   root.userData.faceCenter={x:layout.x,y:(layout.eyeY+layout.mouthY)/2,z:.65*t.scale+t.z};
+  if(t.cell){root.userData.faceCell={...t.cell};root.userData.facePatch={...t.patch};}
   eyeDecorations(faceRoot, original, face);
   const expressions = Object.fromEntries(MOODS.map(emotion => {
     const group = expression(original, face, emotion); group.visible = false; faceRoot.add(group); return [emotion, group];

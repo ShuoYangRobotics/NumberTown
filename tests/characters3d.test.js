@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHARACTERS, getCharacterMetrics, getCharacterFaceLayout, createCharacter } from '../dist/characters3d.js';
 import { getCharacterDefinition } from '../dist/character-data.js';
+import { getCharacterArrangements, createCrazyArrangement } from '../dist/arrangements.js';
 import { Box3, Raycaster, Vector3 } from '../dist/vendor/three.module.js';
 
 const key = ({ x, y }) => `${x},${y}`;
@@ -10,6 +11,7 @@ const shapes = [
   [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [1, 7], [2, 4], [3, 3], [2, 5],
   [2, 6], [3, 4], [3, 6], [2, 7], [5, 5], [4,4], [4,7], [3,6], [2,10], [2,10],
   [3,7], [4,6], [3,10], [3,8], [5,5], [4,7], [3,3], [3,11], [3,10], [3,10],
+  [7,5], [4,8], [3,11], [6,7], [5,7], [6,6], [5,11], [4,10], [5,11], [4,10],
 ];
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 
@@ -19,10 +21,10 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('Zero to Thirty preserve 31 identities and 465 counted, connected unit cubes', () => {
-  assert.equal(CHARACTERS.length, 31);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 31);
-  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),465);
+test('Zero to Forty preserve 41 identities and 820 counted, connected unit cubes', () => {
+  assert.equal(CHARACTERS.length, 41);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 41);
+  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),820);
   for (const [index, friend] of CHARACTERS.entries()) {
     assert.equal(friend.number, index);
     assert.equal(friend.cells.length, friend.number);
@@ -68,7 +70,8 @@ test('definition lookup supports the whole roster and clamps safely',()=>{
   assert.equal(getCharacterDefinition(0).name,'Zero');
   assert.equal(getCharacterDefinition('0').number,0);
   assert.equal(getCharacterDefinition(30).name,'Thirty');
-  assert.equal(getCharacterDefinition(200).number,30);
+  assert.equal(getCharacterDefinition(40).name,'Forty');
+  assert.equal(getCharacterDefinition(200).number,40);
   assert.equal(getCharacterDefinition('19').number,19);
   assert.equal(getCharacterDefinition(-3).number,1);
   assert.equal(getCharacterDefinition(NaN).number,1);
@@ -176,8 +179,69 @@ test('Twenty-Eight has five visibly clear through-holes, including around its fa
   }
 });
 
+test('Thirty-One to Forty retain their reference cube silhouettes and colored number parts',()=>{
+  const calendar=getCharacterDefinition(31);
+  assert.deepEqual(calendar.cells.filter(c=>c.y===0).map(key),['0,0','1,0','2,0']);
+  assert.equal(calendar.cells.filter(c=>c.y>0).length,28);
+  assert.equal(calendar.cells.find(c=>c.x===2&&c.y===0).color,'#eb403c');
+  const thirtyTwo=getCharacterDefinition(32);
+  assert.deepEqual(thirtyTwo.cells.filter(c=>c.color==='#f49a24').map(key),['1,6','2,6']);
+  assert.ok(getCharacterDefinition(33).cells.filter(c=>c.y===10).every(c=>c.color==='#e9ce22'));
+  assert.deepEqual(getCharacterDefinition(34).cells.filter(c=>c.color==='#63ce46').map(key),['2,5','3,5','2,6','3,6']);
+  assert.deepEqual(getCharacterDefinition(35).cells.filter(c=>c.color==='#30bfd8').map(key),['0,6','1,6','2,6','3,6','4,6']);
+  assert.equal(getCharacterDefinition(36).cells.filter(c=>c.color==='#7338bc'&&c.y===0).length,6);
+  const explorer=getCharacterDefinition(37),rainbow=explorer.cells.filter(c=>c.color!=='#fff387');
+  assert.equal(new Set(rainbow.map(c=>c.color)).size,7);
+  assert.deepEqual(rainbow.map(key),['0,9','0,10','1,10','2,10','3,10','4,10','4,9']);
+  const thirtyEight=getCharacterDefinition(38);
+  assert.equal(thirtyEight.cells.filter(c=>c.color==='#dc3f9f'&&c.x>=2&&c.y>=5&&c.y<=8).length,8);
+  assert.deepEqual(thirtyEight.cells.filter(c=>c.y===9).map(key),['0,9','1,9']);
+  const thirtyNine=getCharacterDefinition(39),gray=thirtyNine.cells.filter(c=>c.color!=='#fff387');
+  assert.equal(gray.length,9);
+  assert.deepEqual(gray.map(key).sort(),['0,10','0,8','0,9','1,10','2,10','3,10','4,10','4,8','4,9']);
+  assert.equal(getCharacterDefinition(40).cells.filter(c=>c.color==='#b1ed92').length,20);
+  assert.equal(getCharacterDefinition(40).cells.filter(c=>c.color==='#a7e684').length,20);
+});
+
+test('Thirty-One to Forty have counted calendar rings, flowers, and their distinct reference accessories',()=>{
+  const details={
+    31:{'red calendar binding':1,'silver calendar ring':7},
+    32:{'square glasses':2},
+    33:{'sports badge':1,'badge football':1},
+    34:{'green painter cap':1,'green paint roller':1,'green paint splash':5},
+    35:{'rainbow flower':5,'flower petal':35},
+    36:{'magenta superhero mask':2},
+    37:{'rainbow explorer hat':1,'blue direction arrow':1},
+    38:{'magenta zigzag eyebrow':12},
+    39:{'round gray nose':1,'gray thoughtful eyebrow':12},
+    40:{'green checkered eyebrow':12,'eyebrow checker':96},
+  };
+  for(const [number,features]of Object.entries(details)){
+    const model=createCharacter(Number(number)),counts=new Map();
+    model.root.traverse(object=>{
+      counts.set(object.name,(counts.get(object.name)??0)+1);
+      if(object.geometry)assert.ok(Array.from(object.geometry.getAttribute('position').array).every(Number.isFinite),`${number}/${object.name} has invalid vertices`);
+    });
+    for(const[name,count]of Object.entries(features))assert.equal(counts.get(name),count,`${number}: ${name}`);
+    model.dispose();
+  }
+});
+
+test('Thirty-One stands on the red calendar day rather than its empty lower bounding box',()=>{
+  const model=createCharacter(31);model.root.updateMatrixWorld(true);
+  const shoes=[];
+  model.root.traverse(object=>{if(object.name==='walking shoe')shoes.push(object.getWorldPosition(new Vector3()));});
+  assert.equal(shoes.length,2);
+  for(const shoe of shoes){
+    assert.ok(shoe.x> -1.5&&shoe.x<-.5,'each shoe must be below the red cell');
+    const hits=new Raycaster(new Vector3(shoe.x,.1,0),new Vector3(0,1,0)).intersectObject(model.body,true);
+    assert.ok(hits.some(hit=>hit.object.userData.unitBlock),'the shoe needs a real unit cube directly above');
+  }
+  model.dispose();
+});
+
 test('definition overrides keep all cubes unscaled while faces, limbs, and props fit one-high bodies',()=>{
-  for(const number of[6,10,20,21,24,26,27,28,29,30]){
+  for(const number of[6,10,20,21,24,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]){
     const original=getCharacterDefinition(number),definition={...original,formId:`${number}x1`,transformed:true,width:number,height:1,depth:1,cells:original.cells.map((c,i)=>({...c,x:i,y:0,z:0}))};
     const model=createCharacter(number,{definition}),metrics=getCharacterMetrics(definition);
     assert.equal(model.width,number);assert.equal(model.height,1);assert.equal(model.radius,metrics.radius);
@@ -248,6 +312,43 @@ test('Twenty-One has a substantial mesh backpack, rolled bedding, and a bounded 
   }
 });
 
+test('Twenty-One fits its backpack onto occupied rear patches in corners and layered crazy forms',()=>{
+  const corner=getCharacterArrangements(21).find(definition=>definition.shapeKind==='corner');
+  const layered=[2,13,23].map(seed=>createCrazyArrangement(21,seed));
+  assert.ok(layered.every(definition=>definition.depth>1));
+  for(const definition of[corner,...layered]){
+    const model=createCharacter(21,{definition}),metrics=getCharacterMetrics(definition);
+    const {patch,scale,rearZ}=model.root.userData.backpackAttachment;
+    for(let y=patch.y;y<patch.y+patch.height;y++)for(let x=patch.x;x<patch.x+patch.width;x++){
+      assert.ok(definition.cells.some(cell=>cell.x===x&&cell.y===y&&(cell.z??0)===patch.z));
+      assert.ok(!definition.cells.some(cell=>cell.x===x&&cell.y===y&&(cell.z??0)<patch.z),'the pack patch must face exposed rear space');
+    }
+    model.root.updateMatrixWorld(true);
+    const pack=model.root.getObjectByName('explorer backpack'),bounds=new Box3().setFromObject(pack);
+    assert.ok(bounds.min.x>=patch.x-definition.width/2&&bounds.max.x<=patch.x+patch.width-definition.width/2);
+    assert.ok(bounds.min.y>=patch.y+.35&&bounds.max.y<=patch.y+patch.height+.35);
+    if(definition===corner)assert.ok(bounds.max.x<=-.5,'the L-shaped upper stem ends left of the empty bounding-box center');
+    const main=new Box3().setFromObject(pack.getObjectByName('olive backpack body'));
+    assert.ok(Math.abs(main.max.z-(rearZ-.01*scale))<1e-6,'the pack should touch the rear cube face without a floating gap');
+    const blocks=unitBlocks(model.body);
+    for(const tx of[.1,.5,.9])for(const ty of[.1,.5,.9]){
+      const origin=new Vector3(main.min.x+(main.max.x-main.min.x)*tx,main.min.y+(main.max.y-main.min.y)*ty,main.max.z);
+      const hit=new Raycaster(origin,new Vector3(0,0,1)).intersectObjects(blocks,false)[0];
+      assert.ok(hit&&Math.abs(hit.point.z-rearZ)<1e-6,'every part of the backpack needs a real rear cube surface immediately ahead');
+    }
+    const point=new Vector3();
+    pack.traverse(object=>{
+      if(!object.isMesh)return;
+      const positions=object.geometry.getAttribute('position');
+      for(let index=0;index<positions.count;index++){
+        point.fromBufferAttribute(positions,index).applyMatrix4(object.matrixWorld);
+        assert.ok(Math.hypot(point.x,point.z)<=metrics.radius+1e-6,'the fitted pack must stay within navigation metrics');
+      }
+    });
+    model.dispose();
+  }
+});
+
 test('Twenty-One to Twenty-Five keep their distinctive faces, spectacles, and celestial accessories',()=>{
   const layouts={21:[0,5.87,5.18],22:[-.17,1.53,.88],23:[.62,2.04,1.5],24:[0,4.84,4.12],25:[0,1.95,1.13]};
   const features={21:['pointed purple explorer mask'],22:['striped trainer'],23:['eye rim'],24:['sun staff','golden sun','moon staff','starry crescent moon','square glasses'],25:['square glasses','blue crown eyebrow','gentle blue smile']};
@@ -278,6 +379,23 @@ test('red frames trace the declared outlined cells and never appear on Twenty',(
       let area=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];area+=a.x*b.y-b.x*a.y;}
       assert.equal(Math.abs(area)/2,outlined.length,'raised outline must enclose exactly its declared cells');
     }
+  }
+});
+
+test('layered transformations keep red cube edges without a flattened ten-frame through the body',()=>{
+  for(const number of[10,11,12,13,14,15,16,17,18,19]){
+    const original=getCharacterDefinition(number);
+    const definition={...original,formId:'layered-regression',transformed:true,width:2,height:Math.ceil(number/4),depth:2,
+      cells:original.cells.map((cell,index)=>({...cell,x:index%2,y:Math.floor(index/4),z:Math.floor(index/2)%2}))};
+    const model=createCharacter(number,{definition});
+    assert.equal(unitBlocks(model.body).length,number);
+    assert.equal(model.body.children.filter(object=>object.name==='red ten frame').length,0,'a layered shape must not receive a flattened silhouette');
+    const redEdges=model.body.children.filter(object=>object.name==='unit cube seams'&&object.material.color.getHexString()==='d9384a');
+    assert.equal(redEdges.length,1,'the individual white-ten cubes retain their red edges');
+    const positions=redEdges[0].geometry.getAttribute('position');
+    const depths=Array.from({length:positions.count},(_,index)=>positions.getZ(index));
+    assert.ok(Math.min(...depths)<-.99&&Math.max(...depths)>.99,'cube edges trace both depth layers');
+    model.dispose();
   }
 });
 

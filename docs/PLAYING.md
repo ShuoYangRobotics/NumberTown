@@ -1,6 +1,6 @@
 # Playing NumberTown
 
-[Launch the game](../README.md#run-locally), then choose a friend and explore. The game has 31 characters numbered **0–30**. Choosing a wandering friend gives you control at their current location.
+[Launch the game](../README.md#run-locally), then choose a friend and explore. The game has 41 characters numbered **0–40**. Choosing a wandering friend gives you control at their current location.
 
 ## Controls
 
@@ -16,12 +16,13 @@
 | Esc | Leave train or stop garden tour |
 | F / activity button | Kick football, pick up / throw beach ball, or board a nearby train |
 | E / feeling menu | Change expression |
-| T / Change shape | Try the next factor rectangle, then return to the original shape |
+| T / Change shape | Cycle rectangles, irregular arrangements and a crazy shape, then return to the original |
+| Shift + T / dice button | Generate a fresh connected crazy shape |
 | K / Tell me a math fact | Ask the selected friend for another number fact |
 | M / Map button | Open or close the town map |
 | 1–9 and 0 | Choose One through Ten; the single 0 key chooses Ten |
 | Shift + 1–9 and 0 | Choose Eleven through Twenty |
-| Tab, number, Enter | Choose any friend from Zero through Thirty |
+| Tab, number, Enter | Choose any friend from Zero through Forty |
 | Hold Tab, type a number, release Tab | Choose any friend with a held shortcut |
 | Number field + Go | Choose any friend using the field |
 | Thumbnails / previous and next buttons / [ and ] | Choose a friend from the full cast |
@@ -32,7 +33,7 @@
 | View sea / View town | Frame the view from a scenic deck |
 | Tour garden / Stop tour | Follow or stop the seabed loop |
 
-The bottom strip scrolls through all 31 thumbnails. To choose Zero directly, use **Tab + 0** or Zero’s thumbnail. **Escape** cancels number entry. Tab opens the number field when the game has focus; in menus, dialogs, and other controls, Tab and Shift + Tab keep their normal focus behavior.
+The bottom strip scrolls through all 41 thumbnails. To choose Zero directly, use **Tab + 0** or Zero’s thumbnail. **Escape** cancels number entry. Tab opens the number field when the game has focus; in menus, dialogs, and other controls, Tab and Shift + Tab keep their normal focus behavior.
 
 On touch screens, use the direction pad, Hop, and the nearby activity buttons for kicking, picking up, and throwing. Drag with one finger to orbit and pinch with two fingers to zoom.
 
@@ -62,9 +63,11 @@ The world spans **840 × 780 units**, with **70 houses**: 50 on the west bank an
 
 Zero is a small floating coral smile with a black **0** above it. It has no body cubes, eyes, or limbs. Zero can move, hop, change expression, wander, and share facts about zero.
 
-One through Thirty each contain exactly their number of equal **1 × 1 × 1 cubes**, for **465 cubes** across the cast. Some original shapes are rectangles, while others have steps, extra columns, or gaps. Sixteen is a 4 × 4 square. Twenty-One is a 3 × 7 explorer carrying a modeled backpack; choose **View backpack** to inspect the camping gear and **View face** to turn back. Twenty-Seven is a true **3 × 3 × 3 cube**. Twenty-Eight is a **3 × 11 frame with five openings**, so 33 − 5 = 28.
+One through Forty each contain exactly their number of equal **1 × 1 × 1 cubes**, for **820 cubes** across the cast. Some original shapes are rectangles, while others have steps, extra columns, or gaps. Sixteen is a 4 × 4 square. Twenty-One is a 3 × 7 explorer carrying a modeled backpack; choose **View backpack** to inspect the camping gear and **View face** to turn back. Twenty-Seven is a true **3 × 3 × 3 cube**. Twenty-Eight is a **3 × 11 frame with five openings**, so 33 − 5 = 28.
 
-Press **T** to cycle through the number’s factor rectangles, including tall and wide orientations, and return to its original shape. Cubes keep their size and colors, while the face and accessories adapt to the arrangement. Movement, collision checks, roaming routes, and camera framing use the current form. A shape that needs more room is skipped when you press T again. Zero has no blocks to rearrange, and One has only its 1 × 1 form, so their Change shape buttons are disabled.
+Press **T** to cycle through factor rectangles, connected steps and other irregular forms, tens with the last digit above or beside them, and a crazy shape, then return to the original. Press **Shift + T** or the dice button for a fresh random arrangement. Every cube remains joined to the body by shared faces; no cubes overlap or change size. Two has only two orientations; Zero and One have no alternative arrangements. Cubes keep their size and colors, while the face and accessories adapt to the arrangement. Movement, collision checks, roaming routes, and camera framing use the current form. A shape that needs more room is skipped when you press T again. Zero has no blocks to rearrange, and One has only its 1 × 1 form, so their Change shape buttons are disabled.
+
+Thirty-One has calendar rings, Thirty-Two an orange stripe, Thirty-Three a sports badge, Thirty-Four painting details, Thirty-Five rainbow flowers, Thirty-Six a superhero mask, Thirty-Seven an explorer hat, Thirty-Eight a pink side, Thirty-Nine a gray cap, and Forty a green body with patterned eyebrows. Their original cube counts match their numbers. The [reference archive](../references/characters/README.md) keeps the available user-supplied pictures.
 
 Unselected friends wander quietly between destinations, pause, and continue exploring. Your hill, mountain and underwater visitors stay put until you move them away. Underwater friends retain their swimming height. Friends avoid scenery and each other and cross the river using bridges. Wider forms need more open space and may stay near a roomy destination.
 
@@ -74,4 +77,4 @@ Every friend has happy, excited, curious, surprised, sleepy, and sad expressions
 
 Facts cover arithmetic, parity, number properties, and possible arrangements. Statements about the current body follow its current shape, so a flattened Twenty-Seven does not call its body a cube. Zero teaches facts such as **5 + 0 = 5**, **5 × 0 = 0**, and **0 divided by 5 is 0**; it never claims a block shape or divides by zero.
 
-Voices start muted. Use the sound button to enable the browser’s English speech synthesis when available. Bubbles work independently of voices. Equations use spoken operator words: **2 × 10 = 20** becomes “2 times 10 equals 20.” Switching characters stops the previous voice immediately.
+Voices start muted. Use the sound button to enable the browser’s English speech synthesis when available. Each number has a stable combination of pitch, speaking rate and volume, and uses one of the available English voices. The exact sound depends on the browser’s installed voices; parameter variation still works with a single voice. Bubbles work independently of voices. Equations use spoken operator words: **2 × 10 = 20** becomes “2 times 10 equals 20.” Switching characters stops the previous voice immediately.

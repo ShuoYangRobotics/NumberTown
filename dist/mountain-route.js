@@ -33,13 +33,13 @@ export const SUMMIT_LANDMARK=Object.freeze({id:'summit',name:'Mountain summit',d
 const deckWest=SUMMIT_DECK.x-SUMMIT_DECK.width/2,deckEast=SUMMIT_DECK.x+SUMMIT_DECK.width/2;
 const deckNorth=SUMMIT_DECK.z-SUMMIT_DECK.depth/2,deckSouth=SUMMIT_DECK.z+SUMMIT_DECK.depth/2;
 // Nearby lower turns must not become side entrances to the level platform.
-// The seven-unit north gate follows the actual final approach.
+// The broad north gate follows the final bend and admits the seven-wide calendar.
 export const SUMMIT_RAILS=Object.freeze([
   {id:'summit-west-rail',x1:deckWest,z1:deckNorth,x2:deckWest,z2:deckSouth},
   {id:'summit-east-rail',x1:deckEast,z1:deckNorth,x2:deckEast,z2:deckSouth},
   {id:'summit-south-rail',x1:deckWest,z1:deckSouth,x2:deckEast,z2:deckSouth},
-  {id:'summit-north-west-rail',x1:deckWest,z1:deckNorth,x2:SUMMIT_DECK.x-7,z2:deckNorth},
-  {id:'summit-north-east-rail',x1:SUMMIT_DECK.x,z1:deckNorth,x2:deckEast,z2:deckNorth},
+  {id:'summit-north-west-rail',x1:deckWest,z1:deckNorth,x2:deckWest+.4,z2:deckNorth},
+  {id:'summit-north-east-rail',x1:SUMMIT_DECK.x+3.8,z1:deckNorth,x2:deckEast,z2:deckNorth},
 ].map(Object.freeze));
 export const SUMMIT_OBSTACLES=Object.freeze([
   ...SUMMIT_RAILS.map(rail=>({id:rail.id,kind:'rail',x:Math.min(rail.x1,rail.x2)-.09,z:Math.min(rail.z1,rail.z2)-.09,w:Math.abs(rail.x2-rail.x1)+.18,d:Math.abs(rail.z2-rail.z1)+.18})),
@@ -100,7 +100,13 @@ export function mountainWalkHeight(x,z){
   if(insideDeck(x,z))return SUMMIT_DECK.height;
   if(!withinBounds(x,z))return null;
   const nearest=project(x,z,true);
-  return nearest&&nearest.distance<=halfWidth?nearest.y:null;
+  if(!nearest||nearest.distance>halfWidth)return null;
+  // Ease the last paved shoulder into the deck rather than making a ledge
+  // through a wide character's footprint at the platform boundary.
+  const dx=Math.max(0,Math.abs(x-SUMMIT_DECK.x)-SUMMIT_DECK.width/2);
+  const dz=Math.max(0,Math.abs(z-SUMMIT_DECK.z)-SUMMIT_DECK.depth/2);
+  const blend=1-smooth(Math.hypot(dx,dz)/1.2);
+  return nearest.y+(SUMMIT_DECK.height-nearest.y)*blend;
 }
 
 const peaks=[[-75,4,64,90,76],[20,12,68,78,70],[104,1,74,76,79],[177,14,70,67,70],[304,5,74,76,79],[382,16,71,74,70],[478,0,74,94,83],[565,12,65,80,70]];
@@ -129,5 +135,5 @@ export function mountainHeight(x,z){
     if(blend>0)result+=(Math.max(0,nearest.y-.12)-result)*blend;
   }
   // The platform sits on a broad stone summit, rather than on stilts.
-  return insideDeck(x,z)?SUMMIT_DECK.height-.12:result;
+  return insideDeck(x,z)?Math.min(SUMMIT_DECK.height-.12,nearest?nearest.y-.2:Infinity):result;
 }

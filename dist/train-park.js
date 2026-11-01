@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import { WORLD, MOUNTAINS } from './geography.js';
 
 const TAU = Math.PI * 2;
 const freeze = value => Object.freeze(value);
@@ -66,6 +67,7 @@ export const TRAIN_OBSTACLES = freeze([
   ...PEAKS.map(([x, z, radius], i) => freeze({ id: `railway-peak-${i}`, kind: 'rock', x, z, radius })),
 ]);
 function blocked(x, z, radius) {
+  if(x-radius<WORLD.margin||x+radius>WORLD.width-WORLD.margin||z-radius<MOUNTAINS.maxZ+.05||z+radius>WORLD.depth-WORLD.margin)return true;
   return TRAIN_OBSTACLES.some(obstacle => {
     if (obstacle.radius != null) return Math.hypot(x - obstacle.x, z - obstacle.z) < radius + obstacle.radius;
     const dx = Math.max(obstacle.x - x, 0, x - obstacle.x - obstacle.w);
@@ -86,6 +88,15 @@ export function boardingPoint(state) {
       const x = pose.x + pose.outward.x * (offset + extra) - pose.outward.z * along;
       const z = pose.z + pose.outward.z * (offset + extra) + pose.outward.x * along;
       if (!blocked(x, z, radius)) return { x, z };
+    }
+  }
+  // A forty-wide body cannot fit between the northern rail and the mountains.
+  // Step off beside a nearby bend where the outside verge becomes wider.
+  for(const distance of [12,24,36,48,60])for(const direction of [-1,1]){
+    const nearby=trainPose(pose.progress+direction*distance/TRAIN_TRACK_LENGTH);
+    for(const extra of [0,2,4]){
+      const point={x:nearby.x+nearby.outward.x*(offset+extra),z:nearby.z+nearby.outward.z*(offset+extra)};
+      if(Math.hypot(point.x-pose.x,point.z-pose.z)<=radius+42&&!blocked(point.x,point.z,radius))return point;
     }
   }
   return { x: pose.x + pose.outward.x * (offset + 10), z: pose.z + pose.outward.z * (offset + 10) };

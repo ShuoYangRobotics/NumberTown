@@ -9,8 +9,9 @@ import { createRoamingController } from './roaming.js';
 import { shouldStayAtScenicSpot } from './scenic-stay.js';
 import { conformGroundMarker } from './ground-marker.js';
 import { toSpokenMath } from './speech.js';
+import { getVoiceProfile } from './voice-profiles.js';
 import { mountCharacterShortcut } from './character-shortcut.js';
-import { getCharacterArrangements, getNextArrangement, findArrangementPosition } from './arrangements.js';
+import { getCharacterArrangements, getNextArrangement, createCrazyArrangement, findArrangementPosition } from './arrangements.js';
 
 import { createLandscape } from './terrain.js';
 import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
@@ -19,7 +20,7 @@ import { createFootball, createBallState, stepBall, kickBall, updateBallContact,
 import { BRIDGES, RIVER, COAST, WATER_PLAY, riverX } from './geography.js';
 import { createWaterBall, createWaterBallState, stepWaterBall, pickUpWaterBall, updateHeldWaterBall, throwWaterBall, releaseWaterBall, resetWaterBall } from './water-ball.js';
 import { createSeaLife } from './sea-life.js';
-import { bodyHeight, stepSwimming, resetSwimming, bodiesOverlap } from './swimming.js';
+import { bodyHeight, stepSwimming, resetSwimming, bodiesOverlap, hasBodyClearance } from './swimming.js';
 import { createUnderwaterGarden, gardenTourWaypoints } from './underwater-garden.js';
 import { createTrainPark, createTrainState, boardTrain, leaveTrain, stepTrain, trainPose, boardingPoint, TRAIN_LANDMARK, TRAIN_PARK, TRAIN_OBSTACLES } from './train-park.js';
 import { createAnimalEncounters } from './animal-facts.js';
@@ -110,6 +111,8 @@ let drag=null, pinchDistance=0, suppressClick=false;
 const bubbles = [{element:$('#speech'),player:active,until:0}];
 let voiceUtterance=null;
 const voiceState={text:'',number:null,playing:false};
+let availableVoices='speechSynthesis' in window?speechSynthesis.getVoices():[];
+if('speechSynthesis' in window)speechSynthesis.addEventListener('voiceschanged',()=>{availableVoices=speechSynthesis.getVoices();});
 
 function miniSVG(definition) {
   if(definition.number===0)return `<svg viewBox="-.5 0 1 1.6" aria-hidden="true"><text x="0" y=".94" text-anchor="middle" fill="#141b18" font-family="Arial,sans-serif" font-weight="700" font-size="1.2">0</text><path d="M-.35 1.18q.35 .15 .7-.04q.02 .42-.35 .36q-.35-.02-.35-.32Z" fill="#a43346" stroke="#f17b85" stroke-width=".12" stroke-linejoin="round"/><path d="M-.27 1.23q.25 .07 .53-.03" fill="none" stroke="#fff5da" stroke-width=".075"/></svg>`;
@@ -162,12 +165,13 @@ $('#previous-friend').addEventListener('click',()=>adjacentFriend(-1));
 $('#next-friend').addEventListener('click',()=>adjacentFriend(1));
 
 function updateShapeInfo(message=''){
-  $('#friend-description').textContent=active.definition.transformed?`Still ${active.number} cubes, now in a ${active.width} by ${active.height} arrangement.`:active.description;
+  $('#friend-description').textContent=active.definition.transformed?`Still ${active.number} cubes. ${active.definition.label}.`:active.description;
   $('#shape-size').textContent=active.number===0?'A floating smile':`${active.width} wide · ${active.height} tall${active.definition.depth>1?` · ${active.definition.depth} deep`:''}`;
   const shapes=getCharacterArrangements(active.number);
   $('#transform-shape').disabled=shapes.length<2;
-  $('#transform-shape').title=active.number===0?'Zero has no blocks to rearrange.':shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Keep pressing to return to the original shape.';
-  $('#shape-status').textContent=message||(active.number===0?'No blocks to rearrange':active.formId==='original'?'Original shape':`${active.width} × ${active.height} = ${active.number}`);
+  $('#crazy-shape').disabled=active.number<3;
+  $('#transform-shape').title=active.number===0?'Zero has no blocks to rearrange.':shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Rectangles, irregular shapes, then back to the original. Shift+T makes a new crazy shape.';
+  $('#shape-status').textContent=message||(active.number===0?'No blocks to rearrange':active.formId==='original'?'Original shape':active.definition.shapeKind==='rectangle'?`${active.width} × ${active.height} = ${active.number}`:`${active.definition.label} · ${active.number} cubes`);
 }
 function fitCharacterView(preserve=false){
   if(active.number===28&&active.formId==='original')orbit.elevation=Math.min(orbit.elevation,.32);
@@ -175,14 +179,24 @@ function fitCharacterView(preserve=false){
   const fitted=Math.max(26,visualHeight*2.6,(active.width+2.5)/camera.aspect*2.3);
   orbit.targetDistance=preserve?Math.max(orbit.targetDistance,fitted):fitted;zoom(0);
 }
-function transformFriend(){
+function transformFriend(crazy=false){
   if(modalOpen()||trainState.rider!==null)return;
-  const definition=getNextArrangement(active.number,active.formCursor);
+  if(crazy&&active.number<3)return;
+  let definition;
+  if(crazy){
+    const signature=form=>form.cells.map(cell=>`${cell.x},${cell.y},${cell.z||0}`).sort().join(';');
+    const current=signature(active.definition);
+    for(let attempt=0;attempt<20;attempt++){
+      definition=createCrazyArrangement(active.number,Math.floor(Math.random()*0x100000000));
+      if(signature(definition)!==current)break;
+    }
+  }else definition=getNextArrangement(active.number,active.formCursor);
   if(definition.formId===active.formId&&getCharacterArrangements(active.number).length===1){updateShapeInfo(active.number===0?'Zero has no blocks to rearrange.':'One makes a 1 × 1 square.');return;}
   // Advance the attempted shape even when it does not fit, so another press
   // can reach a narrow rectangle or restore the original body on a small path.
-  active.formCursor=definition.formId;
-  const placement=findArrangementPosition(active,definition,{obstacles:walkingObstacles(active),world:WORLD,maxDistance:8,groundHeight});
+  if(!crazy)active.formCursor=definition.formId;
+  const placement=findArrangementPosition(active,definition,{obstacles:walkingObstacles(active),world:WORLD,maxDistance:8,groundHeight,
+    canPlace:(position,metrics)=>hasBodyClearance({...active,...definition,...metrics,...position,jump:0},players.filter(p=>p!==active&&p.number!==trainState.rider))});
   if(!placement){updateShapeInfo(`More room needed for ${definition.width} × ${definition.height}. Press T for the next shape.`);focusGame();return;}
   const model=createCharacter(active.number,{definition}),oldModel=active.model;
   clearInput();cancelVoice();
@@ -193,7 +207,8 @@ function transformFriend(){
   roaming.pause(active,time);bubbles[0].until=0;active.lastText='';
   updateShapeInfo();updateLocation();fitCharacterView();remark(active);tone();focusGame();
 }
-$('#transform-shape').addEventListener('click',transformFriend);
+$('#transform-shape').addEventListener('click',()=>transformFriend());
+$('#crazy-shape').addEventListener('click',()=>transformFriend(true));
 
 
 for(const emotion of EMOTIONS){
@@ -294,8 +309,11 @@ function speak(text,player){
   if(player!==active||muted||!('speechSynthesis'in window))return;
   cancelVoice();
   const utterance=new SpeechSynthesisUtterance(toSpokenMath(text));voiceUtterance=utterance;
-  utterance.lang='en-US';utterance.rate=.95;utterance.pitch=1.05+(player.number%4)*.09;utterance.volume=.55;
-  Object.assign(voiceState,{text:utterance.text,number:player.number,playing:false});
+  const loadedVoices=speechSynthesis.getVoices();
+  const profile=getVoiceProfile(player.number,loadedVoices.length?loadedVoices:availableVoices);
+  utterance.lang=profile.lang;utterance.rate=profile.rate;utterance.pitch=profile.pitch;utterance.volume=profile.volume;
+  if(profile.voice)utterance.voice=profile.voice;
+  Object.assign(voiceState,{text:utterance.text,number:player.number,playing:false,voiceName:profile.voice?.name||'Browser default',lang:profile.lang,pitch:profile.pitch,rate:profile.rate,volume:profile.volume});
   utterance.onstart=()=>{if(voiceUtterance===utterance)voiceState.playing=true;};
   const finished=()=>{if(voiceUtterance===utterance){voiceUtterance=null;voiceState.playing=false;}};
   utterance.onend=finished;utterance.onerror=finished;speechSynthesis.speak(utterance);
@@ -331,7 +349,7 @@ addEventListener('keydown',event=>{
     const digit=+event.code.slice(-1);const number=event.shiftKey?(digit===0?20:digit+10):(digit===0?10:digit);selectFriend(number);
   }
   if(!event.repeat&&key==='k'){remark(active,{math:true});}
-  if(!event.repeat&&key==='t'){event.preventDefault();transformFriend();}
+  if(!event.repeat&&key==='t'){event.preventDefault();transformFriend(event.shiftKey);}
   if(!event.repeat&&key==='e'){const index=EMOTIONS.findIndex(m=>m.id===active.emotion);setEmotion(active,EMOTIONS[(index+1)%EMOTIONS.length].id,25);remark(active);}
   if(key==='q'||key==='r'){event.preventDefault();trainCameraFollow=false;if(guidedWalk)guidedWalk.autoCamera=false;keys.add(key);if(!event.repeat)orbit.yaw+=(key==='q'?-.12:.12);}
   if(!event.repeat&&key==='c')resetCamera();
@@ -445,6 +463,7 @@ function updateActivity(place){
   $('#activity').hidden=!isTrain&&!isWater&&!['park','football','hill','lookout','beach','water-play','mountains','town-square','pond','mountain-trail','summit'].includes(id)&&!BRIDGE_IDS.has(id);
   $('#train-actions').hidden=!isTrain;$('#board-train').hidden=aboard;$('#leave-train').hidden=!aboard;$('#find-train').hidden=aboard;
   $('#transform-shape').disabled=aboard||getCharacterArrangements(active.number).length<2;
+  $('#crazy-shape').disabled=aboard||active.number<3;
   $('#garden-tour').hidden=id!=='seabed';$('#garden-tour').textContent=gardenTour?'Stop tour':'Tour garden';
   $('#football-actions').hidden=!isFootball;$('#lookout-actions').hidden=!isLookout;
   $('#water-actions').hidden=!isWater;$('#enter-water').hidden=id==='water-play'||id==='seabed';
@@ -590,7 +609,7 @@ function animate(timestamp){
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();if(active.number===21)updateBackpackButton();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},seaLife:{counts:seaLife.counts},garden:{counts:underwaterGarden.counts,touring:!!gardenTour,waypoint:gardenTour?.index},train:{...trainState,pose:trainPose(trainState),hidden:!active.model.root.visible},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+bodyHeight(active).toFixed(3),floor:+groundHeight(active.x,active.z).toFixed(2),swimY:active.swimY,staying:shouldStayAtScenicSpot(active),water:immersionFor(active,active.model.root.userData.visualHeight)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{underwater:cameraWaterBlend(camera.position)>.5,y:+camera.position.y.toFixed(2),yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},seaLife:{counts:seaLife.counts},garden:{counts:underwaterGarden.counts,touring:!!gardenTour,waypoint:gardenTour?.index},train:{...trainState,pose:trainPose(trainState),hidden:!active.model.root.visible},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,shapeKind:active.definition.shapeKind||'original',shapeLabel:active.definition.label||'Original shape',cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+bodyHeight(active).toFixed(3),floor:+groundHeight(active.x,active.z).toFixed(2),swimY:active.swimY,staying:shouldStayAtScenicSpot(active),water:immersionFor(active,active.model.root.userData.visualHeight)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{underwater:cameraWaterBlend(camera.position)>.5,y:+camera.position.y.toFixed(2),yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

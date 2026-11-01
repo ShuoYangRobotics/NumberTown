@@ -259,6 +259,86 @@ const PERSONAL = {
     sleepy: ['Even a crown and thirty blocks need a cozy rest.'],
     sad: ['My crown can rest. A kind friend matters more today.'],
   },
+  31: {
+    happy: ['Thirty-one blocks, and a calendar full of possibilities!', 'My calendar has room for a kind idea every day.', 'Thirty-one cheers for a new day to explore!'],
+    excited: ['Calendar ready! Let’s plan a wonderful adventure!'],
+    curious: ['What new discovery will go on my calendar today?'],
+    surprised: ['Oh! An unexpected treat for my calendar!'],
+    sleepy: ['My calendar can wait. Today needs a little rest.'],
+    sad: ['A quiet day belongs on my calendar, too.'],
+  },
+  32: {
+    happy: ['Thirty-two blocks, ready to find a playful pattern!', 'Two orange blocks make my patterns shine.', 'A little pattern can lead to a big discovery!'],
+    excited: ['Thirty-two cheers! Let’s make a brand new pattern!'],
+    curious: ['Which pattern will my two orange blocks inspire?'],
+    surprised: ['Oh! That pattern has a surprising little twist!'],
+    sleepy: ['My pattern puzzles can wait until after a nap.'],
+    sad: ['A simple, gentle pattern can help me feel calm.'],
+  },
+  33: {
+    happy: ['Thirty-three blocks, cheering for our whole team!', 'My football badge reminds me to share the ball.', 'A sporting friend makes room for every teammate!'],
+    excited: ['Thirty-three cheers! Our whole team gets a turn!'],
+    curious: ['What friendly game could our team try today?'],
+    surprised: ['Wow! A surprising pass from my football teammate!'],
+    sleepy: ['Team time-out! This sporting friend needs a rest.'],
+    sad: ['A tough game is easier with a kind teammate.'],
+  },
+  34: {
+    happy: ['Thirty-four blocks, and a fresh idea to paint!', 'My green cap is ready for a colorful painting day.', 'A paint roller and a bright idea make me smile!'],
+    excited: ['Paint roller ready! Let’s add a splash of color!'],
+    curious: ['What new color could this curious painter mix?'],
+    surprised: ['Oh! A paint splatter became a wonderful new idea!'],
+    sleepy: ['This painter will put the roller down and rest.'],
+    sad: ['I can paint a quiet feeling with gentle colors.'],
+  },
+  35: {
+    happy: ['Thirty-five blocks, with a tune for every flower!', 'My five rainbow flowers inspire a cheerful song.', 'A little music makes my flowers feel extra bright!'],
+    excited: ['Thirty-five cheers! Let’s sing a flower song!'],
+    curious: ['What tune could match my colorful flowers?'],
+    surprised: ['Oh! A surprising note in our flower song!'],
+    sleepy: ['A soft song can help my flowers settle down.'],
+    sad: ['A gentle tune and a flower can brighten a quiet day.'],
+  },
+  36: {
+    happy: ['Thirty-six blocks, ready for a superhero adventure!', 'My bright mask reminds me to help a friend.', 'A superhero can make a difference with one kind act!'],
+    excited: ['Thirty-six cheers! This superhero is ready to help!'],
+    curious: ['How could this masked hero help our town today?'],
+    surprised: ['Oh! Even a superhero can be surprised!'],
+    sleepy: ['A superhero rest will help me feel ready again.'],
+    sad: ['Even a masked hero can ask a friend for comfort.'],
+  },
+  37: {
+    happy: ['Thirty-seven blocks, ready for a rainbow expedition!', 'My compass hat points toward a new adventure.', 'A curious explorer finds wonders along every path.'],
+    excited: ['Compass ready! Thirty-seven cheers for exploring!'],
+    curious: ['Which path will this rainbow explorer discover next?'],
+    surprised: ['Oh! My compass led me to a lovely surprise!'],
+    sleepy: ['This explorer can rest before the next adventure.'],
+    sad: ['An explorer can pause and ask a friend for company.'],
+  },
+  38: {
+    happy: ['Thirty-eight blocks, full of playful discoveries!', 'My pink blocks are ready for a zigzag adventure.', 'A playful zigzag can lead to a wonderful new idea!'],
+    excited: ['Thirty-eight cheers! Let’s discover something playful!'],
+    curious: ['Where will this little zigzag idea lead us?'],
+    surprised: ['Oh! A surprising twist in our playful discovery!'],
+    sleepy: ['My playful pink blocks could use a quiet rest.'],
+    sad: ['My playful ideas can wait while a friend sits with me.'],
+  },
+  39: {
+    happy: ['Thirty-nine blocks, and a thoughtful idea to share!', 'My gray blocks enjoy a good thinking puzzle.', 'A thoughtful pause can help a bright idea grow.'],
+    excited: ['Thirty-nine cheers! I have a thoughtful new idea!'],
+    curious: ['What can my nine gray blocks help us work out?'],
+    surprised: ['Oh! That puzzle gave my gray blocks a surprise!'],
+    sleepy: ['My thoughtful gray blocks need a little rest.'],
+    sad: ['A thoughtful friend can help me share a quiet feeling.'],
+  },
+  40: {
+    happy: ['Forty blocks, and four tens of friendly possibilities!', 'Four green tens are ready to explore together!', 'My checkered eyebrows lift for every friendly hello.'],
+    excited: ['Forty cheers! Four tens are ready for adventure!'],
+    curious: ['What can we count in four teams of ten?'],
+    surprised: ['Oh! That lifted both of my checkered eyebrows!'],
+    sleepy: ['Four green tens could use a cozy little rest.'],
+    sad: ['Forty blocks can share a quiet moment with a friend.'],
+  },
 };
 
 const CHARACTER_NUMBERS = new Set(CHARACTERS.map(character => character.number));
@@ -283,7 +363,19 @@ function measureArrangement(number, definition) {
   const depth = Math.max(...cells.map(cell => cell.z)) - minZ + 1;
   if (width > number || height > number || depth > number) return null;
   const has = (x, y, z = 0) => coordinates.has(`${x + minX},${y + minY},${z + minZ}`);
-  return { width, height, depth, cells, minX, has };
+  // Connectivity is measured from face-adjacent occupied cubes, never inferred
+  // from a form label or a bounding box (crazy shapes may have genuine depth).
+  const reached = new Set([`${cells[0].x},${cells[0].y},${cells[0].z}`]), queue = [cells[0]];
+  for (let index = 0; index < queue.length; index++) {
+    const { x, y, z } = queue[index];
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const key = `${x + dx},${y + dy},${z + dz}`;
+      if (coordinates.has(key) && !reached.has(key)) {
+        reached.add(key); queue.push({ x: x + dx, y: y + dy, z: z + dz });
+      }
+    }
+  }
+  return { width, height, depth, cells, minX, has, connected: reached.size === number };
 }
 
 /** Derive short facts from arithmetic and the CURRENT unit-cube layout. */
@@ -313,6 +405,12 @@ function buildMathFacts(number, definition) {
   add(Math.floor(number / 2), Math.ceil(number / 2));
   if (number >= 10) add(10, number - 10);
   if (number > 20) add(20, number - 20);
+  if (number > 30) add(30, number - 30);
+  if (number >= 10) {
+    const tens = Math.floor(number / 10), ones = number % 10;
+    add(tens * 10, ones);
+    facts.add(`${number} is ${tens} ${tens === 1 ? 'ten' : 'tens'} and ${ones} ${ones === 1 ? 'one' : 'ones'}.`);
+  }
   if (number > 1) add(number - 1, 1);
   if (number > 1 && Number.isInteger(Math.sqrt(number))) add(number - Math.sqrt(number), Math.sqrt(number));
   facts.add(`${number + 1} - 1 = ${number}.`);
@@ -326,14 +424,17 @@ function buildMathFacts(number, definition) {
     if (number % a === 0) factors.push([a, number / a]);
   }
   const shape = measureArrangement(number, definition);
-  if (shape?.depth === 1 && shape.width * shape.height === number) {
+  const rectangle = shape?.depth === 1 && shape.width * shape.height === number;
+  const cube = shape && shape.depth > 1 && shape.width * shape.height * shape.depth === number
+    && shape.width === shape.height && shape.height === shape.depth;
+  if (rectangle) {
     const { width, height } = shape;
     facts.add(`I am a ${width} by ${height} ${width === height ? 'square' : 'rectangle'}!`);
   }
-  if (shape && shape.depth > 1 && shape.width * shape.height * shape.depth === number
-    && shape.width === shape.height && shape.height === shape.depth) {
+  if (cube) {
     facts.add(`I am a ${shape.width} by ${shape.height} by ${shape.depth} cube!`);
   }
+  if (shape?.connected && !rectangle && !cube) facts.add(`My ${number} blocks form one connected shape.`);
   for (const [a, b] of factors) {
     facts.add(`${a} × ${b} = ${number}.`);
     facts.add(`I can arrange into a ${a} by ${b} ${a === b ? 'square' : 'rectangle'}!`);

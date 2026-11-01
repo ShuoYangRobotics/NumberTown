@@ -1,8 +1,9 @@
+import { getCharacterArrangements, findArrangementPosition } from '../dist/arrangements.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WATER_PLAY } from '../dist/geography.js';
 import { groundHeight } from '../dist/terrain-data.js';
-import { bodyHeight, stepSwimming, resetSwimming, SWIM_SPEED, bodiesOverlap } from '../dist/swimming.js';
+import { bodyHeight, stepSwimming, resetSwimming, SWIM_SPEED, bodiesOverlap, hasBodyClearance } from '../dist/swimming.js';
 import { immersionFor } from '../dist/water-view.js';
 
 const swimmer = () => ({number:0,x:125,z:535,height:.9,jump:0,jumpVelocity:0,swimY:null});
@@ -46,4 +47,18 @@ test('character collision compares body spans at different swimming depths',()=>
   assert.equal(bodiesOverlap(tall,short),false);assert.equal(bodiesOverlap(short,tall),false);
   short.swimY=-.5;assert.equal(bodiesOverlap(tall,short),true);
   tall.swimY=-18;short.swimY=-5;assert.equal(bodiesOverlap(tall,short),true);
+});
+
+test('growing underwater checks the new height and finds room beside a higher swimmer', () => {
+  const definition=getCharacterArrangements(20).find(form=>form.width===1&&form.height===20);
+  const player={number:20,x:160,z:560,height:1,radius:.71,swimY:-18,jump:0};
+  const swimmer={number:1,x:160,z:560,height:1,radius:.71,swimY:-8,jump:0};
+  assert.equal(bodiesOverlap(player,swimmer),false);
+  const canPlace=(position,metrics)=>hasBodyClearance({...player,...definition,...metrics,...position,jump:0},[swimmer]);
+  const options={obstacles:[],world:{width:840,depth:690,minZ:-90,margin:2},groundHeight,canPlace};
+  assert.equal(findArrangementPosition(player,definition,{...options,maxDistance:0}),null);
+  const placement=findArrangementPosition(player,definition,{...options,maxDistance:4});
+  assert.ok(placement,'a safe nearby transformation should still be possible');
+  assert.ok(Math.hypot(placement.position.x-swimmer.x,placement.position.z-swimmer.z)>=placement.metrics.radius+swimmer.radius+.08);
+  assert.equal(player.swimY,-18,'finding room must not change the swimming height');
 });

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EMOTIONS, chooseRemark, getMathFacts } from '../dist/personalities.js';
 import { CHARACTERS } from '../dist/character-data.js';
-import { getCharacterArrangements } from '../dist/arrangements.js';
+import { createCrazyArrangement, getCharacterArrangements } from '../dist/arrangements.js';
+import { toSpokenMath } from '../dist/speech.js';
 
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 const places = ['library', 'town-square', 'garden', 'pond', 'park', 'football', 'hill', 'river', 'beach', 'mountains', 'mountain-trail', 'summit', 'lookout'];
@@ -32,7 +33,7 @@ test('Zero has no blocks and a distinct, gentle voice in all six emotions', () =
   assert.equal(lines.size, moods.length);
 });
 
-test('all thirty-one friends have at least three different personal happy remarks', () => {
+test('all forty-one friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
   for (const { number } of CHARACTERS) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
@@ -128,7 +129,7 @@ test('new friends retain dice, rainbow, helping, square, and counting personalit
   }
 });
 
-test('Eleven through Thirty retain their own personality in every emotion', () => {
+test('Eleven through Forty retain their own personality in every emotion', () => {
   const patterns = {
     11: /eleven|football|ball|team|goal/i,
     12: /twelve|rectangle/i,
@@ -150,6 +151,16 @@ test('Eleven through Thirty retain their own personality in every emotion', () =
     28: /twenty-eight|twenty and eight|frame/i,
     29: /twenty-nine|gray/i,
     30: /thirty|crown|royal/i,
+    31: /thirty-one|calendar/i,
+    32: /thirty-two|orange|pattern/i,
+    33: /thirty-three|team|football|sporting/i,
+    34: /thirty-four|paint|roller/i,
+    35: /thirty-five|flower|music|song|tune/i,
+    36: /thirty-six|superhero|mask/i,
+    37: /thirty-seven|rainbow|compass|explor/i,
+    38: /thirty-eight|playful|zigzag|pink/i,
+    39: /thirty-nine|thoughtful|gray/i,
+    40: /forty|four|checkered/i,
   };
   for (const [number, pattern] of Object.entries(patterns)) {
     const personalLines = new Set();
@@ -202,6 +213,25 @@ test('injected randomness is deterministic, bounded, and does not mutate caller 
   assert.notDeepEqual(chooseRemark(20, {}, () => 0), chooseRemark(1, {}, () => 0));
 });
 
+// Compare every pair's Manhattan distance, then grow the connected component.
+// Edge/corner contacts alone do not make one face-connected block arrangement.
+function isConnected(cells) {
+  if (!cells.length) return false;
+  const reached = new Set([0]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let a = 0; a < cells.length; a++) if (reached.has(a)) {
+      for (let b = 0; b < cells.length; b++) if (!reached.has(b)) {
+        const distance = Math.abs(cells[a].x - cells[b].x) + Math.abs(cells[a].y - cells[b].y)
+          + Math.abs((cells[a].z ?? 0) - (cells[b].z ?? 0));
+        if (distance === 1) { reached.add(b); changed = true; }
+      }
+    }
+  }
+  return reached.size === cells.length;
+}
+
 // Independently interpret every public sentence rather than checking only that
 // the generator emits its own templates. Unknown formats must add a validator.
 function checkMathFact(text, number, definition = CHARACTERS.find(item => item.number === number)) {
@@ -219,6 +249,14 @@ function checkMathFact(text, number, definition = CHARACTERS.find(item => item.n
     assert.ok(+match[2] > 0);
     assert.equal(+match[1] / +match[2], +match[3], text);
     assert.equal(+match[3], number);
+  } else if ((match = text.match(/^(\d+) is (\d+) tens? and (\d+) ones?\.$/))) {
+    assert.equal(+match[1], number);
+    assert.ok(+match[3] >= 0 && +match[3] < 10);
+    assert.equal(+match[2] * 10 + +match[3], number);
+  } else if ((match = text.match(/^My (\d+) blocks form one connected shape\.$/))) {
+    assert.equal(+match[1], number);
+    assert.equal(definition.cells.length, number);
+    assert.ok(isConnected(definition.cells), text);
   } else if ((match = text.match(/^(\d+) is even: (\d+) pairs of blocks\.$/))) {
     assert.equal(+match[1], number);
     assert.equal(number % 2, 0);
@@ -292,8 +330,8 @@ function checkMathFact(text, number, definition = CHARACTERS.find(item => item.n
   }
 }
 
-test('all facts for Zero through Thirty are short, unique, and mathematically true', () => {
-  assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 31 }, (_, number) => number));
+test('all facts for Zero through Forty are short, unique, and mathematically true', () => {
+  assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 41 }, (_, number) => number));
   for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
     assert.ok(Object.isFrozen(facts));
@@ -327,8 +365,8 @@ test('Zero teaches identities and valid division without claiming a block shape'
 });
 
 test('every friend teaches operations, parity, factors, and accurate number categories', () => {
-  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
-  const squares = [0, 1, 4, 9, 16, 25];
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+  const squares = [0, 1, 4, 9, 16, 25, 36];
   const cubes = [0, 1, 8, 27];
   for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
@@ -397,6 +435,24 @@ test('Twenty-Six through Thirty describe their numbers, cube, and five-hole fram
   assert.ok(getMathFacts(30).includes('5 × 6 = 30.'));
 });
 
+test('Thirty-One through Forty teach tens, exact arithmetic, and their actual current shapes', () => {
+  for (let number = 31; number <= 40; number++) {
+    const facts = getMathFacts(number);
+    assert.ok(facts.includes(`30 + ${number - 30} = ${number}.`));
+    assert.ok(facts.includes(`${2 * number} divided by 2 is ${number}.`));
+    assert.ok(facts.includes(`${number} is ${Math.floor(number / 10)} tens and ${number % 10} ${number % 10 === 1 ? 'one' : 'ones'}.`));
+  }
+  assert.ok(getMathFacts(31).includes('31 is prime: its only factors are 1 and 31.'));
+  assert.ok(getMathFacts(32).includes('I am a 4 by 8 rectangle!'));
+  assert.ok(getMathFacts(33).includes('I am a 3 by 11 rectangle!'));
+  assert.ok(getMathFacts(35).includes('I am a 5 by 7 rectangle!'));
+  assert.ok(getMathFacts(36).includes('I am a 6 by 6 square!'));
+  assert.ok(getMathFacts(36).includes('36 is a square number: 6 × 6 = 36.'));
+  assert.ok(getMathFacts(37).includes('37 is prime: its only factors are 1 and 37.'));
+  assert.ok(getMathFacts(40).includes('40 is 4 tens and 0 ones.'));
+  assert.ok(getMathFacts(40).includes('I am a 4 by 10 rectangle!'));
+});
+
 test('every real arrangement teaches its current orientation without stale original-shape claims', () => {
   let formsChecked = 0;
   for (const character of CHARACTERS) {
@@ -409,11 +465,15 @@ test('every real arrangement teaches its current orientation without stale origi
       }
       if (arrangement.formId === 'original') {
         assert.deepEqual(facts, getMathFacts(character.number), 'the default API must keep original-shape compatibility');
-      } else {
+      } else if (arrangement.depth === 1 && arrangement.width * arrangement.height === character.number) {
         const { width, height } = arrangement;
         assert.deepEqual(facts.filter(text => text.startsWith('I am a ')), [`I am a ${width} by ${height} ${width === height ? 'square' : 'rectangle'}!`]);
         assert.ok(facts.every(text => !text.startsWith('My ')), 'a rectangle must not describe original steps or holes');
         assert.ok(facts.every(text => !/^I am .* cube!$/.test(text)), 'a flattened 27 must not call its current body a cube');
+      } else {
+        assert.ok(facts.every(text => !/^I am a \d+ by \d+ (square|rectangle)!$/.test(text)), 'irregular or deep shapes must not claim their bounding rectangle is full');
+        if (isConnected(arrangement.cells)) assert.ok(facts.includes(`My ${character.number} blocks form one connected shape.`)
+          || facts.some(text => /^I am .* cube!$/.test(text)), 'connected irregular and solid cube variants get a truthful current-shape fact');
       }
       for (const emotion of moods) for (let index = 0; index < facts.length; index++) {
         const sample = (index + .5) / facts.length;
@@ -428,7 +488,56 @@ test('every real arrangement teaches its current orientation without stale origi
       formsChecked++;
     }
   }
-  assert.ok(formsChecked > 100, 'cover every original and both rectangle orientations');
+  assert.ok(formsChecked > 150, 'cover every original and both rectangle orientations');
+});
+
+test('connected and disconnected irregular arrangements are judged by cells rather than shape labels', () => {
+  const cells = [
+    ...Array.from({ length: 16 }, (_, x) => ({ x, y: 0, z: 0 })),
+    ...Array.from({ length: 15 }, (_, i) => ({ x: 0, y: i + 1, z: 0 })),
+  ];
+  const irregular = { number: 31, width: 16, height: 16, depth: 1, cells, shapeKind: 'rectangle', formId: 'crazy:test' };
+  const facts = getMathFacts(31, irregular);
+  assert.ok(facts.includes('My 31 blocks form one connected shape.'));
+  assert.ok(facts.every(text => !text.startsWith('I am a ')));
+  assert.ok(facts.includes('I can arrange into a 1 by 31 rectangle!'));
+  for (const text of facts) checkMathFact(text, 31, irregular);
+
+  const deepCells = [];
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) deepCells.push({ x, y, z });
+  for (let i = 0; i < 5; i++) deepCells.push({ x: 3, y: i % 3, z: Math.floor(i / 3) });
+  const deep = { number: 32, cells: deepCells, width: 4, height: 3, depth: 3, shapeKind: 'crazy' };
+  assert.ok(getMathFacts(32, deep).includes('My 32 blocks form one connected shape.'));
+  assert.ok(getMathFacts(32, deep).every(text => !text.startsWith('I am a ')));
+  for (const text of getMathFacts(32, deep)) checkMathFact(text, 32, deep);
+
+  const disconnected = { number: 31, shapeKind: 'crazy', cells: Array.from({ length: 31 }, (_, i) => ({ x: i, y: i, z: 0 })) };
+  assert.ok(getMathFacts(31, disconnected).every(text => !text.startsWith('I am a ') && !text.startsWith('My ')), 'corner contacts must not masquerade as a connected body');
+  assert.ok(getMathFacts(31, disconnected).includes('30 + 1 = 31.'));
+});
+
+test('fresh crazy shapes retain truthful and speakable math across every character and multiple seeds', () => {
+  const depths = new Set();
+  for (const { number } of CHARACTERS) for (const seed of [0, 1, 'seaside', 'a new shape']) {
+    const arrangement = createCrazyArrangement(number, seed), facts = getMathFacts(number, arrangement);
+    depths.add(arrangement.depth);
+    if (number >= 3) {
+      assert.ok(facts.includes(`My ${number} blocks form one connected shape.`));
+      assert.ok(facts.every(text => !text.startsWith('I am a ')), 'a crazy outline must not claim to be a complete rectangle or cube');
+    }
+    for (const text of facts) {
+      assert.ok(text.length <= 70, text);
+      checkMathFact(text, number, arrangement);
+      const spoken = toSpokenMath(text);
+      assert.ok(spoken.length > 0);
+      assert.doesNotMatch(spoken, /[×+÷=]|\d\s*[-−]\s*\d/, 'all written arithmetic must pass through the existing spoken-math normalizer');
+      if (text.includes('×')) assert.ok(spoken.includes('times'));
+      if (text.includes('=')) assert.ok(spoken.includes('equals'));
+    }
+    const chosen = chooseRemark(number, { math: true, arrangement, emotion: 'curious' }, () => .5);
+    assert.ok(facts.includes(chosen.text)); assert.equal(chosen.kind, 'math');
+  }
+  assert.ok(depths.has(1) && depths.has(2) && depths.has(3), 'exercise planar shapes and both generated depth ranges');
 });
 
 test('rotated rectangles, flattened cubes, and changed stairs/frame keep only truthful shape facts', () => {
@@ -459,8 +568,8 @@ test('malformed current arrangements omit shape claims instead of reverting to t
 
 test('the character range follows the data and invalid inputs safely fall back to One', () => {
   const highest = CHARACTERS.at(-1).number;
-  assert.equal(highest, 30);
-  assert.equal(CHARACTERS.length, 31);
+  assert.equal(highest, 40);
+  assert.equal(CHARACTERS.length, 41);
   assert.deepEqual(getMathFacts(CHARACTERS.length), getMathFacts(1), 'cast length is not the highest number');
   assert.ok(getMathFacts(highest).includes(`I have ${highest} equal blocks.`));
   assert.deepEqual(getMathFacts(String(highest)), getMathFacts(highest));

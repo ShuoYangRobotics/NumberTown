@@ -14,7 +14,7 @@ import {
   SUMMIT_LANDMARK, mountainHeight, mountainWalkHeight, isOnMountainRoute,
 } from '../dist/mountain-route.js';
 
-const widest = 2.7;
+const widest = Math.max(2.7, ...CHARACTERS.map(character => getCharacterMetrics(character.number).radius));
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
 const close = (actual, expected, tolerance = 1e-5, message = '') =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} differs from ${expected}`);
@@ -127,8 +127,8 @@ test('ascent is continuous with a walkable grade and meets both ground and deck 
   close(previousHeight, SUMMIT_DECK.height, .08, 'Trail to deck transition');
 });
 
-test('all thirty-one character footprints can walk the complete route and the widest can return', () => {
-  assert.equal(CHARACTERS.length, 31);
+test('all forty-one character footprints can walk the complete route and the widest can return', () => {
+  assert.equal(CHARACTERS.length, 41);
   const route = samples(.16);
   const footprints = CHARACTERS.map(character => ({ name: character.name, radius: getCharacterMetrics(character.number).radius }));
   footprints.push({ name: 'Conservative widest footprint', radius: widest });
@@ -214,8 +214,8 @@ test('summit rails and route boundaries keep wide friends supported during attem
 test('the original town spawns, building counts, and low terrain remain unchanged', () => {
   assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'west').length, 50);
   assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'east').length, 20);
-  for (const point of FRIEND_STARTS) {
-    assert.equal(collides(point.x, point.z, obstacles, WORLD, widest), false);
+  for (const [index, point] of FRIEND_STARTS.entries()) {
+    assert.equal(collides(point.x, point.z, obstacles, WORLD, getCharacterMetrics(CHARACTERS[index]).radius), false);
     close(groundHeight(point.x, point.z), 0);
   }
   for (const landmark of LANDMARKS) {

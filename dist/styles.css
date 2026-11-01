@@ -60,3 +60,5 @@
 
 /* New activities share the compact context bar. */
 #train-actions{display:flex;align-items:center;gap:5px}#train-actions button{background:#e4ebd7;border-radius:8px;padding:8px 10px;font-size:10px;white-space:nowrap}#board-train{background:#749a90!important;color:#fff}#garden-tour{white-space:nowrap}.destinations{max-width:calc(100% - 32px);overflow-x:auto;scrollbar-width:none}.destinations::-webkit-scrollbar{display:none}
+
+.shape-controls{display:flex;gap:5px;align-items:stretch;margin-top:7px;pointer-events:auto}.shape-controls #transform-shape{flex:1;width:auto;margin:0}#crazy-shape{flex:0 0 32px;border:1px solid #c9d8bd;border-radius:9px;background:#e5eedb;color:#557343;font-size:22px;line-height:1}#crazy-shape:hover{background:#d9e8cb}#crazy-shape:disabled{opacity:.45;cursor:default}

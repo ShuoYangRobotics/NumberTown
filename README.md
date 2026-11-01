@@ -1,6 +1,6 @@
 # NumberTown
 
-A 3D browser playground with 31 friends, from Zero to Thirty, and a town full of places to explore.
+A 3D browser playground with 41 friends, from Zero to Forty, and a town full of places to explore.
 
 ## Run locally
 
@@ -40,9 +40,11 @@ Source: [ShuoYangRobotics/NumberTown](https://github.com/ShuoYangRobotics/Number
 
 ## Start exploring
 
-Use **WASD** or the arrow keys to walk. Drag to turn the camera and scroll to zoom. Select a numbered thumbnail, or press **Tab**, type **0–30**, then press **Enter**. Press **M** for the town map.
+Use **WASD** or the arrow keys to walk. Drag to turn the camera and scroll to zoom. Select a numbered thumbnail, or press **Tab**, type **0–40**, then press **Enter**. Press **M** for the town map.
 
-The town has 70 homes, 10 stores, a library, school, and town hall. Visit the spinning cube statue, duck pond, 18-cabin Ferris wheel, football pitch, seaside hill, and mountain summit. Hill and mountain visitors stay put when you switch characters. At the beach, choose **Water play** and follow the sandy slope into an expanded sea, up to **18 blocks deep**. **Z / X** moves up / down in the water; release both to hold your height. **Explore seabed** takes you to a colorful garden with a paved loop, coral, kelp, crabs, sea urchins, fish, and sea stars. Turtles swim and bask on the beach. Visit the eastern **Train park** to ride through desert, rainforest, snowy mountains, and farms. **F** boards the train, hold **Space** for twice the speed, and **Esc** exits. Your selected friend shares animal facts when you approach wildlife. **F** picks up and throws a beach ball that floats up and drifts shoreward. One through Thirty contain 465 unit cubes in total; Zero is a floating smile with no blocks.
+The town has 70 homes, 10 stores, a library, school, and town hall. Visit the spinning cube statue, duck pond, 18-cabin Ferris wheel, football pitch, seaside hill, and mountain summit. Hill and mountain visitors stay put when you switch characters. At the beach, choose **Water play** and follow the sandy slope into an expanded sea, up to **18 blocks deep**. **Z / X** moves up / down in the water; release both to hold your height. **Explore seabed** takes you to a colorful garden with a paved loop, coral, kelp, crabs, sea urchins, fish, and sea stars. Turtles swim and bask on the beach. Visit the eastern **Train park** to ride through desert, rainforest, snowy mountains, and farms. **F** boards the train, hold **Space** for twice the speed, and **Esc** exits. Your selected friend shares animal facts when you approach wildlife. **F** picks up and throws a beach ball that floats up and drifts shoreward. One through Forty contain 820 unit cubes in total; Zero is a floating smile with no blocks.
+
+Press **T** to cycle rectangles and irregular arrangements, or **Shift + T** for a fresh connected crazy shape. Every friend has its own voice settings. [Saved character references](references/characters/README.md) preserve the available source images.
 
 - [Playing guide](docs/PLAYING.md): all controls, activities, shapes, and math speech.
 - [Development guide](docs/DEVELOPMENT.md): source layout, tests, and browser debugging.

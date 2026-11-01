@@ -27,7 +27,10 @@ export function createMountainSummit(){
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
     const object=new THREE.Mesh(new THREE.BoxGeometry(width,1,.14),new THREE.MeshStandardMaterial({map:texture,roughness:.85}));object.position.set(x,y,z);root.add(object);
   }
-  const pathVertices=[],pathIndices=[],edges=[],across=8,half=SUMMIT.pathWidth/2;
+  // The wide inner shoulder blends into the level deck over a short distance.
+  // Sample it densely enough that triangles follow that curved elevation field
+  // instead of bridging above the walking surface near a platform corner.
+  const pathVertices=[],pathIndices=[],edges=[],across=48,half=SUMMIT.pathWidth/2;
   const pavedTrail=MOUNTAIN_TRAIL.slice(0,MOUNTAIN_PAVING_END+1);
   pavedTrail.forEach((p,index)=>{
     const before=pavedTrail[Math.max(0,index-1)],after=pavedTrail[Math.min(pavedTrail.length-1,index+1)];
