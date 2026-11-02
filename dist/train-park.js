@@ -3,24 +3,27 @@ import { WORLD, MOUNTAINS } from './geography.js';
 
 const TAU = Math.PI * 2;
 const freeze = value => Object.freeze(value);
+// The scenery was authored as one park. A shared translation keeps its many
+// animal parts, buildings, collisions and public map coordinates together.
+export const TRAIN_PARK_OFFSET = freeze({ x: 200, z: 0 });
 export const TRAIN_PARK = freeze({
-  x: 635, z: 215, rx: 150, rz: 108, gauge: 2.6, speed: 12,
+  x: 635 + TRAIN_PARK_OFFSET.x, z: 215, rx: 150, rz: 108, gauge: 2.6, speed: 12,
   carriageSpacing: 7.2, boardingDistance: 11,
-  bounds: freeze({ minX: 450, maxX: 820, minZ: 78, maxZ: 355 }),
-  entrance: freeze({ x: 465, z: 215 }),
-  station: freeze({ x: 485, z: 215 }),
+  bounds: freeze({ minX: 450 + TRAIN_PARK_OFFSET.x, maxX: 820 + TRAIN_PARK_OFFSET.x, minZ: 78, maxZ: 355 }),
+  entrance: freeze({ x: 465 + TRAIN_PARK_OFFSET.x, z: 215 }),
+  station: freeze({ x: 485 + TRAIN_PARK_OFFSET.x, z: 215 }),
 });
 export const TRAIN_LANDMARK = freeze({
   id: 'train-park', name: 'Train park',
   description: 'Ride through the desert, rainforest, snowy mountains and friendly farms.',
-  x: 485, z: 215, radius: 33, arrival: freeze({ x: 478, z: 215 }),
+  x: TRAIN_PARK.station.x, z: TRAIN_PARK.station.z, radius: 33, arrival: freeze({ x: 478 + TRAIN_PARK_OFFSET.x, z: 215 }),
 });
 export const TRAIN_ZONES = freeze([
   freeze({ id: 'desert', name: 'Sunshine Desert', x: 566, z: 163, rx: 48, rz: 35, color: '#efd296' }),
   freeze({ id: 'rainforest', name: 'Rainbow Rainforest', x: 700, z: 163, rx: 48, rz: 35, color: '#8fbd83' }),
   freeze({ id: 'snow', name: 'Snowy Peaks', x: 700, z: 268, rx: 48, rz: 35, color: '#dfeced' }),
   freeze({ id: 'farm', name: 'Little Meadow Farm', x: 566, z: 268, rx: 48, rz: 35, color: '#b9d48b' }),
-]);
+].map(zone=>freeze({...zone,x:zone.x+TRAIN_PARK_OFFSET.x})));
 
 // The progress coordinate measures distance, not ellipse angle. This keeps the
 // locomotive's speed uniform on both the broad bends and the long sides.
@@ -49,6 +52,10 @@ export function trainPose(progressOrState = 0) {
   return { x: TRAIN_PARK.x + TRAIN_PARK.rx * c, y: 0, z: TRAIN_PARK.z + TRAIN_PARK.rz * s,
     yaw: Math.atan2(dx, dz), progress, outward: { x: dz / length, z: -dx / length } };
 }
+function sceneryPose(progress) {
+  const pose=trainPose(progress);
+  return {...pose,x:pose.x-TRAIN_PARK_OFFSET.x,z:pose.z-TRAIN_PARK_OFFSET.z};
+}
 
 const TREES = [
   [679, 145, 12, 'jungle'], [694, 139, 15, 'jungle'], [718, 150, 13, 'jungle'], [730, 170, 12, 'jungle'],
@@ -65,9 +72,9 @@ export const TRAIN_OBSTACLES = freeze([
   ...TREES.map(([x, z], i) => freeze({ id: `railway-tree-${i}`, kind: 'tree', x, z, radius: .7 })),
   ...ROCKS.map(([x, z, radius], i) => freeze({ id: `railway-rock-${i}`, kind: 'rock', x, z, radius })),
   ...PEAKS.map(([x, z, radius], i) => freeze({ id: `railway-peak-${i}`, kind: 'rock', x, z, radius })),
-]);
+].map(obstacle=>freeze({...obstacle,x:obstacle.x+TRAIN_PARK_OFFSET.x})));
 function blocked(x, z, radius) {
-  if(x-radius<WORLD.margin||x+radius>WORLD.width-WORLD.margin||z-radius<MOUNTAINS.maxZ+.05||z+radius>WORLD.depth-WORLD.margin)return true;
+  if(x-radius<(WORLD.minX??0)+WORLD.margin||x+radius>WORLD.width-WORLD.margin||z-radius<MOUNTAINS.maxZ+.05||z+radius>WORLD.depth-WORLD.margin)return true;
   return TRAIN_OBSTACLES.some(obstacle => {
     if (obstacle.radius != null) return Math.hypot(x - obstacle.x, z - obstacle.z) < radius + obstacle.radius;
     const dx = Math.max(obstacle.x - x, 0, x - obstacle.x - obstacle.w);
@@ -90,13 +97,13 @@ export function boardingPoint(state) {
       if (!blocked(x, z, radius)) return { x, z };
     }
   }
-  // A forty-wide body cannot fit between the northern rail and the mountains.
+  // A fifty-wide body cannot fit between the northern rail and the mountains.
   // Step off beside a nearby bend where the outside verge becomes wider.
-  for(const distance of [12,24,36,48,60])for(const direction of [-1,1]){
+  for(let distance=12;distance<=96;distance+=6)for(const direction of [-1,1]){
     const nearby=trainPose(pose.progress+direction*distance/TRAIN_TRACK_LENGTH);
     for(const extra of [0,2,4]){
       const point={x:nearby.x+nearby.outward.x*(offset+extra),z:nearby.z+nearby.outward.z*(offset+extra)};
-      if(Math.hypot(point.x-pose.x,point.z-pose.z)<=radius+42&&!blocked(point.x,point.z,radius))return point;
+      if(Math.hypot(point.x-pose.x,point.z-pose.z)<=radius+64&&!blocked(point.x,point.z,radius))return point;
     }
   }
   return { x: pose.x + pose.outward.x * (offset + 10), z: pose.z + pose.outward.z * (offset + 10) };
@@ -196,7 +203,7 @@ function textSign(root, text, x, y, z, width, rotation = 0) {
 function ribbon(root, halfWidth, y, color, name) {
   const positions = [], indices = [];
   for (let i = 0; i <= 512; i++) {
-    const p = trainPose(i / 512);
+    const p = sceneryPose(i / 512);
     for (const side of [-1, 1]) positions.push(p.x + p.outward.x * halfWidth * side, y, p.z + p.outward.z * halfWidth * side);
     if (i < 512) { const n = i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
   }
@@ -208,13 +215,13 @@ function railway(root, batch) {
   ribbon(root, 2.45, .036, '#b9afa0', 'Track ballast');
   const tieCount = Math.ceil(TRAIN_TRACK_LENGTH / 1.85);
   for (let i = 0; i < tieCount; i++) {
-    const p = trainPose(i / tieCount);
+    const p = sceneryPose(i / tieCount);
     batch.part(BOX, '#8d7760', [p.x, .095, p.z], [4.05, .14, .3], [0, p.yaw, 0], { feature: 'railway tie' });
   }
   for (const side of [-1, 1]) {
     const points = [];
     for (let i = 0; i < 512; i++) {
-      const p = trainPose(i / 512); points.push(new THREE.Vector3(p.x + p.outward.x * TRAIN_PARK.gauge / 2 * side, .225, p.z + p.outward.z * TRAIN_PARK.gauge / 2 * side));
+      const p = sceneryPose(i / 512); points.push(new THREE.Vector3(p.x + p.outward.x * TRAIN_PARK.gauge / 2 * side, .225, p.z + p.outward.z * TRAIN_PARK.gauge / 2 * side));
     }
     const curve = new THREE.CatmullRomCurve3(points, true);
     mesh(root, new THREE.TubeGeometry(curve, 1024, .083, 6, true), material('#a7bbbf', { metalness: .6, roughness: .36 }), side < 0 ? 'Inner steel rail' : 'Outer steel rail');
@@ -251,10 +258,11 @@ function station(root, batch) {
 function scenery(root, batch) {
   const colors = { sand: '#d8ab70', cactus: '#78a77e', bark: '#8d7760', leaf: '#548d64', pale: '#dbe6dc' };
   for (const zone of TRAIN_ZONES) {
-    ellipsePatch(root, zone.x, zone.z, zone.rx, zone.rz, zone.color, `${zone.name} landscape`);
+    const x=zone.x-TRAIN_PARK_OFFSET.x;
+    ellipsePatch(root, x, zone.z, zone.rx, zone.rz, zone.color, `${zone.name} landscape`);
     const labelZ = zone.z < 215 ? 200 : 230;
-    textSign(root, zone.name, zone.x, 3.7, labelZ, 15);
-    for (const dx of [-5.8, 5.8]) batch.beam(colors.bark, [zone.x + dx, 0, labelZ], [zone.x + dx, 3.4, labelZ], .12);
+    textSign(root, zone.name, x, 3.7, labelZ, 15);
+    for (const dx of [-5.8, 5.8]) batch.beam(colors.bark, [x + dx, 0, labelZ], [x + dx, 3.4, labelZ], .12);
   }
   for (const [x, z, radius] of ROCKS) batch.part(BALL, colors.sand, [x, radius * .45, z], [radius, radius * .8, radius * .72], [0, x, .12]);
   for (const [x, z, radius, height] of PEAKS) {
@@ -419,7 +427,7 @@ function animals(batch) {
       const tail = [[0, 1.15, -1], [.35, 1.35, -1.3], [.48, 1.12, -1.6], [.2, .95, -1.6], [.1, 1.13, -1.5]];
       for (let i = 1; i < tail.length; i++) beam('#d99595', tail[i - 1], tail[i], .07, 'curly pig tail');
     }
-    return freeze({ id, species, x, y: ground, z, radius: scale * (species === 'camel' ? 3 : species === 'toucan' ? 2 : 2.4), features: freeze([...features]) });
+    return freeze({ id, species, x:x+TRAIN_PARK_OFFSET.x, y: ground, z:z+TRAIN_PARK_OFFSET.z, radius: scale * (species === 'camel' ? 3 : species === 'toucan' ? 2 : 2.4), features: freeze([...features]) });
   });
 }
 
@@ -465,8 +473,9 @@ function vehicle(engine, index) {
 }
 export function createTrainPark() {
   const root = new THREE.Group(); root.name = 'Four Worlds Train Park';
-  const batch = staticBuilder(root);
-  railway(root, batch); station(root, batch); scenery(root, batch);
+  const landscape=new THREE.Group();landscape.name='Translated train park scenery';landscape.position.set(TRAIN_PARK_OFFSET.x,0,TRAIN_PARK_OFFSET.z);root.add(landscape);
+  const batch = staticBuilder(landscape);
+  railway(landscape, batch); station(landscape, batch); scenery(landscape, batch);
   const residents = freeze(animals(batch)); batch.flush();
   const train = new THREE.Group(); train.name = 'Adventure train'; root.add(train);
   const vehicles = [vehicle(true, 0), vehicle(false, 1), vehicle(false, 2)];

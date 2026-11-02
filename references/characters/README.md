@@ -18,6 +18,12 @@ Original images supplied by the user for NumberTown character refinement. Keep t
 - [31-40-details](31-40-details.png) — `codex-clipboard-3085c1a7-06cc-4746-afca-fb199bc31f5b.png`
 - [31-40-alternate-shapes](31-40-alternate-shapes.png) — `codex-clipboard-a3c818e7-867d-4aa3-bfe6-c8ff4ff3d34f.png`
 
+- [41-50-illustrated](41-50-illustrated.png) — `codex-clipboard-16a613ea-253d-483e-8c0a-381f2c4727d5.png`
+
+- [41-50-models](41-50-models.png) — `codex-clipboard-46e379ff-ad9d-46c1-80b3-640674d31b66.png`
+
+- [41-50-toys](41-50-toys.png) — `codex-clipboard-094a676b-4be3-47e1-87be-61b12ba105d3.png`
+
 ## Earlier attachments no longer on disk
 
 - 01-05: `codex-clipboard-ba18e5d7-1545-4197-8d77-4c1205c7602f.png`

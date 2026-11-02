@@ -104,12 +104,12 @@ export function createTown() {
   // Dry land ends at the shore. A slab extending under the bay would hide
   // submerged friends and the sloping seabed, even through clear water.
   const landDepth = COAST.seaStart - .35;
-  const island = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRectangle(WORLD.width, landDepth, 6), {
+  const island = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRectangle(WORLD.width - WORLD.minX, landDepth, 6), {
     depth: .8, bevelEnabled: true, bevelSize: .35, bevelThickness: .2, bevelSegments: 2, steps: 1,
   }), [material(COLORS.grass), material(COLORS.soil)]);
   island.name = 'Dry town island';
   island.rotation.x = -Math.PI / 2;
-  island.position.set(WORLD.width / 2, -1, landDepth / 2);
+  island.position.set((WORLD.width + WORLD.minX) / 2, -1, landDepth / 2);
   island.receiveShadow = true; root.add(island);
 
   for (const road of ROAD_SEGMENTS) {
@@ -133,7 +133,7 @@ export function createTown() {
     }
     const front = b.z + b.d / 2;
     const street = b.street;
-    if (street > front) path(b.x, (front + street) / 2, b.kind === 'library' ? 9 : 3.7, street - front + .6, COLORS.path, .034);
+    if (street > front) path(b.x, (front + street) / 2, b.doorWidth ? 16 : b.kind === 'library' ? 9 : 3.7, street - front + .6, COLORS.path, .034);
   }
 
   function orientedBox(x, y, z, ox, oy, oz, w, h, d, color, ry) {
@@ -194,7 +194,8 @@ export function createTown() {
       : null;
     const front = b.z + b.d / 2, back = b.z - b.d / 2;
     const publicBuilding = ['library', 'school', 'hall'].includes(b.kind);
-    const roofH = publicBuilding ? 3 : 2.3;
+    const isShop = ['bakery', 'cafe', 'shop'].includes(b.kind);
+    const roofH = isShop ? 3.6 : publicBuilding ? 3 : 2.3;
     box(b.x, .18, b.z, b.w + .35, .36, b.d + .35, '#e6d4b6');
     box(b.x, b.h / 2 + .17, b.z, b.w, b.h, b.d, b.wall);
     box(b.x, b.h - .05, b.z, b.w + .38, .25, b.d + .38, COLORS.trim);
@@ -205,14 +206,14 @@ export function createTown() {
     for (const dx of [-1, 1]) for (const dz of [-1, 1]) {
       box(b.x + dx * (b.w / 2 - .11), b.h / 2 + .15, b.z + dz * (b.d / 2 - .11), .22, b.h, .22, COLORS.trim);
     }
-    const doorW = publicBuilding ? 2.9 : 1.6, doorH = publicBuilding ? 3.25 : 2.55;
+    const doorW = b.doorWidth || (publicBuilding ? 2.9 : 1.6), doorH = b.doorHeight || (publicBuilding ? 3.25 : 2.55);
     put('door', COLORS.trim, b.x, .22, front + .04, doorW + .28, doorH + .16, .18);
     put('door', b.door, b.x, .24, front + .23, doorW, doorH, .08);
     box(b.x, .18, front + .45, doorW + .65, .2, .9, '#e1d1b7');
     ball(b.x + doorW * .28, 1.4, front + .38, .08, .08, .08, '#d2b775');
     if (publicBuilding) box(b.x, 1.8, front + .34, .045, 2.9, .05, COLORS.trim);
     for (const dx of [-1, 1]) {
-      windowAt(b.x + dx * b.w * .29, b.h * .49 + .25, front + .1, publicBuilding ? 2.1 : 1.55, publicBuilding ? 2.25 : 1.7);
+      windowAt(b.x + dx * b.w * (isShop ? .38 : .29), b.h * .49 + .25, front + .1, isShop ? 3.4 : publicBuilding ? 2.1 : 1.55, isShop ? 7 : publicBuilding ? 2.25 : 1.7);
       windowAt(b.x + dx * b.w * .26, b.h * .48 + .25, back - .1, 1.55, 1.8, Math.PI);
       for (const dz of [-1, 1]) windowAt(b.x + dx * (b.w / 2 + .1), b.h * .48 + .25, b.z + dz * b.d * .23, 1.45, 1.75, dx * Math.PI / 2);
     }
@@ -224,7 +225,7 @@ export function createTown() {
       makeSign(b.name, b.x + doorW / 2 + .55, 2.2, front + .2, .5, .5);
       planter(b.x - b.w * .3, front + .45, 1.85, .65, index);
     } else {
-      makeSign(b.name, b.x, b.h - .62, front + .29, Math.min(b.w - .7, b.kind === 'library' ? 12 : 8.8), .75);
+      makeSign(b.name, b.x, b.h - .62, front + .29, Math.min(b.w - .7, isShop ? 21 : b.kind === 'library' ? 12 : 8.8), isShop ? 1.2 : .75);
     }
     if (b.kind === 'bakery' || b.kind === 'cafe' || b.kind === 'shop') {
       const awningW = b.w * .86, awningD = 1.3, awningY = b.h - 1.4;

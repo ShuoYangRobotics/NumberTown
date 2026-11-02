@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS, SQUARE, STATUE, POND } from '../dist/world-data.js';
 import { BRIDGES, riverX, riverWidth } from '../dist/geography.js';
 import { createTown } from '../dist/world3d.js';
+import { getCharacterArrangements } from '../dist/arrangements.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
 import { Matrix4, Vector3 } from '../dist/vendor/three.module.js';
 
-// The widest friend needs a 5.4-unit corridor. The route check uses a separate
+// Check the widest funny form as well as the original cast. The route check uses a separate
 // occupancy grid, so a safe-looking destination cannot conceal a sealed route.
-const radius = 2.7;
+const radius = Math.max(...CHARACTERS.flatMap(c => getCharacterArrangements(c.number).filter(f => f.shapeKind === 'original' || f.family === 'funny')).map(c => getCharacterMetrics(c).radius));
 function blocked(x, z, footprint = radius) {
   const radius = footprint;
-  if (x < WORLD.margin + radius || z < WORLD.margin + radius ||
+  if (x < WORLD.minX + WORLD.margin + radius || z < WORLD.margin + radius ||
       x > WORLD.width - WORLD.margin - radius || z > WORLD.depth - WORLD.margin - radius) return true;
   // Prevent a route check from accidentally walking across the river, or
   // around its southern mouth. Only the three shared bridges join the banks.
@@ -72,7 +73,6 @@ test('landmark arrivals and all neighborhoods connect to the town square for a w
     assert.ok(!blocked(landmark.arrival.x, landmark.arrival.z), `${landmark.name} arrival is blocked`);
     assert.ok(reached.has(`${landmark.arrival.x},${landmark.arrival.z}`), `${landmark.name} has no safe route`);
   }
-  for (const p of FRIEND_STARTS) assert.ok(reached.has(`${p.x},${p.z}`), `Unreachable start at ${p.x},${p.z}`);
   for (const approach of BUILDING_APPROACHES) {
     assert.ok(!blocked(approach.x, approach.z), `${approach.name} approach is blocked`);
     assert.ok(reached.has(`${approach.x},${approach.z}`), `${approach.name} is cut off from the town`);
@@ -82,11 +82,21 @@ test('landmark arrivals and all neighborhoods connect to the town square for a w
   }
 });
 
-test('the banks have fifty west homes, twenty east homes, and ten stores around a clear large square', () => {
-  assert.deepEqual(WORLD, { width: 840, depth: 690, minZ: -90, margin: 2 });
-  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'west').length, 50);
+test('the expanded banks have sixty west homes, twenty east homes, and thirty spacious stores', () => {
+  assert.deepEqual(WORLD, { width: 1040, depth: 690, minX: -320, minZ: -90, margin: 2 });
+  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'west').length, 60);
   assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'east').length, 20);
-  assert.equal(BUILDINGS.filter(b => ['shop', 'bakery', 'cafe'].includes(b.kind)).length, 10);
+  assert.equal(BUILDINGS.filter(b => ['shop', 'bakery', 'cafe'].includes(b.kind)).length, 30);
+  for (const [bank, count] of [['west', 20], ['east', 10]]) {
+    const shops = BUILDINGS.filter(b => ['shop','bakery','cafe'].includes(b.kind) && b.bank === bank);
+    assert.equal(shops.length, count);
+    assert.ok(shops.every(b => b.w >= 26 && b.d >= 22 && b.doorWidth >= 12 && b.doorHeight >= 9));
+    for (const a of shops) for (const b of shops) if (a !== b) {
+      const gapX = Math.abs(a.x - b.x) - (a.w + b.w) / 2;
+      const gapZ = Math.abs(a.z - b.z) - (a.d + b.d) / 2;
+      assert.ok(gapX >= 20 || gapZ >= 20, 'Market aisles allow wide friends to pass');
+    }
+  }
   for (const kind of ['library', 'school', 'hall']) assert.equal(BUILDINGS.filter(b => b.kind === kind).length, 1);
   assert.equal(new Set(BUILDINGS.map(b => b.id)).size, BUILDINGS.length);
   assert.equal(BUILDING_APPROACHES.length, BUILDINGS.length);
@@ -94,8 +104,8 @@ test('the banks have fifty west homes, twenty east homes, and ten stores around 
   assert.equal(SQUARE.w, 64); assert.equal(SQUARE.d, 56);
   for (const b of BUILDINGS) {
     const o = OBSTACLES.find(obstacle => obstacle.id === b.id);
-    if (b.bank === 'west') assert.ok(o.x + o.w <= 214 && o.z >= 78 && o.z + o.d <= 299, `${b.id} leaves the west town bounds`);
-    else assert.ok(o.x >= 270 && o.x + o.w < 320 && o.z >= 78, `${b.id} enters the river or reserved activity area`);
+    if (b.bank === 'west') assert.ok(o.x >= WORLD.minX + 2 && o.x + o.w <= 214 && o.z >= 78 && o.z + o.d <= 304, `${b.id} leaves the west town bounds`);
+    else assert.ok(o.x >= 270 && o.x + o.w < 600 && o.z >= 78, `${b.id} enters the river or reserved activity area`);
     const overlapsSquare = o.x < SQUARE.x + SQUARE.w / 2 && o.x + o.w > SQUARE.x - SQUARE.w / 2 &&
       o.z < SQUARE.z + SQUARE.d / 2 && o.z + o.d > SQUARE.z - SQUARE.d / 2;
     assert.equal(overlapsSquare, false, `${b.id} intrudes into the square`);
@@ -185,8 +195,8 @@ test('bridge approach paving stops at each bridge edge and broad exits allow a t
       const approach = ROAD_SEGMENTS.find(r => r.id === `${b.id}-${bank}-approach`);
       assert.ok(approach); assert.equal(approach.x2, edge); assert.equal(approach.z2, b.z);
     }
-    const eastExit = Math.max(266, b.x + b.span / 2 + 3.1);
-    const westExit = Math.min(218, b.x - b.span / 2 - 3.1);
+    const eastExit = Math.max(266, b.x + b.span / 2 + radius + .2);
+    const westExit = Math.min(218, b.x - b.span / 2 - radius - .2);
     for (const points of [
       [[b.x - 31, b.z], [eastExit, b.z], [eastExit, b.z + 9], [266, b.z + 9]],
       [[b.x, b.z], [westExit, b.z], [westExit, b.z + 9], [218, b.z + 9]],

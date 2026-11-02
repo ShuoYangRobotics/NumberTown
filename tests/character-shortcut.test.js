@@ -201,14 +201,14 @@ test('public cancel preserves external focus and cleanup removes every keyboard/
   assert.equal(f.state.begins, begins); assert.deepEqual(f.state.selected, []);
 });
 
-test('the expanded cast accepts 31 through 40 and rejects 41', () => {
-  const f = setup(40, 0);
-  for (const number of [31, 35, 40, 0]) {
+test('the expanded cast accepts 31 through 50 and rejects 51', () => {
+  const f = setup(50, 0);
+  for (const number of [31, 35, 40, 41, 48, 50, 0]) {
     f.canvas.focus(); f.key('keydown', 'Tab'); f.key('keyup', 'Tab');
     f.type(String(number)); f.key('keydown', 'Enter');
     assert.equal(f.state.selected.at(-1), number);
   }
-  f.input.focus(); f.type('41'); f.clickGo();
-  assert.equal(f.status.textContent, 'Choose 0–40');
-  assert.deepEqual(f.state.selected, [31, 35, 40, 0]);
+  f.input.focus(); f.type('51'); f.clickGo();
+  assert.equal(f.status.textContent, 'Choose 0–50');
+  assert.deepEqual(f.state.selected, [31, 35, 40, 41, 48, 50, 0]);
 });

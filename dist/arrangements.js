@@ -67,13 +67,102 @@ function zigzag(number) {
   }
   return cells;
 }
+// These silhouettes have a 31-cube core and nineteen ordered additions.
+// Every addition touches an existing face and grows a recognizable feature,
+// rather than adding a disconnected ornament or an arbitrary counting tail.
+function sculpted(number, core, additions) {
+  const cells = [], seen = new Set();
+  for (const cell of [...core, ...additions]) {
+    const point = { x: cell[0], y: cell[1], z: cell[2] ?? 0 }, key = positionKey(point);
+    if (!seen.has(key)) { seen.add(key); cells.push(point); }
+    if (cells.length === number) return cells;
+  }
+  // Future larger friends can thicken the same silhouette toward the back.
+  // A whole new layer remains connected to the preceding occupied layer.
+  const silhouette = [...cells];
+  for (let layer = 1; cells.length < number; layer++) for (const cell of silhouette) {
+    const point = { ...cell, z: cell.z - layer }, key = positionKey(point);
+    if (!seen.has(key)) { seen.add(key); cells.push(point); }
+    if (cells.length === number) break;
+  }
+  return cells;
+}
+function pixels(rows) {
+  const width = Math.max(...rows.map(row => row.length)), middle = Math.floor(width / 2);
+  return rows.flatMap((row, index) => [...row].flatMap((pixel, x) => pixel === '#' ? [[x - middle, rows.length - index - 1, 0]] : []));
+}
+function prism(x, y, z, width, height, depth = 1) {
+  return Array.from({ length: width * height * depth }, (_, i) => [x + i % width, y + Math.floor(i / width) % height, z + Math.floor(i / (width * height))]);
+}
+function pairs(positions) { return positions.flatMap(([x, y, z = 0]) => [[-x, y, z], [x, y, z]]); }
+function diamond(number) {
+  const cells = [{ x: 0, y: 0, z: 0 }];
+  for (let radius = 1; cells.length < number; radius++) {
+    for (let step = 0; step < radius && cells.length < number; step++) {
+      for (const [x, y] of [[step, radius - step], [radius - step, -step], [-step, -radius + step], [-radius + step, step]]) {
+        cells.push({ x, y, z: 0 }); if (cells.length === number) break;
+      }
+    }
+  }
+  return cells;
+}
+function butterfly(number) {
+  return sculpted(number, pixels(['##.#.##', '#######', '.#####.', '...#...', '..###..', '.#####.', '##.#.##']), [
+    ...pairs([[4, 5], [3, 4], [3, 1], [1, 0], [2, 2], [1, 6], [1, 7], [4, 6], [3, 2], [4, 4]]),
+  ]);
+}
+function windowFrame(number) {
+  const perimeter = prism(0, 0, 0, 7, 7).filter(([x, y]) => x === 0 || x === 6 || y === 0 || y === 6);
+  const core = [...perimeter, [1, 1], [5, 1], [1, 5], [5, 5], [2, 5], [3, 5], [4, 5]];
+  const sides = [3, 2, 4, 1, 5, 0, 6].flatMap(y => [[-1, y], [7, y]]);
+  return sculpted(number, core, [...sides, ...[3, 2, 4, 1, 5, 0, 6].map(x => [x, -1])]);
+}
+function robot(number) {
+  return sculpted(number, pixels(['..#..', '#####', '#####', '#####', '#.#.#', '#####', '.###.', '.#.#.', '.#.#.']), [
+    ...pairs([[2, 2]]), [0, 1], ...pairs([[3, 3], [1, 4], [2, 0], [3, 2], [3, 6], [2, 1], [1, 8]]), [0, 9], [-3, 0],
+  ]);
+}
+function rocket(number) {
+  return sculpted(number, pixels(['..#..', '.###.', '.###.', '.###.', '.###.', '#####', '#####', '#####', '.###.']), [
+    ...pairs([[2, 4], [2, 5], [2, 6], [3, 1], [3, 2], [2, 7], [1, 8], [2, 0], [3, 3]]), [0, 9],
+  ]);
+}
+function puppy(number) {
+  const core = [...prism(-2, 2, 0, 5, 2), ...pairs([[2, 0], [2, 1]]), ...prism(2, 4, 0, 3, 3), [5, 4], [5, 5], [2, 7], [-3, 3], [-3, 4], [-3, 5], [-4, 5], [1, 4]];
+  return sculpted(number, core, [
+    [-2, 4], [-1, 4], [0, 4], [-1, 1], [0, 1], [1, 1], [3, 0], [-3, 0], [3, 7], [4, 7], [4, 8], [5, 6], [-4, 4], [-3, 1], [3, 1], [3, 3], [4, 3], [-4, 6], [6, 5],
+  ]);
+}
+function castle(number) {
+  const ground = prism(-2, 0, -1, 5, 1, 3).filter(([x, , z]) => Math.abs(x) === 2 || Math.abs(z) === 1);
+  const towers = [-2, 2].flatMap(x => [-1, 1].flatMap(z => prism(x, 1, z, 1, 3)));
+  const core = [...ground, ...towers, ...prism(-1, 1, -1, 3, 1), ...prism(-1, 2, 1, 3, 1), [0, 2, -1]];
+  return sculpted(number, core, [
+    ...pairs([[1, 2, -1], [2, 1, 0], [2, 2, 0]]), [-1, 0, 0], [0, 0, 0], [1, 0, 0],
+    ...pairs([[2, 4, -1], [2, 4, 1]]), [0, 1, 0], [0, 2, 0], [0, 3, 0], ...pairs([[2, 3, 0]]), [0, 4, 0],
+  ]);
+}
+function bridge(number) {
+  const deck = prism(-3, 2, -1, 7, 1, 3);
+  const pillars = [-3, 3].flatMap(x => [-1, 1].flatMap(z => prism(x, 0, z, 1, 2)));
+  const core = [...deck, ...pillars, [0, 3, -1], [0, 3, 1]];
+  const rails = [1, 2, 3].flatMap(x => [-1, 1].flatMap(z => [[-x, 3, z], [x, 3, z]]));
+  return sculpted(number, core, [...rails, ...pairs([[3, 0, 0], [3, 1, 0]]), [0, 4, -1], [0, 4, 1], [0, 4, 0]]);
+}
+const FUNNY_SHAPES = freeze([
+  ['diamond', 'Stepped diamond', diamond], ['butterfly', 'Butterfly wings', butterfly],
+  ['window-frame', 'Picture frame', windowFrame], ['robot', 'Little robot', robot],
+  ['rocket', 'Space rocket', rocket], ['puppy', 'Puppy pose', puppy],
+  ['castle', 'Chunky castle', castle], ['bridge', 'Chunky bridge', bridge],
+].map(freeze));
+
 function tensStyles(original) {
   const counts = new Map();
   for (const cell of original.cells) counts.set(cell.color, (counts.get(cell.color) ?? 0) + 1);
   const bodyColor = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
   const body = original.cells.filter(cell => cell.color === bodyColor);
-  // Every reference from Eleven to Thirty-Nine uses one ten/twenty/thirty
-  // body color, even when the bright last-digit cubes begin in a stripe.
+  // Eleven through Forty-Nine use one ten/twenty/thirty/forty body color,
+  // even when the bright last-digit cubes begin in a stripe or a frame.
   if (body.length !== original.number - original.number % 10) return original.cells;
   return [...body, ...original.cells.filter(cell => cell.color !== bodyColor)];
 }
@@ -153,7 +242,7 @@ export function createCrazyArrangement(number, seed = 0) {
   return variant(original, positions, { formId: `crazy:${seedValue.toString(36)}`, shapeKind: 'crazy', label: 'Crazy shape', crazySeed: String(seed) });
 }
 
-/** Exact original, all factor rectangles, recognizable shapes, then a crazy sample. */
+/** Exact original, funny silhouettes for larger friends, all rectangles, and a crazy sample. */
 export function getCharacterArrangements(number) {
   const original = getCharacterDefinition(number);
   if (arrangements.has(original.number)) return arrangements.get(original.number);
@@ -165,6 +254,9 @@ export function getCharacterArrangements(number) {
   }
   function addShape(formId, shapeKind, label, positions, metadata = {}, styles) {
     return add(variant(original, positions, { formId, shapeKind, label, ...metadata }, first.originalShape, styles));
+  }
+  if (original.number > 30) for (const [kind, label, generate] of FUNNY_SHAPES) {
+    addShape(kind, kind, label, generate(original.number), { family: 'funny' });
   }
   const factors = [];
   for (let width = 1; width <= original.number; width++) if (original.number % width === 0) factors.push({ width, height: original.number / width });

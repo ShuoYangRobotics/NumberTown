@@ -12,6 +12,7 @@ import { toSpokenMath } from './speech.js';
 import { getVoiceProfile } from './voice-profiles.js';
 import { mountCharacterShortcut } from './character-shortcut.js';
 import { getCharacterArrangements, getNextArrangement, createCrazyArrangement, findArrangementPosition } from './arrangements.js';
+import { buildingOccluders, characterVisibilityPoints, resolveCameraClearance, orbitCameraPosition, smoothCameraLift } from './camera-clearance.js';
 
 import { createLandscape } from './terrain.js';
 import { groundHeight, HILL_LANDMARK, LOOKOUT_LANDMARK, BRIDGE_LANDMARKS, BEACH_LANDMARK, WATER_PLAY_LANDMARK, UNDERWATER_LANDMARK, MOUNTAIN_LANDMARK, TERRAIN_OBSTACLES } from './terrain-data.js';
@@ -24,6 +25,7 @@ import { bodyHeight, stepSwimming, resetSwimming, bodiesOverlap, hasBodyClearanc
 import { createUnderwaterGarden, gardenTourWaypoints } from './underwater-garden.js';
 import { createTrainPark, createTrainState, boardTrain, leaveTrain, stepTrain, trainPose, boardingPoint, TRAIN_LANDMARK, TRAIN_PARK, TRAIN_OBSTACLES } from './train-park.js';
 import { createAnimalEncounters } from './animal-facts.js';
+import { createNumberEncounters } from './number-encounters.js';
 import { isInSea, waterDepthAt, immersionFor, cameraWaterBlend } from './water-view.js';
 import { mountTownMap } from './town-map.js';
 import { SUMMIT, SUMMIT_DECK, MOUNTAIN_TRAIL, MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, mountainHeight, isOnMountainRoute, nearestTrailPoint, mountainProgress } from './mountain-route.js';
@@ -32,7 +34,7 @@ const ALL_OBSTACLES=[...OBSTACLES,...PARK_OBSTACLES,...FOOTBALL_OBSTACLES,...TER
 const ALL_PLACES=[...LANDMARKS,PARK_LANDMARK,FOOTBALL_LANDMARK,HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK,TRAIN_LANDMARK];
 const roaming=createRoamingController({obstacles:ALL_OBSTACLES,world:WORLD,shouldStay:p=>shouldStayAtScenicSpot(p)||isInSea(p),destinations:ALL_PLACES.filter(p=>!['hill','lookout','summit','mountain-trail','mountains','water-play','seabed','train-park'].includes(p.id))});
 const BRIDGE_IDS=new Set(BRIDGE_LANDMARKS.map(p=>p.id));
-const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length};
+const townCounts={westHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west').length,eastHouses:BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east').length,houses:BUILDINGS.filter(b=>b.kind==='house').length,stores:BUILDINGS.filter(b=>['shop','bakery','cafe'].includes(b.kind)).length,westStores:BUILDINGS.filter(b=>b.bank==='west'&&['shop','bakery','cafe'].includes(b.kind)).length,eastStores:BUILDINGS.filter(b=>b.bank==='east'&&['shop','bakery','cafe'].includes(b.kind)).length};
 const $ = selector => document.querySelector(selector);
 const canvas = $('#world');
 const help = $('#help-dialog'), mapDialog=$('#map-dialog');
@@ -74,7 +76,7 @@ const fillLight = new THREE.DirectionalLight('#d8eaf5', .8); fillLight.position.
 const town = createTown(), landscape=createLandscape(), park=createPark(), football=createFootball(), ballState=createBallState();
 const waterBall=createWaterBall(), waterBallState=createWaterBallState();
 const seaLife=createSeaLife(),underwaterGarden=createUnderwaterGarden(),trainPark=createTrainPark(),trainState=createTrainState();
-const encounters=createAnimalEncounters();
+const encounters=createAnimalEncounters(),numberEncounters=createNumberEncounters();
 scene.add(town.root,landscape.root,park.root,football.root,waterBall.root,seaLife.root,underwaterGarden.root,trainPark.root);
 trainPark.update(trainState,0);
 football.update(ballState,0);
@@ -94,6 +96,8 @@ const players = CHARACTERS.map((definition,index) => {
 let active = players.find(player=>player.number===27);
 const camera = new THREE.PerspectiveCamera(42, 1, .3, 1300);
 const orbit = {yaw:.26, elevation:.64, distance:76, targetDistance:76};
+const cameraOccluders=buildingOccluders(BUILDINGS);
+let cameraLift=0;
 const target = new THREE.Vector3(active.x, 2.1, active.z);
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
@@ -104,6 +108,7 @@ const selectionShadow = new THREE.Mesh(new THREE.CircleGeometry(1,40),new THREE.
 selectionShadow.rotation.x=-Math.PI/2;selectionShadow.position.y=.13;scene.add(selectionShadow);
 
 let time=0, lastTime=0, muted=true, nextRemark=9, currentPlace=null, audioContext;
+let nextAutoSpeech=9,lastMathMode='solo';
 let frameCount=0, fps=60, statsAt=0, lastJumpAt=-1, hopCount=0, kickCount=0, throwCount=0, activityUntil=0, activityMessage='';
 let guidedWalk=null,gardenTour=null,trainCameraFollow=true,trailNoticeUntil=0,nextEncounter=0;
 const keys = new Set(), touches = new Set(), tapUntil = new Map(), pointerPositions = new Map();
@@ -170,7 +175,7 @@ function updateShapeInfo(message=''){
   const shapes=getCharacterArrangements(active.number);
   $('#transform-shape').disabled=shapes.length<2;
   $('#crazy-shape').disabled=active.number<3;
-  $('#transform-shape').title=active.number===0?'Zero has no blocks to rearrange.':shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Rectangles, irregular shapes, then back to the original. Shift+T makes a new crazy shape.';
+  $('#transform-shape').title=active.number===0?'Zero has no blocks to rearrange.':shapes.length<2?'One has just one 1 × 1 arrangement.':'Change arrangement (T). Funny shapes, rectangles, irregular shapes, then back to the original. Shift+T makes a new crazy shape.';
   $('#shape-status').textContent=message||(active.number===0?'No blocks to rearrange':active.formId==='original'?'Original shape':active.definition.shapeKind==='rectangle'?`${active.width} × ${active.height} = ${active.number}`:`${active.definition.label} · ${active.number} cubes`);
 }
 function fitCharacterView(preserve=false){
@@ -242,19 +247,25 @@ function enterTrain(){
 function exitTrain(focus=false){
   if(trainState.rider===null)return;
   const rider=players.find(p=>p.number===trainState.rider),point=leaveTrain(trainState);
-  if(rider){const safe=nearestOpenPosition(point,walkingObstacles(rider),WORLD,rider.radius);Object.assign(rider,safe,{jump:0,jumpVelocity:0});resetSwimming(rider);rider.model.root.visible=true;rider.model.root.position.set(rider.x,bodyHeight(rider),rider.z);roaming.pause(rider,time);}
+  if(rider){
+    const peers=players.filter(p=>p!==rider&&p.model.root.visible&&p.number!==trainState.rider);
+    const canPlace=position=>hasBodyClearance({...rider,...position,jump:0,swimY:null},peers);
+    const safe=nearestOpenPosition(point,ALL_OBSTACLES,WORLD,rider.radius,canPlace);
+    Object.assign(rider,safe,{jump:0,jumpVelocity:0});resetSwimming(rider);rider.model.root.visible=true;rider.model.root.position.set(rider.x,bodyHeight(rider),rider.z);roaming.pause(rider,time);
+  }
   clearInput();activityUntil=0;trainPark.update(trainState,time);if(focus){updateLocation();focusGame();}
 }
 function visit(place){
   exitTrain();resetSwimming(active);
   releaseWaterBall(waterBallState,active);
   clearInput();closeMood();
-  const obstacles=walkingObstacles(active);
-  const arrival=place.id==='train-park'?boardingPoint(trainState):place.id==='mountain-trail'?(MOUNTAIN_TRAIL.find(p=>!collides(p.x,p.z,obstacles,WORLD,active.radius))||place.arrival):place.arrival;
-  Object.assign(active,nearestOpenPosition({x:arrival.x,z:arrival.z},obstacles,WORLD,active.radius));
+  const peers=players.filter(p=>p!==active&&p.model.root.visible&&p.number!==trainState.rider);
+  const canPlace=position=>hasBodyClearance({...active,...position,jump:0,swimY:null},peers);
+  const arrival=place.id==='train-park'?boardingPoint(trainState):place.id==='mountain-trail'?(MOUNTAIN_TRAIL.find(p=>!collides(p.x,p.z,ALL_OBSTACLES,WORLD,active.radius)&&canPlace(p))||place.arrival):place.arrival;
+  Object.assign(active,nearestOpenPosition({x:arrival.x,z:arrival.z},ALL_OBSTACLES,WORLD,active.radius,canPlace));
   roaming.pause(active,time);active.jump=0;active.jumpVelocity=0;currentPlace=place;
   const presets={
-    'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
+    market:[.3,.7,110],'east-market':[.3,.7,110],'orchard-lane':[.3,.64,90],'town-square':[.3,.64,76],pond:[.28,.68,90],park:[0,.48,115],football:[0,.64,70],
     hill:[Math.PI,.64,72],beach:[Math.PI,.45,100],'water-play':[Math.PI,.55,44],seabed:[Math.PI+.3,.32,30],mountains:[0,.43,180],
     'mountain-trail':[.25,.59,180],summit:[Math.PI,.5,100],'train-park':[-Math.PI/2,.6,85],
   };
@@ -267,7 +278,7 @@ function visit(place){
   setEmotion(active,place.id==='library'?'curious':'excited',14);remark(active,{place:BRIDGE_IDS.has(place.id)?'river':place.id});updateLocation();focusGame();
 }
 function findPlace(player){
-  if(trainState.rider===player.number||player.x>=445&&player.z>=75&&player.z<=360)return TRAIN_LANDMARK;
+  if(trainState.rider===player.number||player.x>=TRAIN_PARK.bounds.minX-5&&player.x<=TRAIN_PARK.bounds.maxX+5&&player.z>=TRAIN_PARK.bounds.minZ-3&&player.z<=TRAIN_PARK.bounds.maxZ+5)return TRAIN_LANDMARK;
   if(inWaterPlayArea(player))return waterDepthAt(player)>10?UNDERWATER_LANDMARK:player.z>=WATER_PLAY.shoreZ-1?WATER_PLAY_LANDMARK:BEACH_LANDMARK;
   if(isOnMountainRoute(player.x,player.z)){
     if(Math.abs(player.x-SUMMIT_DECK.x)<=SUMMIT_DECK.width/2&&Math.abs(player.z-SUMMIT_DECK.z)<=SUMMIT_DECK.depth/2)return SUMMIT_LANDMARK;
@@ -290,15 +301,39 @@ function remark(player,context={}){
   // Only the friend under the user's control speaks; wandering friends stay quiet.
   if(player!==active)return;
   const next=chooseRemark(player.number,{emotion:player.emotion,lastText:player.lastText,...context,arrangement:player.definition,math:true});
+  const nearby=Number.isInteger(context.nearbyNumber)&&context.nearbyNumber!==player.number&&players.some(p=>p.number===context.nearbyNumber);
+  lastMathMode=nearby?'nearby':'solo';player.lastNearbyNumber=nearby?context.nearbyNumber:null;
   say(player,next.text,'math');
 }
 function say(player,text,kind='math'){
   if(player!==active)return;
   player.lastText=text;player.lastRemarkKind=kind;
+  if(kind!=='math')player.lastNearbyNumber=null;
   const bubble=bubbles[0];bubble.player=player;bubble.until=time+(kind==='animal'?9:6.5);
   bubble.element.replaceChildren();const name=document.createElement('span');name.className='speaker';name.textContent=`${player.name} · ${kind==='animal'?'animal explorer':'number facts'}`;
   bubble.element.append(name,document.createTextNode(text));bubble.element.dataset.spoken=toSpokenMath(text);
-  nextRemark=time+14+Math.random()*6;speak(text,player);
+  // All automatic speech shares one quiet interval. Animal discoveries defer an
+  // overdue math turn without repeatedly moving it another full cycle away.
+  nextAutoSpeech=time+12;numberEncounters.noteSpeech(time);
+  nextRemark=kind==='math'?time+14+Math.random()*6:Math.max(nextRemark,nextAutoSpeech);speak(text,player);
+}
+function updateAutomaticSpeech(){
+  const poses=players.map(player=>({number:player.number,x:player.x,y:bodyHeight(player),z:player.z,height:player.height,radius:player.radius,visible:player.model.root.visible,onFoot:player.number!==trainState.rider}));
+  const selectedPose=poses.find(player=>player.number===active.number);
+  // Observe arrivals while a line is playing, so a still-nearby friend can be
+  // mentioned later, while someone who already walked away cannot.
+  numberEncounters.update(selectedPose,poses,time,{allowSpeech:false});
+  if(time<nextAutoSpeech||voiceUtterance)return;
+  if(time>=nextRemark){
+    const meeting=numberEncounters.update(selectedPose,poses,time,{allowSpeech:lastMathMode!=='nearby',periodic:true});
+    remark(active,meeting?{nearbyNumber:meeting.nearbyNumber}:{});return;
+  }
+  const poseTime=reducedMotion?0:time;
+  const creatures=[...seaLife.animalPoses(poseTime),...town.animalPoses(poseTime),...underwaterGarden.animalPoses(poseTime),...trainPark.animals];
+  const animal=encounters.update({...active,y:trainState.rider===active.number?0:bodyHeight(active)},creatures,time);
+  if(animal){say(active,animal.text,'animal');return;}
+  const meeting=numberEncounters.update(selectedPose,poses,time,{allowSpeech:lastMathMode!=='nearby'});
+  if(meeting)remark(active,{nearbyNumber:meeting.nearbyNumber});
 }
 $('#math-fact').addEventListener('click',()=>{remark(active);focusGame();});
 function cancelVoice(){
@@ -515,8 +550,16 @@ function updateCamera(dt){
   orbit.distance=THREE.MathUtils.lerp(orbit.distance,orbit.targetDistance,1-Math.exp(-dt*7));
   // Keep the character in the open space above the card tray, also on portrait screens.
   const distance=orbit.distance*(innerWidth<700?1.23:1);
-  const horizontal=Math.cos(orbit.elevation)*distance;
-  camera.position.set(target.x+Math.sin(orbit.yaw)*horizontal,target.y+Math.sin(orbit.elevation)*distance,target.z+Math.cos(orbit.yaw)*horizontal);
+  const focusPoints=trainState.rider===active.number?[{x:active.x,y:2,z:active.z}]:characterVisibilityPoints({
+    x:active.x,y:bodyHeight(active),z:active.z,yaw:active.yaw,width:active.width,
+    depth:active.definition.depth||1,cells:active.cells,face:active.model.root.userData.faceCenter,
+  });
+  const clearance=resolveCameraClearance({target,yaw:orbit.yaw,elevation:orbit.elevation,distance,focusPoints,occluders:cameraOccluders});
+  cameraLift=smoothCameraLift(cameraLift,clearance.lift,dt);
+  const effectiveElevation=THREE.MathUtils.clamp(orbit.elevation+cameraLift,.26,1.25);
+  const position=orbitCameraPosition(target,orbit.yaw,effectiveElevation,distance);
+  camera.position.set(position.x,position.y,position.z);
+  camera.userData.effectiveElevation=effectiveElevation;
   if(camera.position.z<68&&camera.position.z>=-65)camera.position.y=Math.max(camera.position.y,mountainHeight(camera.position.x,camera.position.z)+5);
   camera.lookAt(target);camera.updateMatrixWorld();
   const waterBlend=cameraWaterBlend(camera.position);
@@ -580,12 +623,8 @@ function animate(timestamp){
     }
     if(time>=nextEncounter){
       nextEncounter=time+.25;
-      const poseTime=reducedMotion?0:time;
-      const creatures=[...seaLife.animalPoses(poseTime),...town.animalPoses(poseTime),...underwaterGarden.animalPoses(poseTime),...trainPark.animals];
-      const encounter=encounters.update({...active,y:trainState.rider===active.number?0:bodyHeight(active)},creatures,time);
-      if(encounter)say(active,encounter.text,'animal');
+      updateAutomaticSpeech();
     }
-    if(time>nextRemark)remark(active);
     town.update(reducedMotion?0:time);park.update(reducedMotion?0:time);landscape.update(reducedMotion?0:time);seaLife.update(reducedMotion?0:time);underwaterGarden.update(reducedMotion?0:time);if(trainState.rider!==null)trainPark.update(trainState,reducedMotion?0:time);
     if(trainState.rider===null&&active.jump<.3)updateBallContact(ballState,active,dt);
     const goal=stepBall(ballState,dt);football.update(ballState,time);
@@ -609,7 +648,7 @@ function animate(timestamp){
   if(timestamp-statsAt>500){
     fps=Math.round(frameCount*1000/(timestamp-statsAt));frameCount=0;statsAt=timestamp;updateLocation();if(active.number===21)updateBackpackButton();
     canvas.dataset.selected=String(active.number);canvas.dataset.ready='true';
-    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},seaLife:{counts:seaLife.counts},garden:{counts:underwaterGarden.counts,touring:!!gardenTour,waypoint:gardenTour?.index},train:{...trainState,pose:trainPose(trainState),hidden:!active.model.root.visible},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,shapeKind:active.definition.shapeKind||'original',shapeLabel:active.definition.label||'Original shape',cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+bodyHeight(active).toFixed(3),floor:+groundHeight(active.x,active.z).toFixed(2),swimY:active.swimY,staying:shouldStayAtScenicSpot(active),water:immersionFor(active,active.model.root.userData.visualHeight)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{underwater:cameraWaterBlend(camera.position)>.5,y:+camera.position.y.toFixed(2),yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
+    if(debug){$('#diagnostics').hidden=false;$('#diagnostics').textContent=JSON.stringify({renderer:'WebGL 2 · Three.js r180',fps,drawCalls:renderer.info.render.calls,geometries:renderer.info.memory.geometries,triangles:renderer.info.render.triangles,world:{...townCounts,cabins:park.cabinCount,bridges:BRIDGES.length,riverFrom:RIVER.startZ,riverTo:RIVER.endZ,seaStart:COAST.seaStart,width:WORLD.width,depth:WORLD.depth,minX:WORLD.minX,minZ:WORLD.minZ},ball:{x:+ballState.x.toFixed(2),z:+ballState.z.toFixed(2),speed:+Math.hypot(ballState.vx,ballState.vz).toFixed(2),goals:ballState.goals,kicks:kickCount},waterBall:{x:+waterBallState.x.toFixed(2),y:+waterBallState.y.toFixed(2),z:+waterBallState.z.toFixed(2),vx:+waterBallState.vx.toFixed(2),vz:+waterBallState.vz.toFixed(2),mode:waterBallState.mode,heldBy:waterBallState.heldBy,throws:throwCount},seaLife:{counts:seaLife.counts},garden:{counts:underwaterGarden.counts,touring:!!gardenTour,waypoint:gardenTour?.index},train:{...trainState,pose:trainPose(trainState),hidden:!active.model.root.visible},trail:guidedWalk?{direction:guidedWalk.direction,index:guidedWalk.index}:null,characters:players.length,hopCount:hopCount,unitCubes:CHARACTERS.reduce((sum,p)=>sum+p.cells.length,0),selected:{number:active.number,x:+active.x.toFixed(2),z:+active.z.toFixed(2),width:active.width,height:active.height,depth:active.depth,form:active.formId,shapeKind:active.definition.shapeKind||'original',shapeLabel:active.definition.label||'Original shape',cubes:active.cells.length,mood:active.emotion,jump:+active.jump.toFixed(2),altitude:+bodyHeight(active).toFixed(3),floor:+groundHeight(active.x,active.z).toFixed(2),swimY:active.swimY,staying:shouldStayAtScenicSpot(active),water:immersionFor(active,active.model.root.userData.visualHeight)},speech:{text:active.lastText,kind:active.lastRemarkKind,spoken:bubbles[0].element.dataset.spoken||'',speaker:active.number,nearbyNumber:active.lastNearbyNumber??null,mathMode:lastMathMode,nextAutomaticAt:nextAutoSpeech,numberEncounters:numberEncounters.state(),voices:!muted,voice:voiceState},roaming:players.filter(p=>p!==active).map(p=>({number:p.number,x:+p.x.toFixed(2),z:+p.z.toFixed(2),moving:p.moving,...roaming.stateFor(p)})),camera:{underwater:cameraWaterBlend(camera.position)>.5,y:+camera.position.y.toFixed(2),yaw:+orbit.yaw.toFixed(2),elevation:+orbit.elevation.toFixed(2),distance:+orbit.distance.toFixed(1)},place:currentPlace?.id,errors},null,2);}
   }
 }
 updateCamera(1);renderer.render(scene,camera);$('#loading').hidden=true;

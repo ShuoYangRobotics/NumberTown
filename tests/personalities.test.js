@@ -33,7 +33,7 @@ test('Zero has no blocks and a distinct, gentle voice in all six emotions', () =
   assert.equal(lines.size, moods.length);
 });
 
-test('all forty-one friends have at least three different personal happy remarks', () => {
+test('all fifty-one friends have at least three different personal happy remarks', () => {
   const signatures = new Set();
   for (const { number } of CHARACTERS) {
     const lines = new Set(samples.map(value => chooseRemark(number, {}, () => value).text));
@@ -129,7 +129,7 @@ test('new friends retain dice, rainbow, helping, square, and counting personalit
   }
 });
 
-test('Eleven through Forty retain their own personality in every emotion', () => {
+test('Eleven through Fifty retain their own personality in every emotion', () => {
   const patterns = {
     11: /eleven|football|ball|team|goal/i,
     12: /twelve|rectangle/i,
@@ -161,6 +161,16 @@ test('Eleven through Forty retain their own personality in every emotion', () =>
     38: /thirty-eight|playful|zigzag|pink/i,
     39: /thirty-nine|thoughtful|gray/i,
     40: /forty|four|checkered/i,
+    41: /forty-one|red|spark/i,
+    42: /forty-two|spectacles|pattern|rainbow|multiplication/i,
+    43: /forty-three|fram|picture/i,
+    44: /forty-four|team|football|goal/i,
+    45: /forty-five|step|staircase|hero|mask/i,
+    46: /forty-six|flower|hat|perform/i,
+    47: /forty-seven|rainbow|explor/i,
+    48: /forty-eight|rectangle|pattern|spectacles/i,
+    49: /forty-nine|square|rainbow/i,
+    50: /fifty|five tens|star|showtime/i,
   };
   for (const [number, pattern] of Object.entries(patterns)) {
     const personalLines = new Set();
@@ -330,8 +340,8 @@ function checkMathFact(text, number, definition = CHARACTERS.find(item => item.n
   }
 }
 
-test('all facts for Zero through Forty are short, unique, and mathematically true', () => {
-  assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 41 }, (_, number) => number));
+test('all facts for Zero through Fifty are short, unique, and mathematically true', () => {
+  assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 51 }, (_, number) => number));
   for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
     assert.ok(Object.isFrozen(facts));
@@ -365,8 +375,8 @@ test('Zero teaches identities and valid division without claiming a block shape'
 });
 
 test('every friend teaches operations, parity, factors, and accurate number categories', () => {
-  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
-  const squares = [0, 1, 4, 9, 16, 25, 36];
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
+  const squares = [0, 1, 4, 9, 16, 25, 36, 49];
   const cubes = [0, 1, 8, 27];
   for (const { number } of CHARACTERS) {
     const facts = getMathFacts(number);
@@ -451,6 +461,41 @@ test('Thirty-One through Forty teach tens, exact arithmetic, and their actual cu
   assert.ok(getMathFacts(37).includes('37 is prime: its only factors are 1 and 37.'));
   assert.ok(getMathFacts(40).includes('40 is 4 tens and 0 ones.'));
   assert.ok(getMathFacts(40).includes('I am a 4 by 10 rectangle!'));
+});
+
+test('Forty-One through Fifty describe their frames, staircase, rectangles and square accurately', () => {
+  for (let number = 41; number <= 50; number++) {
+    assert.ok(getMathFacts(number).includes(`40 + ${number - 40} = ${number}.`));
+    assert.ok(getMathFacts(number).includes(`${number * 2} divided by 2 is ${number}.`));
+  }
+  assert.ok(getMathFacts(41).includes('41 is prime: its only factors are 1 and 41.'));
+  assert.ok(getMathFacts(43).every(text => !text.startsWith('I am a ')), 'Forty-Three has an open frame, not a complete ten-by-eight rectangle');
+  assert.ok(getMathFacts(43).includes('My 43 blocks form one connected shape.'));
+  assert.ok(getMathFacts(45).includes('My 9 steps have 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 = 45 blocks.'));
+  assert.ok(getMathFacts(47).every(text => !text.startsWith('I am a ')), 'the rainbow tower leaves space beside its upper blocks');
+  assert.ok(getMathFacts(48).includes('I am a 8 by 6 rectangle!'));
+  assert.ok(getMathFacts(49).includes('I am a 7 by 7 square!'));
+  assert.ok(getMathFacts(49).includes('49 is a square number: 7 × 7 = 49.'));
+  assert.ok(getMathFacts(50).includes('I am a 5 by 10 rectangle!'));
+  assert.ok(getMathFacts(50).includes('50 is 5 tens and 0 ones.'));
+});
+
+test('every nonnegative addition split and varied exact operations are selectable', () => {
+  for (const { number } of CHARACTERS) {
+    const facts = getMathFacts(number);
+    for (let a = 0; a <= number; a++) {
+      const line = `${a} + ${number - a} = ${number}.`, index = facts.indexOf(line);
+      assert.ok(index >= 0, line);
+      assert.equal(chooseRemark(number, { math: true }, () => (index + .5) / facts.length).text, line);
+    }
+    if (number) for (let part = 1; part <= 10; part++) {
+      assert.ok(facts.includes(`${number + part} - ${part} = ${number}.`));
+      assert.ok(facts.includes(`${number * part} divided by ${part} is ${number}.`));
+    }
+  }
+  assert.ok(getMathFacts(30).includes('11 + 19 = 30.'));
+  assert.ok(getMathFacts(30).includes('10 + 20 = 30.'));
+  assert.ok(getMathFacts(30).includes('19 + 11 = 30.'));
 });
 
 test('every real arrangement teaches its current orientation without stale original-shape claims', () => {
@@ -549,7 +594,7 @@ test('rotated rectangles, flattened cubes, and changed stairs/frame keep only tr
   assert.ok(!getMathFacts(27, form(27, 9, 3)).includes('I am a 3 by 3 by 3 cube!'));
   assert.ok(getMathFacts(27, form(27, 9, 3)).includes('27 is a cube number: 3 × 3 × 3 = 27.'), 'being a cube number does not depend on the current shape');
   assert.ok(getMathFacts(28, form(28, 4, 7)).every(text => !/frame|holes/.test(text)));
-  assert.ok(!getMathFacts(28, form(28, 4, 7)).includes('33 - 5 = 28.'));
+  assert.ok(getMathFacts(28, form(28, 4, 7)).includes('33 - 5 = 28.'), 'ordinary subtraction remains true after the frame changes shape');
 });
 
 test('malformed current arrangements omit shape claims instead of reverting to the original body', () => {
@@ -568,8 +613,8 @@ test('malformed current arrangements omit shape claims instead of reverting to t
 
 test('the character range follows the data and invalid inputs safely fall back to One', () => {
   const highest = CHARACTERS.at(-1).number;
-  assert.equal(highest, 40);
-  assert.equal(CHARACTERS.length, 41);
+  assert.equal(highest, 50);
+  assert.equal(CHARACTERS.length, 51);
   assert.deepEqual(getMathFacts(CHARACTERS.length), getMathFacts(1), 'cast length is not the highest number');
   assert.ok(getMathFacts(highest).includes(`I have ${highest} equal blocks.`));
   assert.deepEqual(getMathFacts(String(highest)), getMathFacts(highest));

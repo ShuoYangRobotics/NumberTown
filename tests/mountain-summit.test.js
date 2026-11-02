@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
 import { WORLD, MOUNTAINS, riverX, riverWidth } from '../dist/geography.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
+import { getCharacterArrangements } from '../dist/arrangements.js';
 import { OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS } from '../dist/world-data.js';
 import { PARK_OBSTACLES } from '../dist/park.js';
 import { FOOTBALL_OBSTACLES } from '../dist/football.js';
@@ -14,7 +15,8 @@ import {
   SUMMIT_LANDMARK, mountainHeight, mountainWalkHeight, isOnMountainRoute,
 } from '../dist/mountain-route.js';
 
-const widest = Math.max(2.7, ...CHARACTERS.map(character => getCharacterMetrics(character.number).radius));
+const funnyForms=CHARACTERS.flatMap(character=>getCharacterArrangements(character.number).filter(form=>form.family==='funny'));
+const widest = Math.max(2.7, ...[...CHARACTERS,...funnyForms].map(character => getCharacterMetrics(character).radius));
 const obstacles = [...OBSTACLES, ...PARK_OBSTACLES, ...FOOTBALL_OBSTACLES, ...TERRAIN_OBSTACLES];
 const close = (actual, expected, tolerance = 1e-5, message = '') =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} differs from ${expected}`);
@@ -107,8 +109,9 @@ test('the mountain trail starts on town ground and reaches a substantial summit 
   assert.ok(end.y >= 60, 'The new route must climb the mountain, not the existing small hill');
   assert.ok(MOUNTAIN_TRAIL.some(point => point.z < 0), 'The route must use the newly accessible northern terrain');
   assert.ok(WORLD.minZ <= -80);
-  assert.ok(SUMMIT.pathWidth >= 9, 'The paved route needs room for the widest friend and steering');
-  assert.ok(SUMMIT_DECK.width >= 14 && SUMMIT_DECK.depth >= 12);
+  assert.ok(SUMMIT.pathWidth >= widest*2+1, 'The paved route needs room for the widest friend and steering');
+  assert.ok(SUMMIT_DECK.width >= 26 && SUMMIT_DECK.depth >= 22);
+  assert.ok(SUMMIT_DECK.entranceWidth>=widest*2+2, 'The deck gate needs steering room around the whole footprint');
 });
 
 test('ascent is continuous with a walkable grade and meets both ground and deck without a jump', () => {
@@ -127,8 +130,8 @@ test('ascent is continuous with a walkable grade and meets both ground and deck 
   close(previousHeight, SUMMIT_DECK.height, .08, 'Trail to deck transition');
 });
 
-test('all forty-one character footprints can walk the complete route and the widest can return', () => {
-  assert.equal(CHARACTERS.length, 41);
+test('all fifty-one original footprints can walk the complete route and the widest funny form can return', () => {
+  assert.equal(CHARACTERS.length, 51);
   const route = samples(.16);
   const footprints = CHARACTERS.map(character => ({ name: character.name, radius: getCharacterMetrics(character.number).radius }));
   footprints.push({ name: 'Conservative widest footprint', radius: widest });
@@ -194,7 +197,7 @@ test('summit rails and route boundaries keep wide friends supported during attem
           const radians = angle * Math.PI / 8 + Math.PI / 32;
           const x = player.x + Math.cos(radians) * widest;
           const z = player.z + Math.sin(radians) * widest;
-          assert.notEqual(renderedSupport(x, z), null, `A permitted footprint hangs over the mountain/deck edge at ${x},${z}`);
+          assert.notEqual(renderedSupport(x, z), null, `A permitted footprint hangs over the mountain/deck edge at ${x},${z}; center ${player.x},${player.z}, start ${start.x},${start.z}`);
         }
       }
     }
@@ -212,7 +215,7 @@ test('summit rails and route boundaries keep wide friends supported during attem
 });
 
 test('the original town spawns, building counts, and low terrain remain unchanged', () => {
-  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'west').length, 50);
+  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'west').length, 60);
   assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'east').length, 20);
   for (const [index, point] of FRIEND_STARTS.entries()) {
     assert.equal(collides(point.x, point.z, obstacles, WORLD, getCharacterMetrics(CHARACTERS[index]).radius), false);

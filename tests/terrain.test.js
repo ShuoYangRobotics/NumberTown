@@ -12,7 +12,7 @@ import { collides, moveWithCollisions } from '../dist/navigation.js';
 import { createLandscape } from '../dist/terrain.js';
 import { createWaterBall } from '../dist/water-ball.js';
 import { MOUNTAIN_TRAIL_LANDMARK, SUMMIT_LANDMARK, isOnMountainRoute } from '../dist/mountain-route.js';
-const widest = Math.max(...CHARACTERS.map(character=>getCharacterMetrics(character).radius));
+const widest = Math.max(...CHARACTERS.flatMap(character=>[character,...getCharacterArrangements(character.number).filter(form=>form.family==='funny')]).map(character=>getCharacterMetrics(character).radius));
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
 
  test('the relocated hill rises continuously and has a level deck above the sea',()=>{
@@ -20,7 +20,7 @@ const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
   assert.equal(hillHeight(HILL.x+HILL.radius,HILL.z),0);
   let previous=0;
   for(let z=HILL.z-HILL.radius-2;z<=HILL.z-HILL.plateau;z+=.1){
-    const height=hillHeight(HILL.x,z);assert.ok(height>=previous-1e-9);assert.ok(height-previous<.081);previous=height;
+    const height=hillHeight(HILL.x,z);assert.ok(height>=previous-1e-9);assert.ok(height-previous<.1*1.5*HILL.height/(HILL.radius-HILL.plateau)+1e-8);previous=height;
   }
   assert.equal(groundHeight(DECK.x,DECK.z),DECK.height);
   assert.ok(HILL.z+HILL.radius<COAST.beachStart);
@@ -28,6 +28,9 @@ const close = (a,b) => assert.ok(Math.abs(a-b)<1e-6, `${a} differs from ${b}`);
 });
 
 test('a wide friend can follow the entire winding trail through the deck entrance',()=>{
+  assert.equal(CHARACTERS.length,51);
+  assert.ok(HILL.pathWidth>=widest*2+1);
+  assert.ok(DECK.entranceWidth>=widest*2+2);
   const player={x:HILL_TRAIL[0][0],z:HILL_TRAIL[0][1],radius:widest};
   const curve=new THREE.CatmullRomCurve3(HILL_TRAIL.map(([x,z])=>new THREE.Vector3(x,0,z)),false,'centripetal');
   let highest=0;
@@ -42,13 +45,31 @@ test('a wide friend can follow the entire winding trail through the deck entranc
   assert.ok(player.z<DECK.z+DECK.depth/2-player.radius);
 });
 
+test('the widened visible hill paving and deck support the whole largest funny footprint',()=>{
+  const root=createLandscape().root;root.updateMatrixWorld(true);
+  const trail=root.getObjectByName('Hill trail surface'),deck=root.getObjectByName('Hill lookout deck');
+  assert.ok(trail&&deck);
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  const curve=new THREE.CatmullRomCurve3(HILL_TRAIL.map(([x,z])=>new THREE.Vector3(x,0,z)),false,'centripetal');
+  let checked=0;
+  for(const point of curve.getSpacedPoints(90))for(let i=0;i<16;i++){
+    const x=point.x+Math.cos(i*Math.PI/8)*widest,z=point.z+Math.sin(i*Math.PI/8)*widest;
+    ray.ray.origin.set(x,100,z);
+    const hit=ray.intersectObjects([trail,deck],false)[0];
+    assert.ok(hit,`The widest footprint leaves visible hill paving at ${x},${z}`);
+    assert.ok(Math.abs(hit.point.y-groundHeight(x,z))<.15,`The visible hill surface disagrees with walking height at ${x},${z}`);
+    checked++;
+  }
+  assert.ok(checked>1400);
+});
+
 test('all three bridge crossings admit wide characters and have continuous bank ramps',()=>{
   assert.equal(BRIDGES.length,3);
   assert.deepEqual(BRIDGE_LANDMARKS.map(place=>place.id),['north-bridge','river','coast-bridge']);
   assert.equal(RIVER_LANDMARK,BRIDGE_LANDMARKS[1]);
   for(const [index,bridge] of BRIDGES.entries()){
     const start=bridge.x-bridge.span/2-7,end=bridge.x+bridge.span/2+7;
-    const player={x:start,z:bridge.z,radius:2.7};
+    const player={x:start,z:bridge.z,radius:widest};
     moveWithCollisions(player,end-start,0,TERRAIN_OBSTACLES,WORLD);
     close(player.x,end);close(player.z,bridge.z);
     assert.ok(BRIDGE_LANDMARKS[index].arrival.x<bridge.x-bridge.span/2);
@@ -56,7 +77,7 @@ test('all three bridge crossings admit wide characters and have continuous bank 
     assert.equal(bridgeHeight(bridge,start),0);assert.equal(bridgeHeight(bridge,end),0);
     let previous=0;
     for(let x=start;x<=end;x+=.1){const y=groundHeight(x,bridge.z);assert.ok(Number.isFinite(y));assert.ok(Math.abs(y-previous)<.025);previous=y;}
-    const onBridge={x:bridge.x,z:bridge.z,radius:2.7};
+    const onBridge={x:bridge.x,z:bridge.z,radius:widest};
     moveWithCollisions(onBridge,0,20,TERRAIN_OBSTACLES,WORLD);
     assert.ok(onBridge.z<bridge.z+bridge.width/2,'side rails must prevent leaving into the river');
   }
@@ -159,7 +180,7 @@ test('every form shorter than fifteen blocks, including Zero, can fully submerge
 
 test('every geographic landmark has an open arrival for the widest supported footprint',()=>{
   for(const place of [HILL_LANDMARK,LOOKOUT_LANDMARK,...BRIDGE_LANDMARKS,BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK,MOUNTAIN_LANDMARK,MOUNTAIN_TRAIL_LANDMARK,SUMMIT_LANDMARK]){
-    assert.equal(collides(place.arrival.x,place.arrival.z,TERRAIN_OBSTACLES,WORLD,2.7),false,`${place.name} arrival blocked`);
+    assert.equal(collides(place.arrival.x,place.arrival.z,TERRAIN_OBSTACLES,WORLD,widest),false,`${place.name} arrival blocked`);
   }
 });
 
@@ -175,6 +196,10 @@ test('landscape builds without a DOM, uses batched props, and has finite geometr
   assert.ok(meshes>50&&meshes<180,'static scenery should remain batched');assert.ok(instances>10);
   for(const geometry of geometries)for(const value of geometry.attributes.position.array)assert.ok(Number.isFinite(value));
   assert.equal(landscape.root.children.filter(object=>object.userData.bridgeId).length,3);
+  for(const name of ['Long sandy beach','Wet sand shoreline','Rugged northern mountain range','Open sea','Sea foam 1']){
+    const bounds=new THREE.Box3().setFromObject(landscape.root.getObjectByName(name));
+    assert.ok(bounds.min.x<(WORLD.minX??0)&&bounds.max.x>WORLD.width,`${name} must cover both edges of the expanded world`);
+  }
 });
 
 test('the actual sandy floor matches walking height, and neither the island nor opaque sea covers the underwater bay',()=>{

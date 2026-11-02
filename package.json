@@ -1,7 +1,7 @@
 {
   "name": "numbertown",
-  "version": "4.10.0",
-  "description": "A local 3D playground with Numberblock friends Zero through Forty.",
+  "version": "4.11.0",
+  "description": "A local 3D playground with Numberblock friends Zero through Fifty.",
   "private": true,
   "type": "module",
   "engines": {

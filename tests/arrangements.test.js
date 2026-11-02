@@ -10,7 +10,7 @@ const positionKey = cell => `${cell.x},${cell.y},${cell.z ?? 0}`;
 const styles = cells => cells.map(({ color, outline }) => JSON.stringify([color, outline ?? null])).sort();
 const geometry = form => form.cells.map(positionKey).sort().join(';');
 const world = { width: 60, depth: 60, margin: 1 };
-const rectangle = (number, width) => getCharacterArrangements(number).find(form => form.width === width && form.depth === 1);
+const rectangle = (number, width) => getCharacterArrangements(number).find(form => form.width === width && form.depth === 1 && form.width * form.height === number);
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-8, message ?? `${actual} != ${expected}`);
 
 function assertConnected(form) {
@@ -43,8 +43,8 @@ function assertExactForm(form, original) {
   assertConnected(form);
 }
 
-test('all forty-one identities have cached immutable shapes and every factor orientation', () => {
-  assert.deepEqual(CHARACTERS.map(c => c.number), Array.from({ length: 41 }, (_, i) => i));
+test('all fifty-one identities have cached immutable shapes and every factor orientation', () => {
+  assert.deepEqual(CHARACTERS.map(c => c.number), Array.from({ length: 51 }, (_, i) => i));
   for (const original of CHARACTERS) {
     const forms = getCharacterArrangements(original.number), first = forms[0];
     assert.equal(getCharacterArrangements(original.number), forms);
@@ -85,7 +85,7 @@ test('all forty-one identities have cached immutable shapes and every factor ori
 });
 
 test('tens bodies and last-digit caps/sides contain the actual colored ones, even when the original stripe is elsewhere', () => {
-  for (let number = 11; number <= 39; number++) {
+  for (let number = 11; number <= 49; number++) {
     if (!(number % 10)) continue;
     const original = getCharacterDefinition(number), count = number - number % 10;
     const frequencies = new Map();
@@ -127,7 +127,84 @@ test('recognizable curated forms are connected actual stairs, T bars, L corners,
   }
 });
 
-test('seeded crazy shapes preserve every cube and stay connected, compact and varied for 0–40', () => {
+test('every friend above thirty gets eight distinct compact funny forms before factor rectangles', () => {
+  const kinds = ['diamond', 'butterfly', 'window-frame', 'robot', 'rocket', 'puppy', 'castle', 'bridge'];
+  for (let number = 31; number <= 50; number++) {
+    const original = getCharacterDefinition(number), forms = getCharacterArrangements(number);
+    const funny = forms.filter(form => form.family === 'funny');
+    assert.deepEqual(funny.map(form => form.shapeKind), kinds, `${number}: missing funny form`);
+    assert.deepEqual(forms.slice(1, 9), funny, 'T should reach the new funny forms immediately');
+    assert.equal(getNextArrangement(number, 'original'), funny[0]);
+    for (const form of funny) {
+      assertExactForm(form, original);
+      assert.equal(form.formId, form.shapeKind);
+      assert.ok(form.width <= 11 && form.height <= 11 && form.depth <= 3, `${number}/${form.formId}: oversized funny shape`);
+      assert.notEqual(form.width * form.height * form.depth, number, 'a funny form must be more than a solid box');
+    }
+    assert.equal(funny.filter(form => form.depth === 3).length, 2, 'the castle and bridge need real depth');
+    assert.deepEqual(forms[0].cells, original.cells, 'funny forms must not alter the original reference');
+  }
+  assert.equal(getCharacterArrangements(30).some(form => form.family === 'funny'), false);
+});
+
+function enclosedAir(form) {
+  const occupied = new Set(form.cells.map(cell => `${cell.x},${cell.y}`)), outside = new Set(['-1,-1']);
+  const queue = [[-1, -1]];
+  for (let i = 0; i < queue.length; i++) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const x = queue[i][0] + dx, y = queue[i][1] + dy, key = `${x},${y}`;
+    if (x < -1 || x > form.width || y < -1 || y > form.height || occupied.has(key) || outside.has(key)) continue;
+    outside.add(key); queue.push([x, y]);
+  }
+  let holes = 0;
+  for (let x = 0; x < form.width; x++) for (let y = 0; y < form.height; y++) if (!occupied.has(`${x},${y}`) && !outside.has(`${x},${y}`)) holes++;
+  return holes;
+}
+
+test('diamond, wings, frames and character silhouettes keep their recognizable features at every count', () => {
+  for (let number = 31; number <= 50; number++) {
+    const forms = getCharacterArrangements(number), get = kind => forms.find(form => form.shapeKind === kind);
+    const wings = get('butterfly'), waist = wings.cells.filter(cell => cell.y === 3);
+    assert.equal(waist.length, 1, `${number}: wings lost their narrow waist`);
+    for (const side of [-1, 1]) for (const dy of [-1, 1]) {
+      assert.ok(wings.cells.some(cell => (cell.x - waist[0].x) * side >= 2 && (cell.y - 3) * dy >= 1), `${number}: missing wing quadrant`);
+    }
+    assert.ok(enclosedAir(get('window-frame')) >= 9, `${number}: frame opening was filled`);
+    const robot = get('robot');
+    assert.ok(robot.cells.filter(cell => cell.y === 7).length >= 5, `${number}: robot needs its wide head`);
+    const robotFeet = robot.cells.filter(cell => cell.y === 0).map(cell => cell.x).sort((a, b) => a - b);
+    assert.ok(robotFeet.some((x, i) => i && x - robotFeet[i - 1] > 1), `${number}: robot needs separate feet`);
+    const rocket = get('rocket');
+    const top = rocket.cells.filter(cell => cell.y === rocket.height - 1).length, fins = rocket.cells.filter(cell => cell.y === 2).length;
+    assert.ok(top < fins, `${number}: rocket nose should taper above its fins`);
+    const puppy = get('puppy'), paws = puppy.cells.filter(cell => cell.y === 0).map(cell => cell.x).sort((a, b) => a - b);
+    assert.ok(paws.some((x, i) => i && x - paws[i - 1] > 1), `${number}: puppy needs separate paws`);
+    assert.ok(puppy.cells.some(cell => cell.x === 0 && cell.y >= 5), `${number}: puppy is missing its raised tail`);
+    assert.ok(puppy.cells.some(cell => cell.x === puppy.width - 1 && cell.y >= 4), `${number}: puppy is missing its snout`);
+  }
+  const diamond = getCharacterArrangements(41).find(form => form.shapeKind === 'diamond');
+  assert.deepEqual(Array.from({ length: diamond.height }, (_, y) => diamond.cells.filter(cell => cell.y === y).length), [1, 3, 5, 7, 9, 7, 5, 3, 1]);
+  assert.deepEqual([diamond.width, diamond.height, diamond.depth], [9, 9, 1]);
+  assert.equal(getCharacterArrangements(43)[0].cells.length, 43);
+  assert.ok(enclosedAir(getCharacterArrangements(43)[0]) > 0, 'the reference Forty-Three frame keeps its opening');
+});
+
+test('chunky castles have four towers and a doorway; bridges have a supported deck and open span', () => {
+  for (let number = 31; number <= 50; number++) {
+    const forms = getCharacterArrangements(number);
+    const castle = forms.find(form => form.shapeKind === 'castle'), bridge = forms.find(form => form.shapeKind === 'bridge');
+    const castleCells = new Set(castle.cells.map(positionKey)), bridgeCells = new Set(bridge.cells.map(positionKey));
+    for (const x of [0, 4]) for (const z of [0, 2]) for (let y = 0; y <= 3; y++) assert.ok(castleCells.has(`${x},${y},${z}`), `${number}: missing castle tower block`);
+    for (let x = 1; x <= 3; x++) {
+      assert.equal(castleCells.has(`${x},1,2`), false, `${number}: castle entrance is blocked`);
+      assert.ok(castleCells.has(`${x},2,2`), `${number}: missing doorway lintel`);
+    }
+    for (let x = 0; x < 7; x++) for (let z = 0; z < 3; z++) assert.ok(bridgeCells.has(`${x},2,${z}`), `${number}: missing bridge deck block`);
+    for (let x = 1; x <= 5; x++) for (let y = 0; y < 2; y++) for (let z = 0; z < 3; z++) assert.equal(bridgeCells.has(`${x},${y},${z}`), false, `${number}: bridge span is filled`);
+    for (const x of [0, 6]) for (const z of [0, 2]) for (let y = 0; y < 2; y++) assert.ok(bridgeCells.has(`${x},${y},${z}`), `${number}: missing bridge pier block`);
+  }
+});
+
+test('seeded crazy shapes preserve every cube and stay connected, compact and varied for 0–50', () => {
   const depths = new Set();
   for (const original of CHARACTERS) {
     const geometries = new Set(), ids = new Set();
@@ -156,7 +233,7 @@ test('seeded crazy shapes preserve every cube and stay connected, compact and va
 });
 
 test('stable cycling restores original depth, window holes and exact cells; Zero and One do not invent shapes', () => {
-  for (let number = 0; number <= 40; number++) {
+  for (let number = 0; number <= 50; number++) {
     const forms = getCharacterArrangements(number);
     let form = forms[0];
     for (let index = 1; index < forms.length; index++) { form = getNextArrangement(number, form.formId); assert.equal(form, forms[index]); }
@@ -226,9 +303,24 @@ test('nearby characters, terrain steps, and world bounds remain part of safe pla
   assert.equal(findArrangementPosition(player, definition, { obstacles: [], world, maxDistance: -1 }), null);
 });
 
+test('placement preserves the caller guard and checks it against the new body at every candidate', () => {
+  const player = { number: 1, x: 30, z: 30, radius: .7 }, definition = rectangle(12, 4), expected = getCharacterMetrics(definition);
+  const visited = [], canPlace = (point, metrics) => {
+    assert.deepEqual(metrics, expected, 'the guard must receive the transformed body metrics');
+    visited.push({ ...point });
+    return point.x >= 30.5;
+  };
+  const result = findArrangementPosition(player, definition, { obstacles: [], world, maxDistance: 1, canPlace });
+  assert.ok(result && result.position.x >= 30.5);
+  assert.deepEqual(visited[0], { x: 30, z: 30 });
+  assert.ok(visited.length > 1, 'a rejected candidate must not bypass the guard');
+  assert.equal(findArrangementPosition(player, definition, { obstacles: [], world, maxDistance: 1, canPlace: () => false }), null);
+  assert.deepEqual(player, { number: 1, x: 30, z: 30, radius: .7 });
+});
+
 test('every rendered arrangement retains unit cubes; faces, arms and feet attach to occupied surface cells', () => {
   for (const original of CHARACTERS) {
-    for (const definition of [...getCharacterArrangements(original.number), ...([3, 8, 21, 27, 36, 40].includes(original.number) ? [createCrazyArrangement(original.number, 3), createCrazyArrangement(original.number, 17)] : [])]) {
+    for (const definition of [...getCharacterArrangements(original.number), ...([3, 8, 21, 27, 36, 40, 41, 43, 45, 47, 50].includes(original.number) ? [createCrazyArrangement(original.number, 3), createCrazyArrangement(original.number, 17)] : [])]) {
       const label = `${original.number}/${definition.formId}`, model = createCharacter(original.number, { definition });
       const blocks = [];
       model.root.updateMatrixWorld(true);

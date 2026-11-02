@@ -12,6 +12,7 @@ const shapes = [
   [2, 6], [3, 4], [3, 6], [2, 7], [5, 5], [4,4], [4,7], [3,6], [2,10], [2,10],
   [3,7], [4,6], [3,10], [3,8], [5,5], [4,7], [3,3], [3,11], [3,10], [3,10],
   [7,5], [4,8], [3,11], [6,7], [5,7], [6,6], [5,11], [4,10], [5,11], [4,10],
+  [4,11], [4,11], [10,8], [4,11], [9,9], [4,12], [4,17], [8,6], [7,7], [5,10],
 ];
 const moods = ['happy', 'excited', 'curious', 'surprised', 'sleepy', 'sad'];
 
@@ -21,10 +22,10 @@ function unitBlocks(root) {
   return blocks;
 }
 
-test('Zero to Forty preserve 41 identities and 820 counted, connected unit cubes', () => {
-  assert.equal(CHARACTERS.length, 41);
-  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 41);
-  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),820);
+test('Zero to Fifty preserve 51 identities and 1275 counted, connected unit cubes', () => {
+  assert.equal(CHARACTERS.length, 51);
+  assert.equal(new Set(CHARACTERS.map(friend => friend.name)).size, 51);
+  assert.equal(CHARACTERS.reduce((sum,friend)=>sum+friend.cells.length,0),1275);
   for (const [index, friend] of CHARACTERS.entries()) {
     assert.equal(friend.number, index);
     assert.equal(friend.cells.length, friend.number);
@@ -71,7 +72,8 @@ test('definition lookup supports the whole roster and clamps safely',()=>{
   assert.equal(getCharacterDefinition('0').number,0);
   assert.equal(getCharacterDefinition(30).name,'Thirty');
   assert.equal(getCharacterDefinition(40).name,'Forty');
-  assert.equal(getCharacterDefinition(200).number,40);
+  assert.equal(getCharacterDefinition(50).name,'Fifty');
+  assert.equal(getCharacterDefinition(200).number,50);
   assert.equal(getCharacterDefinition('19').number,19);
   assert.equal(getCharacterDefinition(-3).number,1);
   assert.equal(getCharacterDefinition(NaN).number,1);
@@ -240,8 +242,77 @@ test('Thirty-One stands on the red calendar day rather than its empty lower boun
   model.dispose();
 });
 
+test('Forty-One to Fifty match the supplied forty-plus parts, open frame, staircase, and square',()=>{
+  for(let number=41;number<=49;number++)assert.equal(getCharacterDefinition(number).cells.filter(cell=>cell.color==='#b0ed91').length,40,`${number} must retain forty green cubes`);
+  assert.deepEqual(getCharacterDefinition(41).cells.filter(cell=>cell.color==='#ed313d').map(key),['1,10']);
+  assert.deepEqual(getCharacterDefinition(42).cells.filter(cell=>cell.color==='#f6a12f').map(key),['1,10','2,10']);
+  const frame=getCharacterDefinition(43);
+  assert.equal(frame.cells.filter(cell=>cell.y>=6).length,20);
+  assert.equal(frame.cells.filter(cell=>cell.y===0).length,10);
+  assert.equal(frame.cells.filter(cell=>cell.y>=1&&cell.y<=5&&(cell.x===0||cell.x===9)).length,10);
+  assert.deepEqual(frame.cells.filter(cell=>cell.color==='#ffe33c').map(key),['3,1','4,1','5,1']);
+  assert.equal(getCharacterDefinition(44).cells.filter(cell=>cell.y===10&&cell.color==='#39c923').length,4);
+  const staircase=getCharacterDefinition(45);
+  for(let x=0;x<9;x++)assert.deepEqual(staircase.cells.filter(cell=>cell.x===x).map(cell=>cell.y),Array.from({length:x+1},(_,y)=>y));
+  assert.deepEqual(staircase.cells.filter(cell=>cell.color==='#29bfd7').map(key),['8,4','8,5','8,6','8,7','8,8']);
+  assert.deepEqual(getCharacterDefinition(46).cells.filter(cell=>cell.color==='#7839cc').map(key),['0,10','1,10','2,10','3,10','1,11','2,11']);
+  const rainbow=getCharacterDefinition(47).cells.filter(cell=>cell.y>=10);
+  assert.deepEqual(rainbow.map(key),['2,10','2,11','2,12','2,13','2,14','2,15','2,16']);
+  assert.equal(new Set(rainbow.map(cell=>cell.color)).size,7);
+  assert.equal(getCharacterDefinition(48).cells.filter(cell=>cell.y===5&&cell.color==='#e533a8').length,8);
+  const gray=getCharacterDefinition(49).cells.filter(cell=>cell.color!=='#b0ed91');
+  assert.equal(gray.length,9);assert.ok(gray.every(cell=>cell.x>=2&&cell.x<=4&&cell.y>=2&&cell.y<=4));
+  assert.ok(getCharacterDefinition(50).cells.every(cell=>cell.color==='#84d3dc'));
+});
+
+test('Forty-One to Fifty keep their reference accessories and distinct facial styling',()=>{
+  const details={
+    42:{'rainbow multiplication belt':1,'rainbow belt stripe':14,'purple hexagon belt buckle':1,'hexagon buckle dot':6,'blue multiplication eyebrow':12},
+    43:{'green frame chevron':20},
+    44:{'forty-four football badge':1,'football badge ball':1,'white football boot cuff':2},
+    45:{'gray staircase superhero mask':2},
+    46:{'yellow hat flower':1,'yellow flower petal':7,'curved purple eyebrow':12},
+    47:{'brown explorer headband':1,'padded explorer brow band':1,'explorer rainbow wrist band':14},
+    48:{'square glasses':2,'purple rectangular eyebrow':12,'yellow wrist bangle':1},
+    49:{'seven rainbow combs':1,'rainbow hair comb':7,'rounded comb tooth':21},
+    50:{'fifty golden eye star':1,'fifty sweeping blue swoosh':1,'blue wrist cuff':1},
+  };
+  for(let number=41;number<=50;number++){
+    const model=createCharacter(number),counts=new Map();
+    model.root.traverse(object=>{
+      counts.set(object.name,(counts.get(object.name)??0)+1);
+      if(object.geometry)assert.ok(Array.from(object.geometry.getAttribute('position').array).every(Number.isFinite),`${number}/${object.name} has invalid geometry`);
+    });
+    for(const[name,count]of Object.entries(details[number]??{}))assert.equal(counts.get(name),count,`${number}: ${name}`);
+    const face=model.face.getObjectByName('expression happy');
+    if(number===44){const eyes=face.children.filter(object=>object.name==='eye white');assert.ok(eyes[0].scale.x>eyes[1].scale.x*1.3);}
+    if(number===41){const rims=model.face.children.filter(object=>object.name==='eye rim');assert.equal(rims.length,2);assert.ok(rims.every(object=>object.material.color.getHexString()==='d73a3d'));}
+    if(number===49){
+      model.root.updateMatrixWorld(true);
+      const hair=new Box3().setFromObject(model.root.getObjectByName('seven rainbow combs'));
+      const label=new Box3().setFromObject(model.root.getObjectByName('number 49'));
+      assert.ok(label.min.y>hair.max.y+.05,'the numeral must not cover the rainbow combs');
+    }
+    model.dispose();
+  }
+});
+
+test('Forty-Three keeps its frame window visibly open through the full 3D model',()=>{
+  const data=getCharacterDefinition(43),model=createCharacter(43);model.root.updateMatrixWorld(true);
+  const occupied=new Set(data.cells.map(key));
+  let checked=0;
+  for(let y=1;y<=5;y++)for(let x=1;x<=8;x++)if(!occupied.has(`${x},${y}`)){
+    for(const dx of[-.22,.22])for(const dy of[-.22,.22]){
+      const ray=new Raycaster(new Vector3(x+.5-data.width/2+dx,y+.85+dy,3),new Vector3(0,0,-1));
+      assert.equal(ray.intersectObject(model.root,true).filter(hit=>hit.object.isMesh).length,0,`frame opening ${x},${y} must stay clear`);
+      checked++;
+    }
+  }
+  assert.equal(checked,148);model.dispose();
+});
+
 test('definition overrides keep all cubes unscaled while faces, limbs, and props fit one-high bodies',()=>{
-  for(const number of[6,10,20,21,24,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]){
+  for(const number of[6,10,20,21,24,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50]){
     const original=getCharacterDefinition(number),definition={...original,formId:`${number}x1`,transformed:true,width:number,height:1,depth:1,cells:original.cells.map((c,i)=>({...c,x:i,y:0,z:0}))};
     const model=createCharacter(number,{definition}),metrics=getCharacterMetrics(definition);
     assert.equal(model.width,number);assert.equal(model.height,1);assert.equal(model.radius,metrics.radius);

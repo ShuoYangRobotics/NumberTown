@@ -1,5 +1,7 @@
 /** Pure, local dialogue: no timers, browser APIs, or network services. */
 import { CHARACTERS } from './character-data.js';
+import { getMathConversationFacts } from './math-conversations.js';
+export { getMathConversationFacts } from './math-conversations.js';
 
 export const EMOTIONS = Object.freeze([
   { id: 'happy', label: 'Happy', icon: '😊' },
@@ -339,6 +341,86 @@ const PERSONAL = {
     sleepy: ['Four green tens could use a cozy little rest.'],
     sad: ['Forty blocks can share a quiet moment with a friend.'],
   },
+  41: {
+    happy: ['Forty-one blocks, with one bright red spark of curiosity!', 'My red block is ready for a green-town adventure.', 'A curious spark makes every little discovery special!'],
+    excited: ['Forty-one cheers! My red spark is ready to explore!'],
+    curious: ['What will my little red spark help us discover?'],
+    surprised: ['Oh! A surprising discovery for my curious spark!'],
+    sleepy: ['My red spark can rest until our next adventure.'],
+    sad: ['Even a curious spark can have a quiet day.'],
+  },
+  42: {
+    happy: ['Forty-two blocks, ready for a multiplication adventure!', 'My blue spectacles help me look for number patterns.', 'A rainbow belt and a curious mind are ready to explore!'],
+    excited: ['Forty-two cheers! Let’s explore a new number pattern!'],
+    curious: ['What multiplication pattern can my spectacles spot?'],
+    surprised: ['Oh! A surprising number pattern behind my spectacles!'],
+    sleepy: ['My multiplication puzzles can wait for a little rest.'],
+    sad: ['A tricky number pattern is easier with a patient friend.'],
+  },
+  43: {
+    happy: ['Forty-three blocks, framing a lovely view of our town!', 'My open frame is a window for wonderful pictures.', 'Every little view can become a cheerful picture!'],
+    excited: ['Forty-three cheers! Let’s frame a brand new picture!'],
+    curious: ['What picture can we see through my green frame?'],
+    surprised: ['Oh! A surprising little picture in my frame!'],
+    sleepy: ['My picture-making ideas can wait for a quiet rest.'],
+    sad: ['A peaceful picture can help me share a quiet feeling.'],
+  },
+  44: {
+    happy: ['Forty-four blocks, cheering for every teammate!', 'My football badge reminds me to play kindly.', 'A happy team makes room for everyone!'],
+    excited: ['Forty-four cheers! Pass the football to a friend!'],
+    curious: ['What new teamwork trick could we try with our football?'],
+    surprised: ['Wow! That teammate made a surprising football pass!'],
+    sleepy: ['Team time-out! My football badge needs a little rest.'],
+    sad: ['Even after a missed goal, my teammates are here for me.'],
+  },
+  45: {
+    happy: ['Forty-five blocks, ready for a step-by-step rescue!', 'This staircase hero helps one kind step at a time.', 'My gray mask reminds me that small steps matter.'],
+    excited: ['Forty-five cheers! This staircase hero is ready!'],
+    curious: ['Which small step could help a friend today?'],
+    surprised: ['Oh! A surprising view from this hero’s next step!'],
+    sleepy: ['This staircase hero needs a gentle rest.'],
+    sad: ['One small step is enough for this quiet hero today.'],
+  },
+  46: {
+    happy: ['Forty-six blocks, with a flower for our friendly show!', 'My purple hat is ready for a cheerful performance.', 'A little flower brings a smile to every performance.'],
+    excited: ['Forty-six cheers! My purple hat says it’s showtime!'],
+    curious: ['What new expression could this performer try?'],
+    surprised: ['Oh! A surprise flower for our friendly performance!'],
+    sleepy: ['The performer and the purple hat can take a little rest.'],
+    sad: ['A performer can share quiet feelings as well as smiles.'],
+  },
+  47: {
+    happy: ['Forty-seven blocks, ready for a rainbow adventure!', 'My explorer headband is ready for a brand new path.', 'A rainbow of discoveries is waiting for this explorer!'],
+    excited: ['Forty-seven cheers! Let’s explore beyond the next bend!'],
+    curious: ['Where will this rainbow explorer’s next path lead?'],
+    surprised: ['Oh! A colorful surprise on our rainbow adventure!'],
+    sleepy: ['This rainbow explorer can pause for a peaceful rest.'],
+    sad: ['An explorer can ask a friend to share a quiet moment.'],
+  },
+  48: {
+    happy: ['Forty-eight blocks, and lots of rectangle patterns!', 'My purple spectacles love a good rectangle puzzle.', 'Pink blocks and playful patterns make me smile!'],
+    excited: ['Forty-eight cheers! Another rectangle pattern to explore!'],
+    curious: ['Which rectangle pattern will my spectacles spot next?'],
+    surprised: ['Oh! A surprising new pattern for my rectangle puzzle!'],
+    sleepy: ['My purple spectacles can rest beside our pattern book.'],
+    sad: ['A gentle rectangle puzzle can help me feel calm.'],
+  },
+  49: {
+    happy: ['Forty-nine blocks, with a thoughtful square idea!', 'My rainbow hair makes square adventures colorful.', 'A little square discovery can brighten my gray center.'],
+    excited: ['Forty-nine cheers! A new square adventure awaits!'],
+    curious: ['What thoughtful pattern could our square adventure reveal?'],
+    surprised: ['Oh! A surprising square pattern for my rainbow hair!'],
+    sleepy: ['This thoughtful square explorer needs a little rest.'],
+    sad: ['A thoughtful square friend can sit quietly beside me.'],
+  },
+  50: {
+    happy: ['Fifty blocks, ready for a sparkling showtime adventure!', 'My golden star shines for every friendly hello.', 'Five tens and a little showtime sparkle make me smile!'],
+    excited: ['Fifty cheers! My golden star says it’s showtime!'],
+    curious: ['What new showtime surprise could our five tens create?'],
+    surprised: ['Oh! That surprise made my golden star sparkle!'],
+    sleepy: ['This showtime star can take a soft, quiet rest.'],
+    sad: ['My star can shine softly while a friend keeps me company.'],
+  },
 };
 
 const CHARACTER_NUMBERS = new Set(CHARACTERS.map(character => character.number));
@@ -413,8 +495,15 @@ function buildMathFacts(number, definition) {
   }
   if (number > 1) add(number - 1, 1);
   if (number > 1 && Number.isInteger(Math.sqrt(number))) add(number - Math.sqrt(number), Math.sqrt(number));
+  // Every nonnegative split can be chosen, including both operand orders.
+  // This makes a number such as Thirty more than its familiar ten-plus-twenty.
+  for (let a = 0; a <= number; a++) add(a, number - a);
   facts.add(`${number + 1} - 1 = ${number}.`);
   facts.add(`${number * 2} divided by 2 is ${number}.`);
+  for (let part = 1; part <= 10; part++) {
+    facts.add(`${number + part} - ${part} = ${number}.`);
+    facts.add(`${number * part} divided by ${part} is ${number}.`);
+  }
   facts.add(number % 2 === 0
     ? `${number} is even: ${number / 2} pairs of blocks.`
     : `${number} is odd: ${Math.floor(number / 2)} pairs and 1 left over.`);
@@ -625,12 +714,15 @@ const FRIEND_LINES = {
  * sharing mutable state between characters; random is injectable for tests.
  * math:true guarantees an arithmetic/shape fact and adds kind:'math', while
  * retaining the requested emotion even when a place or walking context exists.
+ * With a valid, different nearbyNumber, the fact uses both friends' numbers.
+ * The caller must check actual proximity and decide when to offer that context.
  */
 export function chooseRemark(number, context = {}, random = Math.random) {
   const mood = EMOTIONS.some(item => item.id === context.emotion) ? context.emotion : 'happy';
   const personality = PERSONAL[characterNumber(number)] || PERSONAL[1];
   const place = PLACES[context.place];
-  const candidates = context.math === true ? [...getMathFacts(number, context.arrangement)] : place
+  const conversation = context.math === true ? getMathConversationFacts(number, context.nearbyNumber) : [];
+  const candidates = context.math === true ? [...(conversation.length ? conversation : getMathFacts(number, context.arrangement))] : place
     ? [...place[mood]]
     : [...personality[mood], ...(mood === 'happy' ? [] : MOOD_LINES[mood])];
 

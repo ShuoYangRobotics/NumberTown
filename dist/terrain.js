@@ -1,12 +1,13 @@
 import * as THREE from './vendor/three.module.js';
 import { WORLD } from './geography.js';
-import { HILL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, WATER_PLAY_BUOYS, MOUNTAINS, HILL_TRAIL, HILL_TREES, BEACH_UMBRELLAS, hillHeight, bridgeHeight, waterPlayHeight, riverX, riverWidth } from './terrain-data.js';
+import { HILL, DECK, RIVER, BRIDGES, COAST, WATER_PLAY, WATER_PLAY_BUOYS, MOUNTAINS, HILL_TRAIL, HILL_TREES, HILL_DECK_RAILS, HILL_TELESCOPE, BEACH_UMBRELLAS, hillHeight, bridgeHeight, waterPlayHeight, riverX, riverWidth } from './terrain-data.js';
 import { SUMMIT, mountainHeight, nearestTrailPoint } from './mountain-route.js';
 import { createMountainSummit } from './mountain-summit.js';
 
 /** Complete geographic scenery. Static props share instanced draw calls. */
 export function createLandscape() {
   const root = new THREE.Group(); root.name = 'Mountain river, hill, and seaside';
+  const worldMinX=WORLD.minX??0,worldSpan=WORLD.width-worldMinX,worldCenter=(worldMinX+WORLD.width)/2;
   const materials = new Map(), batches = new Map(), dummy = new THREE.Object3D();
   const geometry = { box: new THREE.BoxGeometry(1, 1, 1), sphere: new THREE.SphereGeometry(1, 12, 8), cylinder: new THREE.CylinderGeometry(1, 1, 1, 10) };
   function mat(color, options = {}) {
@@ -90,7 +91,7 @@ export function createLandscape() {
   {
   // A broad offset ribbon folds over itself at tight bends. Clip a shared
   // ground grid to the path corridor instead, so every patch is drawn once.
-  const trailStep=.32, trailRadius=3, trailLift=.10, trailVertices=[], trailIndices=[];
+  const trailStep=.32, trailRadius=HILL.pathWidth/2, trailLift=.10, trailVertices=[], trailIndices=[];
   const minX=Math.floor((Math.min(...trail.map(p=>p[0]))-trailRadius)/trailStep)*trailStep;
   const maxX=Math.ceil((Math.max(...trail.map(p=>p[0]))+trailRadius)/trailStep)*trailStep;
   const minZ=Math.floor((Math.min(...trail.map(p=>p[1]))-trailRadius)/trailStep)*trailStep;
@@ -131,7 +132,8 @@ export function createLandscape() {
   }
   for (let i = 5; i < 130; i += 12) {
     const [x,z] = trail[i], [nx,nz] = trail[i+1], length = Math.hypot(nx-x,nz-z)||1;
-    const px=x+(nz-z)/length*3.1, pz=z-(nx-x)/length*3.1, y=hillHeight(px,pz);
+    const px=x+(nz-z)/length*(HILL.pathWidth/2+.4), pz=z-(nx-x)/length*(HILL.pathWidth/2+.4), y=hillHeight(px,pz);
+    if(trail.some(([tx,tz])=>Math.hypot(px-tx,pz-tz)<HILL.pathWidth/2+.25))continue;
     box(px,y+.45,pz,.18,.9,.18,'#b69a6c'); ball(px,y+.94,pz,.22,.12,.22,'#fff0ca');
   }
   HILL_TREES.forEach((tree, i) => {
@@ -140,20 +142,20 @@ export function createLandscape() {
     ball(tree.x,y+tree.height*.78,tree.z,1.75,tree.height*.44,1.75,['#87aa81','#a5bd87','#94b28a'][i%3]);
     ball(tree.x+.5,y+tree.height*1.05,tree.z-.2,1.15,1.3,1.15,'#a8c091');
   });
-  box(DECK.x,DECK.height-.18,DECK.z,DECK.width,.36,DECK.depth,'#b78d5c');
+  const hillDeck=new THREE.Mesh(new THREE.BoxGeometry(DECK.width,.36,DECK.depth),mat('#b78d5c'));
+  hillDeck.name='Hill lookout deck';hillDeck.position.set(DECK.x,DECK.height-.18,DECK.z);hillDeck.castShadow=true;hillDeck.receiveShadow=true;root.add(hillDeck);
   for (let x = DECK.x-DECK.width/2+.25; x < DECK.x+DECK.width/2; x += .5) box(x,DECK.height+.008,DECK.z,.465,.016,DECK.depth-.15,Math.round(x*2)%3===0?'#d5b785':'#dfc293');
-  const west=DECK.x-DECK.width/2, east=DECK.x+DECK.width/2, north=DECK.z-DECK.depth/2, south=DECK.z+DECK.depth/2;
-  const deckRails=[[[west,north],[west,south]],[[east,north],[east,south]],[[west,south],[east,south]],[[west,north],[DECK.x-4.3,north]],[[DECK.x+4.3,north],[east,north]]];
-  for (const [[ax,az],[bx,bz]] of deckRails) {
+  const south=DECK.z+DECK.depth/2;
+  for (const {x1:ax,z1:az,x2:bx,z2:bz} of HILL_DECK_RAILS) {
     beam([ax,DECK.height+1.12,az],[bx,DECK.height+1.12,bz],.1,'#a57c51'); beam([ax,DECK.height+.5,az],[bx,DECK.height+.5,bz],.055,'#c3a06f');
     const count=Math.ceil(Math.hypot(ax-bx,az-bz)/2);
     for(let i=0;i<=count;i++)box(ax+(bx-ax)*i/count,DECK.height+.58,az+(bz-az)*i/count,.17,1.16,.17,'#ab8154');
   }
-  const tx=DECK.x+4.8, tz=DECK.z+3.9;
+  const tx=HILL_TELESCOPE.x, tz=HILL_TELESCOPE.z;
   put('cylinder','#7c9997',tx,DECK.height+.8,tz,.14,1.6,.14); put('cylinder','#ddd1b0',tx,DECK.height+.09,tz,.55,.18,.55);
   beam([tx,DECK.height+1.7,tz],[tx-.1,DECK.height+1.9,tz+1.1],.23,'#779d9e');
   label('SEASIDE HILL LOOKOUT',DECK.x,DECK.height+.8,south+.13,6.1,1.05,Math.PI);
-  label('HILL TRAIL  ↑',HILL_TRAIL[0][0]+5,.95,HILL_TRAIL[0][1],4.2,1);
+  label('HILL TRAIL  ↑',HILL_TRAIL[0][0]+9,.95,HILL_TRAIL[0][1],4.2,1);
 
   // The sea continues far past the world's walking boundary and into the fog.
   const seaColor = '#7dbfc9';
@@ -166,9 +168,9 @@ export function createLandscape() {
   }
   // The opaque ocean has a real opening. Placing transparent water over an
   // uncut ocean plane would still conceal everything below the surface.
-  seaSection(-1200,WATER_PLAY.xMin,COAST.seaStart,WATER_PLAY.deepZ);
+  seaSection(worldMinX-1200,WATER_PLAY.xMin,COAST.seaStart,WATER_PLAY.deepZ);
   seaSection(WATER_PLAY.xMax,WORLD.width+1200,COAST.seaStart,WATER_PLAY.deepZ);
-  seaSection(-1200,WORLD.width+1200,WATER_PLAY.deepZ,seaVisualEnd);
+  seaSection(worldMinX-1200,WORLD.width+1200,WATER_PLAY.deepZ,seaVisualEnd);
   const sea = surface(seaVertices,seaIndices,seaColor,'Open sea');
   sea.material.roughness=.35; sea.material.metalness=.05; sea.receiveShadow=false;
   // Sand continues below the beach, following the same gentle walking slope.
@@ -209,8 +211,8 @@ export function createLandscape() {
     const object=new THREE.InstancedMesh(geometry.sphere,mat(color),entries.length);object.name=colorIndex===3?'Buoy ivory bands':`Colored bay buoys ${colorIndex+1}`;
     object.castShadow=true;object.receiveShadow=true;buoyGroup.add(object);buoyBatches.push({object,entries,band:colorIndex===3});
   }
-  plane(WORLD.width/2,(COAST.beachStart+COAST.seaStart)/2,WORLD.width+160,COAST.seaStart-COAST.beachStart,'#f2dfb5',.026,'Long sandy beach');
-  plane(WORLD.width/2,COAST.seaStart-2.4,WORLD.width+160,4.8,'#dfcea9',.03,'Wet sand shoreline');
+  plane(worldCenter,(COAST.beachStart+COAST.seaStart)/2,worldSpan+160,COAST.seaStart-COAST.beachStart,'#f2dfb5',.026,'Long sandy beach');
+  plane(worldCenter,COAST.seaStart-2.4,worldSpan+160,4.8,'#dfcea9',.03,'Wet sand shoreline');
   for(let i=0;i<36;i++) {
     const x=8+i*12.2, z=COAST.beachStart+1.2+Math.sin(i*1.8)*.7;
     ball(x,.035,z,2.5,.045,.6,'#d6d6a3',false);
@@ -288,7 +290,7 @@ export function createLandscape() {
   // Fine terrain under the spiral supports its full width; distant peaks keep
   // a coarser horizontal grid so the expanded mountain stays inexpensive.
   const mountainXs=[];
-  for(let x=-130;x<40;x+=6)mountainXs.push(x);
+  for(let x=worldMinX-130;x<40;x+=6)mountainXs.push(x);
   for(let x=40;x<170;x+=.75)mountainXs.push(x);
   for(let x=170;x<WORLD.width+130;x+=6)mountainXs.push(x);
   mountainXs.push(WORLD.width+130);
@@ -321,7 +323,7 @@ export function createLandscape() {
   mountains.geometry.setAttribute('color',new THREE.Float32BufferAttribute(mountainColors,3)); mountains.castShadow=true;
   mountains.userData.nonClimbable=true; mountains.userData.gorgeX=riverX(MOUNTAINS.ridgeZ);
   root.add(createMountainSummit());
-  for(let x=4;x<WORLD.width;x+=22) {
+  for(let x=worldMinX+4;x<WORLD.width;x+=22) {
     if(Math.abs(x-riverX(61))<24)continue;
     if(nearestTrailPoint(x,63).distance<SUMMIT.pathWidth/2+4)continue;
     ball(x,1.2,63,3.1,2.3,3.7,'#91a18c');
@@ -339,7 +341,7 @@ export function createLandscape() {
   const waveSpacing=12,waveCount=Math.ceil((WATER_PLAY.deepZ-WATER_PLAY.shoreZ+24)/waveSpacing);
   for(let row=0;row<waveCount;row++) {
     const points=[];
-    for(let x=-90;x<=WORLD.width+90;x+=7)points.push([x,Math.sin(x*.065+row*.9)*.75]);
+    for(let x=worldMinX-90;x<=WORLD.width+90;x+=7)points.push([x,Math.sin(x*.065+row*.9)*.75]);
     const wave=ribbon(points,.18+row*.012,'#e0f1e3',()=>.12,1,`Sea foam ${row+1}`);
     wave.material=new THREE.MeshBasicMaterial({color:row%3?'#d9efe4':'#ecf5e6',transparent:true,opacity:row<4?.48:.24,side:THREE.DoubleSide,depthWrite:false});
     wave.receiveShadow=false;wave.renderOrder=11;waves.push(wave);

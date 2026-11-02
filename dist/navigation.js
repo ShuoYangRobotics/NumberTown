@@ -28,13 +28,16 @@ export function moveWithCollisions(player, dx, dz, obstacles, world, radius = pl
   return Math.hypot(player.x - start.x, player.z - start.z);
 }
 
-export function nearestOpenPosition(position, obstacles, world, radius = .6) {
-  if (!collides(position.x, position.z, obstacles, world, radius)) return { ...position };
-  for (let distance = .5; distance < Math.max(world.width, world.depth); distance += .5) {
+/** Additional placement rules are evaluated at each candidate, after terrain. */
+export function nearestOpenPosition(position, obstacles, world, radius = .6, canPlace = () => true) {
+  const isOpen = point => !collides(point.x, point.z, obstacles, world, radius) && canPlace(point);
+  if (isOpen(position)) return { ...position };
+  const searchRadius = Math.hypot(world.width - (world.minX ?? 0), world.depth - (world.minZ ?? 0));
+  for (let distance = .5; distance <= searchRadius; distance += .5) {
     for (let i = 0; i < 32; i++) {
       const angle = i * Math.PI / 16;
       const point = { x: position.x + Math.cos(angle) * distance, z: position.z + Math.sin(angle) * distance };
-      if (!collides(point.x, point.z, obstacles, world, radius)) return point;
+      if (isOpen(point)) return point;
     }
   }
   throw new Error('No safe walking position in town.');

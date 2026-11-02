@@ -112,15 +112,41 @@ test('a wide friend backs out of an occupied narrow crossing and takes a clear d
   assert.ok(returnedThroughCrossing && controller.stateFor(player).visits > visitsBeforeReturn, 'the temporary visitor snapshot must not poison cached routes after the crossing clears');
 });
 
-test('all forty unselected friends keep exploring the assembled town within a frame budget', () => {
-  assert.equal(CHARACTERS.length, 41);
+test('a short queued trip proceeds while another friend searches for an unreachable destination', () => {
+  const world = { width: 400, depth: 400, margin: 1 };
+  const obstacles = [
+    { x: 355, z: 355, w: 30, d: 2 }, { x: 355, z: 383, w: 30, d: 2 },
+    { x: 355, z: 355, w: 2, d: 30 }, { x: 383, z: 355, w: 2, d: 30 },
+  ];
+  const searching = friend(1, 20, 20, .8), walking = friend(2, 30, 20, .8);
+  let firstTrip = true;
+  const controller = createRoamingController({ obstacles, world,
+    destinations: [place('nearby', 44, 20), place('enclosed', 370, 370)], random: () => firstTrip ? .99 : 0 });
+  for (let frame = 0; frame < 120; frame++) {
+    firstTrip = frame < 12;
+    controller.update(firstTrip ? [searching] : [searching, walking], null, .1, frame / 10);
+    for (const player of [searching, walking]) assert.equal(collides(player.x, player.z, obstacles, world, player.radius), false);
+    assert.ok(Math.hypot(searching.x - walking.x, searching.z - walking.z) >= searching.radius + walking.radius);
+  }
+  assert.equal(controller.stateFor(searching).id, 'enclosed', 'the first search must really target the sealed courtyard');
+  assert.equal(controller.stateFor(searching).visits, 0);
+  assert.ok(controller.stateFor(walking).visits >= 1, 'a large search must not block a short, clear walk for twelve seconds');
+});
+
+test('all fifty unselected friends keep exploring the assembled town within a frame budget', () => {
+  assert.equal(CHARACTERS.length, 51);
   const players = CHARACTERS.map((character, index) => friend(character.number, FRIEND_STARTS[index].x, FRIEND_STARTS[index].z, getCharacterMetrics(character.number).radius));
   const active = players.find(p=>p.number===11), original = { ...active }, times = [], choices = players.map(() => new Set());
+  const destinations=[...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK];
+  const longestTrip=Math.max(...destinations.flatMap(a=>destinations.map(b=>Math.hypot(a.arrival.x-b.arrival.x,a.arrival.z-b.arrival.z))));
+  // The western orchard and eastern market are now about 800 units apart.
+  // Allow two long trips at the slowest walking speed, plus planning/yielding
+  // time, while retaining the same visit, diversity and frame-budget checks.
+  const simulationSeconds=Math.max(600,Math.ceil((2*longestTrip/1.9+150)/100)*100);
   const controller = createRoamingController({ obstacles: townObstacles, world: WORLD,
-    destinations: [...LANDMARKS, PARK_LANDMARK, FOOTBALL_LANDMARK, ...BRIDGE_LANDMARKS, BEACH_LANDMARK],
+    destinations,
     random: seeded(19), shouldStay: shouldStayAtScenicSpot });
-  // Two cross-town trips can exceed five simulated minutes at walking speed.
-  for (let frame = 0; frame < 6000; frame++) {
+  for (let frame = 0; frame < simulationSeconds*10; frame++) {
     const started = performance.now();
     controller.update(players, active, .1, frame / 10);
     times.push(performance.now() - started);
@@ -136,11 +162,12 @@ test('all forty unselected friends keep exploring the assembled town within a fr
   assert.deepEqual(active, original);
   for (let index = 0; index < players.length; index++) {
     if (players[index] === active) continue;
-    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${players[index].number} did not keep exploring: ${JSON.stringify(controller.stateFor(players[index]))}`);
+    assert.ok(controller.stateFor(players[index]).visits >= 2, `Friend ${players[index].number} did not keep exploring after ${simulationSeconds}s at ${players[index].x},${players[index].z}: ${JSON.stringify(controller.stateFor(players[index]))}`);
     assert.ok(choices[index].size >= 3, `Friend ${players[index].number} repeated only one destination`);
   }
   times.sort((a, b) => a - b);
-  assert.ok(times[Math.floor(times.length * .99)] < 20, 'Planning consumed the browser frame budget on more than 1% of frames');
+  const p99=times[Math.floor(times.length*.99)];
+  assert.ok(p99 < 20, `Planning consumed the browser frame budget on more than 1% of frames (${p99.toFixed(2)}ms p99)`);
 });
 
 test('an unreachable destination is abandoned and a reachable alternative is visited', () => {
@@ -312,16 +339,19 @@ test('scenic holds remove both active planning work and queued routes', () => {
 });
 
 test('a transformed wide friend routes around obstacles using its new footprint', () => {
-  const world={width:110,depth:110,margin:1},player=friend(30,20,20,8);
-  const obstacles=[{x:49,z:0,w:2,d:72}];
-  const controller=createRoamingController({obstacles,world,destinations:[place('far-side',85,20)],random:seeded(17)});
-  let crossed=false;
-  for(let frame=0;frame<2400&&!controller.stateFor(player).visits;frame++){
-    controller.update([player],null,.1,frame/10);
-    assert.equal(collides(player.x,player.z,obstacles,world,player.radius),false,'A wide rectangle clipped a wall outside the normal spatial bucket');
-    if(player.x>51)crossed=true;
+  for(const radius of [8,16,25.01]){
+    const size=radius>20?140:110,start=Math.max(20,radius+1.5);
+    const world={width:size,depth:size,margin:1},player=friend(30,start,start,radius);
+    const obstacles=[{x:59,z:0,w:2,d:72}];
+    const controller=createRoamingController({obstacles,world,destinations:[place('far-side',size-27,start)],random:seeded(17)});
+    let crossed=false;
+    for(let frame=0;frame<2400&&!controller.stateFor(player).visits;frame++){
+      controller.update([player],null,.1,frame/10);
+      assert.equal(collides(player.x,player.z,obstacles,world,player.radius),false,`Radius ${radius} clipped a wall outside its center's spatial bucket`);
+      if(player.x>61)crossed=true;
+    }
+    assert.ok(crossed&&controller.stateFor(player).visits>0,`Radius ${radius} needs a route with enough clearance`);
   }
-  assert.ok(crossed&&controller.stateFor(player).visits>0,'The larger shape needs a route with enough clearance');
 });
 
 test('roaming friends avoid a long selected rectangle before entering its footprint', () => {

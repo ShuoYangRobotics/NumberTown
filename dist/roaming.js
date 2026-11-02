@@ -33,7 +33,7 @@ class MinHeap {
 
 /** Incremental NPC walking; user-selected scenic visitors can stay until moved. */
 export function createRoamingController({ obstacles, world, destinations, random = Math.random, shouldStay = () => false }) {
-  const states = new Map(), queue = [], cells = new Map(), globalObstacles = [];
+  const states = new Map(), queue = [], searches = new Set(), cells = new Map(), globalObstacles = [];
   const bucketSize = 12, originX = Math.floor(world.minX ?? 0), originZ = Math.floor(world.minZ ?? 0);
   const columns = Math.ceil(world.width - originX) + 1, rows = Math.ceil(world.depth - originZ) + 1;
   // Each footprint needs its own routing grid: a long rectangle cannot use
@@ -44,7 +44,7 @@ export function createRoamingController({ obstacles, world, destinations, random
     if (!grids.has(clearance)) grids.set(clearance, { clearance, occupancy: new Uint8Array(columns * rows), edges: new Map() });
     return grids.get(clearance);
   }
-  let job = null, logicalTime = 0;
+  let job = null, logicalTime = 0, currentPlayers = [];
   const roll = () => Math.max(0, Math.min(.999999, Number(random()) || 0));
   const cellKey = (x, z) => `${Math.floor(x / bucketSize)},${Math.floor(z / bucketSize)}`;
 
@@ -65,9 +65,20 @@ export function createRoamingController({ obstacles, world, destinations, random
       }
     }
   }
-  const blocked = (x, z, radius = CLEARANCE) => radius > CLEARANCE
-    ? collides(x, z, obstacles, world, radius)
-    : collides(x, z, globalObstacles, world, radius) || collides(x, z, cells.get(cellKey(x, z)) ?? [], world, radius);
+  function blocked(x, z, radius = CLEARANCE) {
+    if (collides(x, z, globalObstacles, world, radius)) return true;
+    if (radius <= CLEARANCE) return collides(x, z, cells.get(cellKey(x, z)) ?? [], world, radius);
+    // Larger friends need more neighboring buckets, not a scan of every
+    // house in both towns at every A* edge. Buckets already include CLEARANCE;
+    // expand the query by the remainder of this friend's actual footprint.
+    const extra = radius - CLEARANCE;
+    for (let bx = Math.floor((x - extra) / bucketSize); bx <= Math.floor((x + extra) / bucketSize); bx++) {
+      for (let bz = Math.floor((z - extra) / bucketSize); bz <= Math.floor((z + extra) / bucketSize); bz++) {
+        if (collides(x, z, cells.get(`${bx},${bz}`) ?? [], world, radius)) return true;
+      }
+    }
+    return false;
+  }
   const staticCollider = { blocks: blocked };
   function visitorsClear(a, b, radius, visitors) {
     const dx = b.x - a.x, dz = b.z - a.z, lengthSquared = dx * dx + dz * dz;
@@ -133,9 +144,9 @@ export function createRoamingController({ obstacles, world, destinations, random
   }
   function cancel(s) {
     s.version++; s.path = []; s.cursor = 0; s.stalled = 0;
-    if (job?.s === s) job = null;
+    if (job?.s === s) { searches.delete(job); job = null; }
     for (let index = queue.length - 1; index >= 0; index--) {
-      if (queue[index].s === s) queue.splice(index, 1);
+      if (queue[index].s === s) { searches.delete(queue[index]); queue.splice(index, 1); }
     }
   }
   function wait(s, time, delay) { cancel(s); s.status = 'waiting'; s.until = time + delay; }
@@ -186,6 +197,9 @@ export function createRoamingController({ obstacles, world, destinations, random
   }
   function begin(request, time) {
     if (request.s.version !== request.version || request.s.selected) return null;
+    // A crowd can move while this request waits. Detour around the visitors
+    // who are here now instead of treating their old positions as permanent.
+    if (request.visitors.length) request = { ...request, visitors: nearby(request.player, currentPlayers) };
     const start = { x: request.player.x, z: request.player.z }, radius = request.player.radius ?? .6;
     const grid = gridFor(radius);
     if (clearSegment(start, request.target, grid.clearance, request.visitors)) { finish(request, [request.target]); return null; }
@@ -194,29 +208,34 @@ export function createRoamingController({ obstacles, world, destinations, random
     const heap = new MinHeap(), records = new Map();
     records.set(from, { cost: 0, parent: -1, closed: false });
     heap.push({ id: from, cost: 0, priority: 0 });
-    return { ...request, from, to, start, heap, records, grid, expanded: 0 };
+    return { ...request, from, to, start, heap, records, grid, expanded: 0, sliceExpanded: 0 };
   }
   function plan(time) {
     const deadline = clock() + 3.5;
     let expanded = 0, starts = 0;
     while (expanded < 280 && clock() < deadline) {
-      if (job && (job.s.version !== job.version || job.s.selected)) job = null;
+      if (job && (job.s.version !== job.version || job.s.selected)) { searches.delete(job); job = null; }
       if (!job) {
-        if (!queue.length || starts++ >= 2) return;
-        job = begin(queue.shift(), time);
+        // Bound concurrent search memory, but share CPU fairly. An impossible
+        // route must not park the entire cast behind one large flood search.
+        const index = searches.size >= 8 || starts >= 2 ? queue.findIndex(request => request.heap) : 0;
+        if (!queue.length || index < 0) return;
+        const request = queue.splice(index, 1)[0];
+        if (request.heap) job = request;
+        else { starts++; job = begin(request, time); if (job) searches.add(job); }
         if (!job) continue;
       }
       const item = job.heap.pop();
-      if (!item) { fail(job.s, time); job = null; continue; }
+      if (!item) { searches.delete(job); fail(job.s, time); job = null; continue; }
       const record = job.records.get(item.id);
       if (record.closed || item.cost !== record.cost) continue;
       if (item.id === job.to) {
         const path = [job.target];
         for (let id = item.id; id !== -1; id = job.records.get(id).parent) path.push(pointAt(id));
-        path.reverse(); finish(job, path); job = null; continue;
+        path.reverse(); finish(job, path); searches.delete(job); job = null; continue;
       }
-      record.closed = true; expanded++; job.expanded++;
-      if (job.expanded > 42000) { fail(job.s, time); job = null; continue; }
+      record.closed = true; expanded++; job.expanded++; job.sliceExpanded++;
+      if (job.expanded > 42000) { searches.delete(job); fail(job.s, time); job = null; continue; }
       const point = pointAt(item.id), goal = pointAt(job.to);
       for (let direction = 0; direction < DIRECTIONS.length; direction++) {
         const [dx, dz] = DIRECTIONS[direction], x = point.x + dx, z = point.z + dz;
@@ -227,6 +246,7 @@ export function createRoamingController({ obstacles, world, destinations, random
         job.records.set(next, { cost, parent: item.id, closed: false });
         job.heap.push({ id: next, cost, priority: cost + Math.hypot(goal.x - x, goal.z - z) * 1.12 });
       }
+      if (job.sliceExpanded >= 70) { job.sliceExpanded = 0; queue.push(job); job = null; }
     }
   }
   function nearby(player, players) {
@@ -275,6 +295,7 @@ export function createRoamingController({ obstacles, world, destinations, random
   }
   return {
     update(players, active, dt, time) {
+      currentPlayers = players;
       const step = Math.max(0, Math.min(.1, Number.isFinite(dt) ? dt : 0));
       logicalTime = Number.isFinite(time) ? time : logicalTime + step;
       for (const player of players) {

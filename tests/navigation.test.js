@@ -39,3 +39,27 @@ test('turning takes the short path across the angle seam',()=>{
   const angle=angleLerp(Math.PI-.1,-Math.PI+.1,.5);
   near(angle,Math.PI);
 });
+
+test('safe relocation applies candidate placement rules without bypassing terrain or mutating its input',()=>{
+  const start={x:30,z:40},obstacles=[{x:31,z:35,w:3,d:10}];
+  const original={...start};let checked=0;
+  const canPlace=point=>{
+    checked++;
+    assert.equal(collides(point.x,point.z,obstacles,world,1),false,'terrain must clear before custom rules run');
+    return Math.hypot(point.x-start.x,point.z-start.z)>=3;
+  };
+  const result=nearestOpenPosition(start,obstacles,world,1,canPlace);
+  assert.ok(checked>1);
+  assert.ok(Math.hypot(result.x-start.x,result.z-start.z)>=3);
+  assert.equal(collides(result.x,result.z,obstacles,world,1),false);
+  assert.deepEqual(start,original);
+  assert.deepEqual(nearestOpenPosition(start,[],world,1),start,'four-argument callers keep their old behavior');
+});
+
+test('safe relocation searches the full expanded negative-coordinate world',()=>{
+  const expanded={minX:-200,minZ:-10,width:100,depth:20,margin:0};
+  const result=nearestOpenPosition({x:-190,z:5},[],expanded,.5,point=>point.x>=95);
+  assert.ok(result.x>=95);
+  assert.equal(collides(result.x,result.z,[],expanded,.5),false);
+  assert.throws(()=>nearestOpenPosition({x:1,z:1},[],{width:2,depth:2},.1,()=>false),/No safe walking position/);
+});

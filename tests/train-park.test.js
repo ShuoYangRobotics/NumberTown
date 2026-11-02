@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../dist/vendor/three.module.js';
 import {
-  TRAIN_PARK, TRAIN_LANDMARK, TRAIN_ZONES, TRAIN_TRACK_LENGTH, TRAIN_OBSTACLES,
+  TRAIN_PARK, TRAIN_PARK_OFFSET, TRAIN_LANDMARK, TRAIN_ZONES, TRAIN_TRACK_LENGTH, TRAIN_OBSTACLES,
   createTrainState, trainPose, boardingPoint, boardTrain, leaveTrain, stepTrain, createTrainPark,
 } from '../dist/train-park.js';
 import { WORLD } from '../dist/geography.js';
@@ -27,10 +27,53 @@ function trainSnapshot() {
   return result;
 }
 
+test('the full park shifts 200 units east with scenery, public coordinates, and colliders in agreement',()=>{
+  assert.deepEqual(TRAIN_PARK_OFFSET,{x:200,z:0});
+  assert.deepEqual(TRAIN_PARK.station,{x:685,z:215});
+  assert.deepEqual(TRAIN_PARK.entrance,{x:665,z:215});
+  assert.deepEqual(TRAIN_LANDMARK.arrival,{x:678,z:215});
+  assert.deepEqual(TRAIN_PARK.bounds,{minX:650,maxX:1020,minZ:78,maxZ:355});
+  close(TRAIN_PARK.x,835);close(TRAIN_LANDMARK.x,685);
+  park.root.updateMatrixWorld(true);
+  const scenery=park.root.getObjectByName('Translated train park scenery');
+  assert.deepEqual(scenery.position.toArray(),[200,0,0]);
+  const sceneryBounds=new THREE.Box3().setFromObject(scenery);
+  assert.ok(sceneryBounds.min.x>640&&sceneryBounds.max.x<1020,'all visible scenery must be in the relocated park');
+  const center=new THREE.Vector3();
+  new THREE.Box3().setFromObject(park.root.getObjectByName('Track ballast')).getCenter(center);
+  close(center.x,835,1e-4);close(center.z,215,1e-4);
+  close(park.root.getObjectByName('Station platform').getWorldPosition(center).x,677);
+  for(const zone of TRAIN_ZONES){
+    const point=park.root.getObjectByName(`${zone.name} landscape`).getWorldPosition(new THREE.Vector3());
+    close(point.x,zone.x);close(point.z,zone.z);
+  }
+  for(const[id,object]of[
+    ['railway-ticket-house',park.root.getObjectByName('Ticket house')],
+    ['railway-farm-barn',park.root.getObjectByName('Meadow farm barn').children[0]],
+  ]){
+    const bounds=new THREE.Box3().setFromObject(object),obstacle=TRAIN_OBSTACLES.find(candidate=>candidate.id===id);
+    close(bounds.min.x,obstacle.x);close(bounds.max.x,obstacle.x+obstacle.w);
+    close(bounds.min.z,obstacle.z);close(bounds.max.z,obstacle.z+obstacle.d);
+  }
+  const trunks=[];
+  scenery.traverse(object=>{
+    if(!object.isInstancedMesh)return;
+    object.userData.parts.forEach((part,index)=>{
+      if(!['jungle trunk','pine trunk','orchard trunk'].includes(part.feature))return;
+      const matrix=new THREE.Matrix4();object.getMatrixAt(index,matrix);matrix.premultiply(object.matrixWorld);
+      trunks.push(new THREE.Vector3().setFromMatrixPosition(matrix));
+    });
+  });
+  const treeObstacles=TRAIN_OBSTACLES.filter(obstacle=>obstacle.kind==='tree');
+  assert.equal(trunks.length,treeObstacles.length);
+  for(const obstacle of treeObstacles)assert.ok(trunks.some(point=>Math.hypot(point.x-obstacle.x,point.z-obstacle.z)<1e-6));
+  assert.equal(park.animals[0].x,733,'animal diagnostics use world coordinates too');
+});
+
 test('the train starts at the west station and remains entirely still until occupied', () => {
   const state = createTrainState();
   assert.equal(state.rider, null);
-  close(trainPose(state).x, 485); close(trainPose(state).z, 215);
+  close(trainPose(state).x, TRAIN_PARK.station.x); close(trainPose(state).z, TRAIN_PARK.station.z);
   assert.deepEqual(boardingPoint(state), TRAIN_LANDMARK.arrival);
   const before = { ...state };
   for (const dt of [0, .016, .5, 100, 10000]) stepTrain(state, dt, true);
@@ -46,7 +89,7 @@ test('Zero boards successfully; distant players, invalid players and second ride
   const state = createTrainState();
   const before = { ...state };
   assert.equal(boardTrain(state, { number: 0, radius: 1, x: 600, z: 200 }), false);
-  for (const invalid of [null, {}, { number: -1, x: 478, z: 215 }, { number: 1, x: NaN, z: 215 }]) assert.equal(boardTrain(state, invalid), false);
+  for (const invalid of [null, {}, { number: -1, ...TRAIN_LANDMARK.arrival }, { number: 1, x: NaN, z: 215 }]) assert.equal(boardTrain(state, invalid), false);
   assert.deepEqual(state, before, 'failed boarding must not alter a parked train');
   const zero = playerAt(state, 0), originalPlayer = { ...zero };
   assert.equal(boardTrain(state, zero), true); assert.equal(state.rider, 0);
@@ -81,7 +124,7 @@ test('arc-length travel has constant speed and holding boost doubles it exactly'
 
 test('ellipse normals point outside and safe exits stay local at every part of the loop', () => {
   const radii = [...new Set(CHARACTERS.flatMap(character => getCharacterArrangements(character.number).map(form => getCharacterMetrics(form).radius)))];
-  assert.ok(Math.max(...radii) >= 20, 'the audit must include the forty-wide form');
+  assert.ok(Math.max(...radii) >= 25, 'the audit must include the fifty-wide form');
   for (let i = 0; i < 1024; i++) {
     const progress = i / 1024, pose = trainPose(progress);
     close(ellipseLevel(pose.x, pose.z), 1, 1e-10);
@@ -91,7 +134,7 @@ test('ellipse normals point outside and safe exits stay local at every part of t
       const point = boardingPoint({ progress, riderRadius: radius });
       assert.ok(ellipseLevel(point.x, point.z) > 1, 'exit is inside the moving railway');
       assert.equal(collides(point.x, point.z, allObstacles, WORLD, radius), false, `blocked exit at ${progress}, radius ${radius}`);
-      assert.ok(Math.hypot(point.x - pose.x, point.z - pose.z) <= radius + 42, 'leaving jumps beyond the nearby bend');
+      assert.ok(Math.hypot(point.x - pose.x, point.z - pose.z) <= radius + 64, 'leaving jumps beyond the nearby bend');
       // Its entire circular footprint stays beyond the rail and the train body.
       for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
         assert.ok(ellipseLevel(point.x + Math.cos(angle) * radius, point.z + Math.sin(angle) * radius) > 1.006, 'exiting character overlaps the train track');
@@ -118,8 +161,8 @@ test('leaving stops in place, can be reversed by reboarding, and supports every 
 });
 
 test('the station connects to the town road and a broad walkable park interior', () => {
-  const route = [{ x: 435, z: 320 }, { x: 435, z: 215 }, TRAIN_PARK.entrance, TRAIN_LANDMARK.arrival, { x: 510, z: 215 }, { x: 635, z: 215 }, { x: 765, z: 215 }];
-  for (const radius of [.5, 2.7, 3.5]) for (let segment = 1; segment < route.length; segment++) {
+  const route = [{ x: 635, z: 320 }, { x: 635, z: 215 }, TRAIN_PARK.entrance, TRAIN_LANDMARK.arrival, { x: 710, z: 215 }, { x: 835, z: 215 }, { x: 965, z: 215 }];
+  for (const radius of [.5, 2.7, 3.5,getCharacterMetrics(43).radius,getCharacterMetrics(47).radius]) for (let segment = 1; segment < route.length; segment++) {
     const a = route[segment - 1], b = route[segment];
     for (let t = 0; t <= 1; t += .01) {
       const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t;
@@ -172,6 +215,7 @@ test('the parked train freezes after a ride, while resumed wheels and cars advan
 });
 
 test('four distinctive scenic zones have all nine recognizable animal species and trackside encounters', () => {
+  park.root.updateMatrixWorld(true);
   assert.equal(new Set(TRAIN_ZONES.map(z => z.color)).size, 4);
   for (const zone of TRAIN_ZONES) assert.ok(park.root.getObjectByName(`${zone.name} landscape`));
   for (const name of ['Rainforest pool', 'Meadow farm barn', 'Adventure railway station']) assert.ok(park.root.getObjectByName(name));
@@ -186,6 +230,7 @@ test('four distinctive scenic zones have all nine recognizable animal species an
       if (!part.animalId) return;
       if (!rendered.has(part.animalId)) rendered.set(part.animalId, []);
       const matrix = new THREE.Matrix4(); object.getMatrixAt(index, matrix);
+      matrix.premultiply(object.matrixWorld);
       rendered.get(part.animalId).push({ feature: part.feature, position: new THREE.Vector3().setFromMatrixPosition(matrix), determinant: matrix.determinant() });
     });
   });

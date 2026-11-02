@@ -64,6 +64,19 @@ export function createMountainSummit(){
   const landingGeometry=new THREE.BufferGeometry();landingGeometry.setAttribute('position',new THREE.Float32BufferAttribute(landingVertices,3));landingGeometry.setIndex(landingIndices);landingGeometry.computeVertexNormals();
   const landing=new THREE.Mesh(landingGeometry,pathMaterial);landing.receiveShadow=true;landing.name='Mountain trail landing';path.add(landing);
 
+  // The enlarged summit has a level, straight approach after the spiral.
+  // It is a separate ribbon so the turn never folds a wide strip over itself.
+  const approachVertices=[],approachIndices=[],approach=MOUNTAIN_TRAIL.slice(MOUNTAIN_PAVING_END);
+  approach.forEach((p,row)=>{
+    for(let column=0;column<=across;column++){
+      const x=p.x+(column/across-.5)*SUMMIT.pathWidth;
+      approachVertices.push(x,mountainWalkHeight(x,p.z)??SUMMIT_DECK.height,p.z);
+      if(row<approach.length-1&&column<across){const i=row*(across+1)+column;approachIndices.push(i,i+across+1,i+1,i+1,i+across+1,i+across+2);}
+    }
+  });
+  const approachGeometry=new THREE.BufferGeometry();approachGeometry.setAttribute('position',new THREE.Float32BufferAttribute(approachVertices,3));approachGeometry.setIndex(approachIndices);approachGeometry.computeVertexNormals();
+  const approachMesh=new THREE.Mesh(approachGeometry,pathMaterial);approachMesh.name='Level summit approach';approachMesh.receiveShadow=true;path.add(approachMesh);
+
   const nearDeck=(x,z,padding=0)=>Math.abs(x-SUMMIT_DECK.x)<=SUMMIT_DECK.width/2+padding&&Math.abs(z-SUMMIT_DECK.z)<=SUMMIT_DECK.depth/2+padding;
   let lastRail=0,lastRailDistance=0,lastMarker=0,traveled=0;
   for(let i=1;i<pavedTrail.length;i++){
@@ -90,23 +103,23 @@ export function createMountainSummit(){
   }
   const deck=new THREE.Mesh(new THREE.BoxGeometry(SUMMIT_DECK.width,.48,SUMMIT_DECK.depth),material('#b7a080'));
   deck.name='Mountain summit deck';deck.position.set(SUMMIT_DECK.x,SUMMIT_DECK.height-.24,SUMMIT_DECK.z);deck.receiveShadow=true;deck.castShadow=true;root.add(deck);
-  for(let x=SUMMIT_DECK.x-7.7;x<SUMMIT_DECK.x+8;x+=.55)box('#e4d3b2',x,SUMMIT_DECK.height+.008,SUMMIT_DECK.z,.51,.016,13.7);
+  for(let x=SUMMIT_DECK.x-SUMMIT_DECK.width/2+.3;x<SUMMIT_DECK.x+SUMMIT_DECK.width/2;x+=.55)box('#e4d3b2',x,SUMMIT_DECK.height+.008,SUMMIT_DECK.z,.51,.016,SUMMIT_DECK.depth-.3);
   for(const rail of SUMMIT_RAILS){
     const {x1,z1,x2,z2}=rail,count=Math.ceil(Math.hypot(x2-x1,z2-z1)/2);
     beam([x1,72+1.22,z1],[x2,72+1.22,z2],.09,'#718f89');
     beam([x1,72+.58,z1],[x2,72+.58,z2],.055,'#a8b9a0');
     for(let i=0;i<=count;i++)box('#718f89',x1+(x2-x1)*i/count,72+.65,z1+(z2-z1)*i/count,.16,1.3,.16);
   }
-  for(const [x,z] of [[98.65,2.4],[109.35,-1]]){
+  for(const [x,z] of [[93.8,6],[114.2,4]]){
     box('#b69064',x,72+.55,z,1.1,.18,3.2);box('#b69064',x+(x<104?-.42:.42),72+1.12,z,.18,1.05,3.2);
     for(const dz of [-1.15,1.15])box('#718f89',x,72+.26,z+dz,.75,.52,.15);
   }
-  const telescope={x:109.3,z:5};
+  const telescope={x:114.5,z:9};
   instance('cylinder','#718f89',telescope.x,72+.8,telescope.z,.13,1.6,.13);
   instance('cylinder','#d4c9a6',telescope.x,72+.09,telescope.z,.55,.18,.55);
   beam([telescope.x,72+1.72,telescope.z],[telescope.x-.35,72+1.92,telescope.z+1.15],.24,'#739f9e');
-  sign('MOUNTAIN SUMMIT · 72 m',104,73.1,7.8,6.5);
-  sign('SUMMIT TRAIL  ↑',98,1.4,78,5);
+  sign('MOUNTAIN SUMMIT · 72 m',104,73.1,SUMMIT_DECK.z+SUMMIT_DECK.depth/2+.13,6.5);
+  sign('SUMMIT TRAIL  ↑',94,1.4,78,5);
   for(const {shape,color,matrices} of batches.values()){
     const mesh=new THREE.InstancedMesh(geometries[shape],material(color),matrices.length);matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=true;mesh.receiveShadow=true;mesh.computeBoundingSphere();root.add(mesh);
   }

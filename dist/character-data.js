@@ -6,6 +6,8 @@ const GOLD_EDGE = '#d49a37';
 const GOLD = '#ffd58b';
 const THIRTY = '#fff387';
 const THIRTY_EDGE = '#c7b64a';
+const FORTY = '#b0ed91';
+const FORTY_EDGE = '#69b95b';
 
 function grid(columns, rows, color, outline) {
   return Array.from({ length: columns * rows }, (_, index) => {
@@ -100,6 +102,28 @@ export const CHARACTERS = Object.freeze([
     ...[0,4].flatMap(x=>[8,9].map(y=>({x,y,color:x===0?'#aeb6b6':'#959ea0',outline:'#737e80'}))),
   ]),
   character(40, 'Forty', '#a9e888', '#358a48', 'Four bright green tens with smart checkered eyebrows.', grid(4,10,(x,y)=>(x+y)%2?'#b1ed92':'#a7e684','#66af5b')),
+  character(41, 'Forty-One', FORTY, '#55923b', 'Forty green blocks and one bright red spark of curiosity.', [
+    ...grid(4,10,FORTY,FORTY_EDGE),{x:1,y:10,color:'#ed313d',outline:'#b92e37'},
+  ]),
+  character(42, 'Forty-Two', FORTY, '#367d9b', 'A rainbow-belted explorer of multiplication and cheerful patterns.', [
+    ...grid(4,10,FORTY,FORTY_EDGE),...grid(2,1,'#f6a12f','#d88c29').map(cell=>({...cell,x:cell.x+1,y:10})),
+  ]),
+  character(43, 'Forty-Three', FORTY, '#ae4d31', 'A friendly picture frame with a sunny three and a window on the world.', [
+    ...grid(10,8,FORTY,FORTY_EDGE).filter(cell=>cell.y===0||cell.y>=6||cell.x===0||cell.x===9),
+    ...grid(3,1,'#ffe33c','#d2b52b').map(cell=>({...cell,x:cell.x+3,y:1})),
+  ]),
+  character(44, 'Forty-Four', FORTY, '#348d6f', 'Four green teammates above forty, ready for a friendly match.', grid(4,11,(_,y)=>y===10?'#39c923':FORTY,FORTY_EDGE)),
+  character(45, 'Forty-Five', FORTY, '#3ea3aa', 'A staircase superhero who reaches new heights one step at a time.', Array.from({length:9},(_,x)=>Array.from({length:x+1},(_,y)=>({x,y,color:x===8&&y>=4?'#29bfd7':FORTY,outline:FORTY_EDGE}))).flat()),
+  character(46, 'Forty-Six', FORTY, '#7960b3', 'A purple block hat, a little flower, and a great big smile.', [
+    ...grid(4,10,FORTY,FORTY_EDGE),...grid(4,1,'#7839cc','#6331a9').map(cell=>({...cell,y:10})),
+    ...grid(2,1,'#7839cc','#6331a9').map(cell=>({...cell,x:cell.x+1,y:11})),
+  ]),
+  character(47, 'Forty-Seven', FORTY, '#713b26', 'An adventurous rainbow explorer with a tower of colorful ideas.', [
+    ...grid(4,10,FORTY,FORTY_EDGE),...grid(1,7,(_,y)=>RAINBOW[y]).map(cell=>({...cell,x:2,y:cell.y+10})),
+  ]),
+  character(48, 'Forty-Eight', FORTY, '#8739a3', 'A wide cheerful rectangle with eight pink blocks and playful purple glasses.', grid(8,6,(_,y)=>y===5?'#e533a8':FORTY,FORTY_EDGE)),
+  character(49, 'Forty-Nine', FORTY, '#38734a', 'A seven-by-seven square with a thoughtful gray nine and rainbow combs.', grid(7,7,(x,y)=>x>=2&&x<=4&&y>=2&&y<=4?['#b5bab7','#a0a6a2','#7f8881'][y-2]:FORTY,FORTY_EDGE)),
+  character(50, 'Fifty', '#84d3dc', '#347487', 'Five bright blue tens, a golden star, and a sweeping showtime smile.', grid(5,10,'#84d3dc','#5099a3')),
 ]);
 const CHARACTERS_BY_NUMBER = new Map(CHARACTERS.map(character => [character.number, character]));
 

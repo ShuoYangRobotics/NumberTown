@@ -2,23 +2,23 @@ import { MOUNTAINS, riverX } from './geography.js';
 
 const clamp=value=>Math.max(0,Math.min(1,value));
 const smooth=value=>{const t=clamp(value);return t*t*(3-2*t);};
-export const SUMMIT=Object.freeze({x:104,z:1,height:72,pathWidth:9.6,shoulderWidth:7.4,turns:1.5});
-export const SUMMIT_DECK=Object.freeze({x:104,z:1,width:16,depth:14,height:72});
+export const SUMMIT=Object.freeze({x:104,z:1,height:72,pathWidth:12.4,shoulderWidth:7.4,turns:1.5,innerRadius:22});
+export const SUMMIT_DECK=Object.freeze({x:104,z:1,width:26,depth:22,height:72,entranceWidth:14});
 const halfWidth=SUMMIT.pathWidth/2;
 
 // Height follows the shrinking radius, so each turn climbs a conical hillside
 // instead of reaching summit height while it is still far from the peak.
-const raw=[],startAngle=.5;
+const raw=[],startAngle=0,radialChange=56-SUMMIT.innerRadius;
 const sx=SUMMIT.x+56*Math.sin(startAngle),sz=SUMMIT.z+56*Math.cos(startAngle);
-const tx=56*Math.cos(startAngle)*3*Math.PI-48*Math.sin(startAngle);
-const tz=-56*Math.sin(startAngle)*3*Math.PI-48*Math.cos(startAngle),tl=Math.hypot(tx,tz);
+const tx=56*Math.cos(startAngle)*3*Math.PI-radialChange*Math.sin(startAngle);
+const tz=-56*Math.sin(startAngle)*3*Math.PI-radialChange*Math.cos(startAngle),tl=Math.hypot(tx,tz);
 const controls=[[104,79],[104,65],[sx-tx/tl*18,sz-tz/tl*18],[sx,sz]];
 for(let i=0;i<=100;i++){
   const t=i/100,u=1-t,weights=[u**3,3*u*u*t,3*u*t*t,t**3];
   raw.push({x:controls.reduce((sum,p,index)=>sum+p[0]*weights[index],0),z:controls.reduce((sum,p,index)=>sum+p[1]*weights[index],0),y:0});
 }
 for(let i=1;i<=700;i++){
-  const t=i/700,r=56-48*t,a=startAngle+3*Math.PI*t;
+  const t=i/700,r=56-radialChange*t,a=startAngle+3*Math.PI*t;
   raw.push({x:SUMMIT.x+r*Math.sin(a),z:SUMMIT.z+r*Math.cos(a),y:SUMMIT.height*smooth(t)});
 }
 const last=raw.at(-1);
@@ -33,19 +33,20 @@ export const SUMMIT_LANDMARK=Object.freeze({id:'summit',name:'Mountain summit',d
 const deckWest=SUMMIT_DECK.x-SUMMIT_DECK.width/2,deckEast=SUMMIT_DECK.x+SUMMIT_DECK.width/2;
 const deckNorth=SUMMIT_DECK.z-SUMMIT_DECK.depth/2,deckSouth=SUMMIT_DECK.z+SUMMIT_DECK.depth/2;
 // Nearby lower turns must not become side entrances to the level platform.
-// The broad north gate follows the final bend and admits the seven-wide calendar.
+// The final level approach enters a broad north gate. Lower turns stay clear
+// of every rail even when a character has an eleven-block silhouette.
 export const SUMMIT_RAILS=Object.freeze([
   {id:'summit-west-rail',x1:deckWest,z1:deckNorth,x2:deckWest,z2:deckSouth},
   {id:'summit-east-rail',x1:deckEast,z1:deckNorth,x2:deckEast,z2:deckSouth},
   {id:'summit-south-rail',x1:deckWest,z1:deckSouth,x2:deckEast,z2:deckSouth},
-  {id:'summit-north-west-rail',x1:deckWest,z1:deckNorth,x2:deckWest+.4,z2:deckNorth},
-  {id:'summit-north-east-rail',x1:SUMMIT_DECK.x+3.8,z1:deckNorth,x2:deckEast,z2:deckNorth},
+  {id:'summit-north-west-rail',x1:deckWest,z1:deckNorth,x2:SUMMIT_DECK.x-SUMMIT_DECK.entranceWidth/2,z2:deckNorth},
+  {id:'summit-north-east-rail',x1:SUMMIT_DECK.x+SUMMIT_DECK.entranceWidth/2,z1:deckNorth,x2:deckEast,z2:deckNorth},
 ].map(Object.freeze));
 export const SUMMIT_OBSTACLES=Object.freeze([
   ...SUMMIT_RAILS.map(rail=>({id:rail.id,kind:'rail',x:Math.min(rail.x1,rail.x2)-.09,z:Math.min(rail.z1,rail.z2)-.09,w:Math.abs(rail.x2-rail.x1)+.18,d:Math.abs(rail.z2-rail.z1)+.18})),
-  {id:'summit-west-bench',kind:'furniture',x:98.1,z:.8,w:1.1,d:3.2},
-  {id:'summit-east-bench',kind:'furniture',x:108.8,z:-2.6,w:1.1,d:3.2},
-  {id:'summit-telescope',kind:'furniture',x:109.3,z:5,radius:.75},
+  {id:'summit-west-bench',kind:'furniture',x:93.25,z:4.4,w:1.1,d:3.2},
+  {id:'summit-east-bench',kind:'furniture',x:113.65,z:2.4,w:1.1,d:3.2},
+  {id:'summit-telescope',kind:'furniture',x:114.5,z:9,radius:.75},
 ].map(Object.freeze));
 
 const bounds={minX:Math.min(...raw.map(p=>p.x))-halfWidth,maxX:Math.max(...raw.map(p=>p.x))+halfWidth,minZ:Math.min(...raw.map(p=>p.z))-halfWidth,maxZ:79};
@@ -93,7 +94,11 @@ export function isOnMountainRoute(x,z,radius=0){
   if(nearest.distance+radius<=halfWidth-edgeMargin&&z+radius<=bounds.maxZ)return true;
   if(!insideFootprint(x,z,edgeMargin))return false;
   if(radius<=0)return true;
-  for(let i=0;i<24;i++)if(!insideFootprint(x+Math.cos(i*Math.PI/12)*radius,z+Math.sin(i*Math.PI/12)*radius,edgeMargin))return false;
+  // At the inside corner of two joined corridors, sparse fixed-angle probes
+  // can jump across a narrow unsupported notch. Keep every unprobed arc less
+  // than the inset, independent of the character's footprint size.
+  const probes=Math.max(24,Math.ceil(Math.PI*radius/.1));
+  for(let i=0;i<probes;i++)if(!insideFootprint(x+Math.cos(i*Math.PI*2/probes)*radius,z+Math.sin(i*Math.PI*2/probes)*radius,edgeMargin))return false;
   return true;
 }
 export function mountainWalkHeight(x,z){
@@ -121,7 +126,7 @@ export function baseMountainHeight(x,z){
 export function mountainHeight(x,z){
   const original=baseMountainHeight(x,z);
   const radius=Math.hypot(x-SUMMIT.x,z-SUMMIT.z);
-  const cone=SUMMIT.height*(1-smooth((radius-8)/48));
+  const cone=SUMMIT.height*(1-smooth((radius-SUMMIT.innerRadius)/radialChange));
   const peakBlend=1-smooth((radius-50)/32);
   let result=original+(cone-original)*peakBlend;
   if(!withinBounds(x,z,SUMMIT.shoulderWidth))return result;

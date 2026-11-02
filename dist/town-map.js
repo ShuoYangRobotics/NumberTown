@@ -3,6 +3,7 @@ import {HILL,DECK,BRIDGES,HILL_TRAIL,RIVER,COAST,WATER_PLAY,riverX,riverWidth} f
 import {WATER_PLAY_BUOYS,UNDERWATER_LANDMARK} from './terrain-data.js';
 import {FIELD} from './football.js';
 import {PARK} from './park.js';
+import {TRAIN_PARK_OFFSET} from './train-park.js';
 import {MOUNTAIN_TRAIL,SUMMIT_DECK} from './mountain-route.js';
 
 /** A true plan of the playable geography, built from the world data. */
@@ -13,18 +14,18 @@ export function mountTownMap(container,places,onVisit){
   for(let z=WORLD.minZ;z<=RIVER.endZ;z+=2)riverPoints.push([z,riverX(z),riverWidth(z)/2]);
   const riverPath=riverPoints.map(([z,x,w],i)=>`${i?'L':'M'}${x-w} ${z}`).join(' ')+riverPoints.slice().reverse().map(([z,x,w])=>`L${x+w} ${z}`).join(' ')+'Z';
   const cabinDots=Array.from({length:PARK.cabinCount},(_,i)=>{const a=i/PARK.cabinCount*Math.PI*2;return `<circle cx="${PARK.x+Math.sin(a)*16}" cy="${PARK.z+Math.cos(a)*16}" r="2.1" fill="${['#e7a277','#94bba8','#bd9abd'][i%3]}"/>`;}).join('');
-  const ridges=[...Array(9)].map((_,i)=>{const x=10+i*50;if(Math.abs(x-240)<30)return '';return `<path d="M${x-37} 66L${x} ${-66+i%3*8}L${x+37} 66Z" fill="${i%2?'#9caeb1':'#b0bfc0'}"/><path d="M${x-8} ${-42+i%3*8}L${x} ${-66+i%3*8}L${x+8} ${-42+i%3*8}L${x+2} ${-46+i%3*8}L${x-3} ${-39+i%3*8}Z" fill="#eff3e8"/>`;}).join('');
+  const ridges=Array.from({length:Math.ceil((WORLD.width-WORLD.minX)/50)},(_,i)=>{const x=WORLD.minX+10+i*50;if(Math.abs(x-240)<30)return '';return `<path d="M${x-37} 66L${x} ${-66+i%3*8}L${x+37} 66Z" fill="${i%2?'#9caeb1':'#b0bfc0'}"/><path d="M${x-8} ${-42+i%3*8}L${x} ${-66+i%3*8}L${x+8} ${-42+i%3*8}L${x+2} ${-46+i%3*8}L${x-3} ${-39+i%3*8}Z" fill="#eff3e8"/>`;}).join('');
   const bridgePaths=BRIDGES.map(b=>`<path d="M${b.x-b.span/2} ${b.z}h${b.span}" stroke="#bd9668" stroke-width="${b.width}"/><path d="M${b.x-b.span/2} ${b.z}h${b.span}" stroke="#ead1a1" stroke-width="${b.width-3}"/>`).join('');
   const cube=['#ed7268','#f0c95d','#79b8a2','#f3ebd4','#78a3c9','#e9a867','#7fa8c9','#e9aa62','#e77d76'].map((c,i)=>`<rect x="${SQUARE.x-6+(i%3)*4}" y="${SQUARE.z-6+Math.floor(i/3)*4}" width="3.6" height="3.6" rx=".4" fill="${c}"/>`).join('');
-  container.innerHTML=`<svg viewBox="0 ${WORLD.minZ} ${WORLD.width} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: fifty west-bank houses, twenty east-bank houses, three river bridges, eastern park and football, a winding path to a northern summit deck, an eastern train park with four landscapes, and a large southern bay with a sloping sandy seabed and an underwater garden.">
+  container.innerHTML=`<svg viewBox="${WORLD.minX} ${WORLD.minZ} ${WORLD.width-WORLD.minX} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: sixty west-bank houses and twenty west-bank stores, twenty east-bank houses and ten east-bank stores, three river bridges, eastern park and football, a winding path to a northern summit deck, an eastern train park with four landscapes, and a large southern bay with a sloping sandy seabed and an underwater garden.">
     <defs><linearGradient id="bay-depth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4e5c9"/><stop offset=".46" stop-color="#8accc7"/><stop offset="1" stop-color="#65b6bd"/></linearGradient></defs>
-    <rect y="${WORLD.minZ}" width="${WORLD.width}" height="${WORLD.depth-WORLD.minZ}" rx="8" fill="#dce6c9"/>
-    <rect x="0" y="${COAST.beachStart}" width="${WORLD.width}" height="${WORLD.depth-COAST.beachStart}" fill="#efdeb0"/>
-    <rect x="0" y="${COAST.seaStart}" width="${WORLD.width}" height="${WORLD.depth-COAST.seaStart}" fill="#87bfcb"/>
+    <rect x="${WORLD.minX}" y="${WORLD.minZ}" width="${WORLD.width-WORLD.minX}" height="${WORLD.depth-WORLD.minZ}" rx="8" fill="#dce6c9"/>
+    <rect x="${WORLD.minX}" y="${COAST.beachStart}" width="${WORLD.width-WORLD.minX}" height="${WORLD.depth-COAST.beachStart}" fill="#efdeb0"/>
+    <rect x="${WORLD.minX}" y="${COAST.seaStart}" width="${WORLD.width-WORLD.minX}" height="${WORLD.depth-COAST.seaStart}" fill="#87bfcb"/>
     <rect x="${WATER_PLAY.xMin}" y="${WATER_PLAY.shoreZ}" width="${WATER_PLAY.xMax-WATER_PLAY.xMin}" height="${WATER_PLAY.deepZ-WATER_PLAY.shoreZ}" fill="url(#bay-depth)"/>
     <path d="M${WATER_PLAY.xMin} ${WATER_PLAY.shoreZ}V${WATER_PLAY.deepZ}H${WATER_PLAY.xMax}V${WATER_PLAY.shoreZ}" fill="none" stroke="#f8efca" stroke-width="1" stroke-dasharray="2 3"/>
     ${WATER_PLAY_BUOYS.map(buoy=>`<circle cx="${buoy.x}" cy="${buoy.z}" r="1.5" fill="${['#ed9a77','#f0d37a','#9cc4b7'][buoy.index%3]}"/>`).join('')}
-    <path d="M0 ${COAST.seaStart+2}H${WORLD.width}" stroke="#eaf4dd" stroke-width="3"/>
+    <path d="M${WORLD.minX} ${COAST.seaStart+2}H${WORLD.width}" stroke="#eaf4dd" stroke-width="3"/>
     <g fill="none" stroke="#f6efd8" stroke-linecap="round">${roads}</g>
     <rect x="${SQUARE.x-SQUARE.w/2}" y="${SQUARE.z-SQUARE.d/2}" width="${SQUARE.w}" height="${SQUARE.d}" rx="4" fill="#f0dfbf"/>
     ${buildings}${cube}
@@ -48,7 +49,7 @@ export function mountTownMap(container,places,onVisit){
     <text x="${SUMMIT_DECK.x}" y="${SUMMIT_DECK.z-14}" style="fill:#fff8e5;font-weight:800">SUMMIT DECK</text>
     <path d="${riverPath}" fill="#85bdca"/>
     ${bridgePaths}
-    <rect x="450" y="78" width="370" height="275" rx="16" fill="#d5dec1" stroke="#fcf6dc" stroke-width="3"/>
+    <g transform="translate(${TRAIN_PARK_OFFSET.x} ${TRAIN_PARK_OFFSET.z})"><rect x="450" y="78" width="370" height="275" rx="16" fill="#d5dec1" stroke="#fcf6dc" stroke-width="3"/>
     <path d="M450 78H635V215H450Z" fill="#e8c58b"/><path d="M635 78H820V215H635Z" fill="#90b994"/>
     <path d="M450 215H635V353H450Z" fill="#b9ce82"/><path d="M635 215H820V353H635Z" fill="#d5e7df"/>
     <ellipse cx="635" cy="215" rx="150" ry="108" fill="none" stroke="#8e7663" stroke-width="5"/>
@@ -56,10 +57,12 @@ export function mountTownMap(container,places,onVisit){
     <rect x="467" y="198" width="16" height="34" rx="3" fill="#fff4db"/>
     <text x="550" y="155">DESERT</text><text x="723" y="155">RAINFOREST</text>
     <text x="550" y="279">FARMS</text><text x="723" y="279">SNOWY PEAKS</text>
-    <text x="635" y="370">DISCOVERY TRAIN PARK</text>
+    <text x="635" y="370">DISCOVERY TRAIN PARK</text></g>
     <ellipse cx="125" cy="550" rx="34" ry="28" fill="none" stroke="#f5dfae" stroke-width="6"/>
-    <text class="map-area" x="112" y="74">WEST BANK · 50 HOMES</text>
+    <text class="map-area" x="112" y="74">WEST BANK · 60 HOMES</text>
     <text class="map-area" x="343" y="74">EAST BANK · 20 HOMES</text>
+    <text x="-115" y="74">WEST MARKET · 20 STORES</text>
+    <text x="515" y="74">EAST MARKET · 10 STORES</text>
     <text x="340" y="-49">HIGH MOUNTAINS</text>
     <text x="220" y="389">LONG BEACH</text><text x="${(WATER_PLAY.xMin+WATER_PLAY.xMax)/2}" y="421">WATER PLAY</text>
     <text x="${UNDERWATER_LANDMARK.x}" y="${UNDERWATER_LANDMARK.z}">UNDERWATER GARDEN</text>

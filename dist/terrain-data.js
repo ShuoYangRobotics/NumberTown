@@ -43,7 +43,7 @@ export const BEACH_LANDMARK = Object.freeze({ id: 'beach', name: 'Seaside beach'
 export const WATER_PLAY_LANDMARK = Object.freeze({ id: 'water-play', name: 'Water play', description: 'Follow the sandy beach into the turquoise bay and play with the floating beach ball.', x: 160, z: 410, radius: 31, arrival: Object.freeze({ x: 160, z: 403 }) });
 export const UNDERWATER_LANDMARK = Object.freeze({ id: 'seabed', name: 'Underwater garden', description: 'Explore the deep sandy floor beneath the clear blue bay.', x: 125, z: 535, radius: 110, arrival: Object.freeze({ x: 125, z: 535 }) });
 export const MOUNTAIN_LANDMARK = Object.freeze({ id: 'mountains', name: 'Mountain view', description: 'Look up at the rugged peaks and the river gorge.', x: 130, z: 79, radius: 34, arrival: Object.freeze({ x: 130, z: 79 }) });
-export const HILL_TREES = Object.freeze([.12, .75, 1.24, 1.98, 2.65, 3.35, 4.55, 5.5].map((angle, index) => Object.freeze({ x: HILL.x + Math.cos(angle) * (25 + index % 3), z: HILL.z + Math.sin(angle) * (25 + index % 3), height: 4.5 + index % 3 * .6, radius: 1.8 })));
+export const HILL_TREES = Object.freeze([.12, .75, 1.24, 1.98, 2.65, 3.35, 4.95, 5.5].map((angle, index) => Object.freeze({ x: HILL.x + Math.cos(angle) * (30 + index % 3), z: HILL.z + Math.sin(angle) * (30 + index % 3), height: 4.5 + index % 3 * .6, radius: 1.8 })));
 export const BEACH_UMBRELLAS = Object.freeze([[54, 384], [104, 386], [189, 384], [294, 385], [350, 384], [405, 386]].map(([x, z], index) => Object.freeze({ x, z, index, radius: 2.9 })));
 export const WATER_PLAY_BUOYS = Object.freeze([
   ...[WATER_PLAY.xMin, WATER_PLAY.xMax].flatMap(x => Array.from({ length: 10 }, (_, index) => ({ x, z: WATER_PLAY.shoreZ + (index + .5) * (WATER_PLAY.deepZ - WATER_PLAY.shoreZ) / 10 }))),
@@ -60,9 +60,17 @@ for (let z = Math.floor(RIVER.startZ); z < RIVER.endZ; z++) {
 }
 const west = DECK.x - DECK.width / 2, east = DECK.x + DECK.width / 2;
 const north = DECK.z - DECK.depth / 2, south = DECK.z + DECK.depth / 2;
+export const HILL_DECK_RAILS = Object.freeze([
+  { id: 'deck-west', x1: west, z1: north, x2: west, z2: south },
+  { id: 'deck-east', x1: east, z1: north, x2: east, z2: south },
+  { id: 'deck-south', x1: west, z1: south, x2: east, z2: south },
+  { id: 'deck-north-west', x1: west, z1: north, x2: DECK.x-DECK.entranceWidth/2, z2: north },
+  { id: 'deck-north-east', x1: DECK.x+DECK.entranceWidth/2, z1: north, x2: east, z2: north },
+].map(Object.freeze));
+export const HILL_TELESCOPE = Object.freeze({ x: DECK.x+8.5, z: DECK.z+6.6, radius: .7 });
 export const TERRAIN_OBSTACLES = Object.freeze([
   ...water,
-  { id: 'mountain-range', kind: 'mountain', x: -100, z: RIVER.startZ - 40, w: WORLD.width + 200, d: MOUNTAINS.maxZ - RIVER.startZ + 40,
+  { id: 'mountain-range', kind: 'mountain', x: (WORLD.minX??0)-100, z: RIVER.startZ - 40, w: WORLD.width-(WORLD.minX??0)+200, d: MOUNTAINS.maxZ - RIVER.startZ + 40,
     blocks: (x, z, radius) => z - radius < MOUNTAINS.maxZ && !isOnMountainRoute(x, z, radius) },
   ...SUMMIT_OBSTACLES,
   // The beach opens into the bay. Ordinary rectangle collisions keep the
@@ -70,12 +78,8 @@ export const TERRAIN_OBSTACLES = Object.freeze([
   { id: 'open-sea-west', kind: 'sea', x: -500, z: COAST.seaStart, w: WATER_PLAY.xMin + 500, d: WATER_PLAY.deepZ - COAST.seaStart },
   { id: 'open-sea-east', kind: 'sea', x: WATER_PLAY.xMax, z: COAST.seaStart, w: WORLD.width + 500 - WATER_PLAY.xMax, d: WATER_PLAY.deepZ - COAST.seaStart },
   { id: 'open-sea', kind: 'sea', x: -500, z: WATER_PLAY.deepZ, w: WORLD.width + 1000, d: COAST.seaEnd - WATER_PLAY.deepZ + 100 },
-  { id: 'deck-west', kind: 'rail', x: west - .1, z: north - .1, w: .2, d: DECK.depth + .2 },
-  { id: 'deck-east', kind: 'rail', x: east - .1, z: north - .1, w: .2, d: DECK.depth + .2 },
-  { id: 'deck-south', kind: 'rail', x: west - .1, z: south - .1, w: DECK.width + .2, d: .2 },
-  { id: 'deck-north-west', kind: 'rail', x: west - .1, z: north - .1, w: DECK.width / 2 - 4.2, d: .2 },
-  { id: 'deck-north-east', kind: 'rail', x: DECK.x + 4.2, z: north - .1, w: DECK.width / 2 - 4.1, d: .2 },
-  { id: 'deck-telescope', kind: 'furniture', x: DECK.x + 4.8, z: DECK.z + 3.9, radius: .7 },
+  ...HILL_DECK_RAILS.map(rail => ({ id: rail.id, kind: 'rail', x: Math.min(rail.x1,rail.x2)-.1, z: Math.min(rail.z1,rail.z2)-.1, w: Math.abs(rail.x2-rail.x1)+.2, d: Math.abs(rail.z2-rail.z1)+.2 })),
+  { id: 'deck-telescope', kind: 'furniture', ...HILL_TELESCOPE },
   ...BRIDGES.flatMap(bridge => [-1, 1].map(side => ({ id: `${bridge.id}-${side < 0 ? 'north' : 'south'}-rail`, kind: 'rail', x: bridge.x - (bridge.span - 14) / 2 - .1, z: bridge.z + side * (bridge.width / 2 + .2) - .1, w: bridge.span - 14 + .2, d: .2 }))),
   ...HILL_TREES.map((tree, index) => ({ ...tree, id: `hill-tree-${index}`, kind: 'tree' })),
   ...BEACH_UMBRELLAS.map(umbrella => ({ ...umbrella, id: `beach-umbrella-${umbrella.index}`, kind: 'umbrella' })),
