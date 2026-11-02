@@ -40,7 +40,10 @@ Paths below are relative to the repository root.
 | `dist/animal-facts.js` | Animal facts and proximity encounters with depth checks and cooldowns |
 | `dist/water-view.js` | Depth, complete character immersion, and underwater camera transitions |
 | `dist/ground-marker.js` | Selection ring and shadow that follow sloping ground |
-| `dist/town-map.js` | Map geometry, destination buttons, and player marker |
+| `dist/town-map.js`, `dist/map-view.js` | Large map, bounded pan/zoom, follow marker, responsive destinations, and label visibility |
+| `dist/road-flowers.js` | Deterministic verge planting clear of roads, doors, water, and activities |
+| `dist/town-pets.js` | Twenty instanced cats/dogs, validated road graph, wandering, and approach greetings |
+| `dist/pet-sounds.js` | Local meow/bark synthesis, gesture-based audio activation, and mute control |
 | `dist/camera-clearance.js` | Roof and wall sight lines; gentle automatic camera lift |
 | `dist/navigation.js` | Camera-relative movement, collision checks, and safe positions |
 | `dist/roaming.js` | Destination choice, route planning, and unselected character movement |
@@ -59,7 +62,7 @@ World coordinates use **+x east, +z south, and y up**. The world is 1,360 units 
 
 Characters are identified by their **number**, from 0 through 50. The cast has 51 entries, so its length is not its highest number. Zero has no occupied cube cells but has finite display and navigation dimensions. One through Fifty have exactly their number of unit cubes.
 
-Arrangement changes preserve number identity, exact cube count and the color/outline multiset. Every arrangement uses unique integer grid cells connected through cube faces. `createCrazyArrangement(number, seed)` generates a deterministic bounded random form; Shift + T supplies a fresh seed. Shape metadata labels irregular bodies without treating their bounding rectangle as a filled body. Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits spoken dialogue and bubbles to the selected character. Animal encounters share the same speech pipeline, with global and per-species cooldowns. Swimming stores the absolute feet height in `swimY`; camera, carrying, immersion and character rendering all use that height. Empty trains never advance their motion clock. Switching characters and fast travel disembark before changing the active friend or position.
+Arrangement changes preserve number identity, exact cube count and the color/outline multiset. Every arrangement uses unique integer grid cells connected through cube faces. `createCrazyArrangement(number, seed)` generates a deterministic bounded random form; Shift + T supplies a fresh seed. Shape metadata labels irregular bodies without treating their bounding rectangle as a filled body. Arrangement changes preserve number identity and cube colors. Use the current definition for geometry, collision size, and shape-specific speech. Math facts distinguish a number property, such as 27 being a cube number, from the shape currently being shown. The game limits number dialogue to the selected character; nearby cats and dogs have their own brief greeting bubbles and calls. Pet and number movement share dynamic collision avoidance without adding moving pets to cached static navigation grids. Animal encounters share the same speech pipeline, with global and per-species cooldowns. Swimming stores the absolute feet height in `swimY`; camera, carrying, immersion and character rendering all use that height. Empty trains never advance their motion clock. Switching characters and fast travel disembark before changing the active friend or position.
 
 ## Tests
 

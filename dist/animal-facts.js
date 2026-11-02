@@ -46,6 +46,16 @@ export const ANIMAL_FACTS = Object.freeze(Object.fromEntries(Object.entries({
     'A young duck is called a duckling.',
     'Ducks have feathers that help keep them warm.',
   ],
+  cat: [
+    'A young cat is called a kitten.',
+    'Cats use their whiskers to sense things close to their faces.',
+    'Cats are mammals, just like us.',
+  ],
+  dog: [
+    'A young dog is called a puppy.',
+    'Dogs have a very strong sense of smell.',
+    'Dogs use their tails and body movements to communicate.',
+  ],
   camel: [
     "A camel's hump stores fat.",
     'Camels have broad feet that help them walk on sand.',

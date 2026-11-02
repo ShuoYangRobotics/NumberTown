@@ -5,7 +5,7 @@ import { createSeaLife, SEA_LIFE_COUNTS, fishPose, starPose, turtlePose } from '
 import { createTown } from '../dist/world3d.js';
 
 const species = ['fish', 'sea-star', 'sea-turtle', 'crab', 'sea-urchin', 'coral', 'duck', 'camel', 'meerkat',
-  'monkey', 'toucan', 'mountain-goat', 'arctic-fox', 'cow', 'sheep', 'pig'];
+  'monkey', 'toucan', 'mountain-goat', 'arctic-fox', 'cow', 'sheep', 'pig', 'cat', 'dog'];
 const player = (overrides = {}) => ({ number: 0, x: 0, y: 0, z: 0, height: 1, radius: .6, ...overrides });
 const animal = (overrides = {}) => ({ id: 'fish-1', species: 'fish', x: 3, y: .5, z: 0, radius: .5, ...overrides });
 const seeded = () => {
@@ -13,7 +13,7 @@ const seeded = () => {
   return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
 };
 
-test('all sixteen animal types have distinct, short, immutable fact pools', () => {
+test('all eighteen animal types have distinct, short, immutable fact pools', () => {
   assert.deepEqual(Object.keys(ANIMAL_FACTS).sort(), [...species].sort());
   assert.ok(Object.isFrozen(ANIMAL_FACTS));
   for (const [type, facts] of Object.entries(ANIMAL_FACTS)) {

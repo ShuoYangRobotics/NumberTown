@@ -359,16 +359,37 @@ test('foam and beach-ball ripples sit above the bay without a depth-offset surfa
 });
 
 test('the town map shows the bounded bay and exposes its supplied water-play destination',()=>{
-  const oldDocument=globalThis.document,buttons=[],playerMarker={setAttribute(){}};let selected=null;
-  const container={innerHTML:'',querySelector(selector){return selector==='.map-places'?{append(button){buttons.push(button);}}:playerMarker;}};
-  globalThis.document={createElement(){return{addEventListener(type,callback){this[type]=callback;}};}};
+  const oldDocument=globalThis.document,oldResizeObserver=globalThis.ResizeObserver,buttons=[],elements=new Map();let selected=null;
+  const createElement=()=>({
+    attributes:{},style:{},dataset:{},textContent:'',
+    setAttribute(name,value){this.attributes[name]=value;},
+    addEventListener(type,callback){this[type]=callback;},
+    querySelectorAll(){return[];},
+    getBoundingClientRect(){return{width:1000,height:600,left:0,top:0,right:1000,bottom:600};},
+    append(button){buttons.push(button);},
+  });
+  const container={innerHTML:'',querySelector(selector){
+    if(!elements.has(selector))elements.set(selector,createElement());
+    return elements.get(selector);
+  }};
+  globalThis.document={createElement};
+  globalThis.ResizeObserver=class{
+    constructor(callback){this.callback=callback;}
+    observe(){this.callback();}
+    disconnect(){}
+  };
   try{
-    mountTownMap(container,[BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK],place=>{selected=place;});
+    const map=mountTownMap(container,[BEACH_LANDMARK,WATER_PLAY_LANDMARK,UNDERWATER_LANDMARK],place=>{selected=place;});
     assert.match(container.innerHTML,/WATER PLAY/);assert.match(container.innerHTML,/UNDERWATER GARDEN/);
     assert.match(container.innerHTML,new RegExp(`x="${WATER_PLAY.xMin}" y="${WATER_PLAY.shoreZ}" width="194" height="262"`));
     const button=buttons.find(item=>item.textContent==='Water play');assert.ok(button);button.click();assert.equal(selected,WATER_PLAY_LANDMARK);
     const underwaterButton=buttons.find(item=>item.textContent==='Underwater garden');assert.ok(underwaterButton);underwaterButton.click();assert.equal(selected,UNDERWATER_LANDMARK);
-  }finally{if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
+    map.update({x:125,z:550});assert.match(elements.get('#map-player').attributes.transform,/translate\(125 550\)/);
+    map.destroy();
+  }finally{
+    if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;
+    if(oldResizeObserver===undefined)delete globalThis.ResizeObserver;else globalThis.ResizeObserver=oldResizeObserver;
+  }
 });
 
 

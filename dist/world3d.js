@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import { WORLD, BUILDINGS, TREES, BENCHES, LAMPS, POND, FOUNTAIN, ROAD_SEGMENTS, SQUARE, STATUE, BUNTING } from './world-data.js';
 import { COAST } from './geography.js';
+import { ROAD_FLOWER_BEDS, ROAD_FLOWER_COLORS } from './road-flowers.js';
 
 const COLORS = {
   grass: '#b7cda4', soil: '#dfd0ad', path: '#f3e6cc', edge: '#fff5df',
@@ -48,6 +49,20 @@ function archGeometry() {
   return new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 12 });
 }
 
+function roadsideBlossomGeometry() {
+  // A shallow five-petal cup, just forty triangles per bloom. Thousands of
+  // flowers share this geometry instead of adding individual sphere petals.
+  const positions = [], steps = 40;
+  const edge = i => {
+    const a = i * Math.PI * 2 / steps, r = .75 + .25 * Math.cos(a * 5);
+    return [Math.cos(a) * r, .06, Math.sin(a) * r];
+  };
+  for (let i = 0; i < steps; i++) positions.push(0, .16, 0, ...edge(i + 1), ...edge(i));
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals(); return geometry;
+}
+
 /** A complete toy village. update() takes elapsed time in seconds. */
 export function createTown() {
   const root = new THREE.Group();
@@ -61,6 +76,10 @@ export function createTown() {
     plane: new THREE.PlaneGeometry(1, 1),
     torus: new THREE.TorusGeometry(1, .1, 6, 32),
     roof: gableGeometry(), door: archGeometry(),
+    roadsideBlossom: roadsideBlossomGeometry(),
+    roadsideLeaf: new THREE.OctahedronGeometry(1, 0),
+    roadsideCenter: new THREE.IcosahedronGeometry(1, 0),
+    roadsideBed: new THREE.CircleGeometry(1, 12),
   };
   const materials = new Map(), batches = new Map();
   const dummy = new THREE.Object3D();
@@ -80,7 +99,7 @@ export function createTown() {
     const mat = typeof color === 'string' ? material(color) : color;
     const geo = geometry[shape];
     const key = `${shape}:${mat.uuid}:${cast}`;
-    if (!batches.has(key)) batches.set(key, { geo, mat, cast, matrices: [] });
+    if (!batches.has(key)) batches.set(key, { name: shape, geo, mat, cast, matrices: [] });
     dummy.position.set(x, y, z); dummy.rotation.set(rx, ry, rz); dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
     const matrix = dummy.matrix.clone();
     if (buildingTransform) matrix.premultiply(buildingTransform);
@@ -406,6 +425,28 @@ export function createTown() {
     flower(x, z, COLORS.flowers[i % 4], .42 + (i % 3) * .08, .75);
   }
 
+  // Low, walkable flower pockets frame both sides of the streets. Placement
+  // leaves intersections and doors clear; all parts join static batches.
+  const blossomMaterials = ROAD_FLOWER_COLORS.map(color => material(color, { side: THREE.DoubleSide }));
+  for (const bed of ROAD_FLOWER_BEDS) {
+    put('roadsideBed', '#8da877', bed.x, .052, bed.z, bed.radius, bed.radius, 1, -Math.PI / 2, 0, 0, false);
+    const spread = bed.radius * .56;
+    for (let i = 0; i < bed.bloomCount; i++) {
+      const angle = i * Math.PI * 2 / bed.bloomCount + bed.colorIndex * .65;
+      const x = bed.x + Math.cos(angle) * spread, z = bed.z + Math.sin(angle) * spread;
+      const height = .64 + (i % 3) * .13, size = bed.radius > .6 ? .34 : .23;
+      box(x, height / 2, z, .045, height, .045, '#648d5a', 0, 0, false);
+      const leafOffset = bed.radius > .6 ? .13 : .09, leafWidth = bed.radius > .6 ? .2 : .14;
+      for (const side of [-1, 1]) put('roadsideLeaf', '#648d5a', x + side * leafOffset, height * .48, z,
+        leafWidth, .065, .095, 0, i * .9, side * .28, false);
+      put('roadsideBlossom', blossomMaterials[(bed.colorIndex + i % 2) % blossomMaterials.length], x, height, z,
+        size, size, size, .1, angle, .12, false);
+      put('roadsideCenter', '#efc753', x, height + size * .17, z, size * .3, .07, size * .3, 0, 0, 0, false);
+    }
+  }
+  root.userData.roadFlowers = { beds: ROAD_FLOWER_BEDS.length,
+    blooms: ROAD_FLOWER_BEDS.reduce((sum, bed) => sum + bed.bloomCount, 0) };
+
   // Flags mark the library entrance and remain well above the tall friends.
   cylinder(BUNTING.x1, BUNTING.height / 2, BUNTING.z, .09, BUNTING.height, '#b6a185');
   cylinder(BUNTING.x2, BUNTING.height / 2, BUNTING.z, .09, BUNTING.height, '#b6a185');
@@ -418,8 +459,9 @@ export function createTown() {
     flag.position.set(BUNTING.x1 + 1 + i * (BUNTING.x2 - BUNTING.x1 - 2) / 14, BUNTING.height - .1, BUNTING.z); flag.castShadow = true; root.add(flag); animated.flags.push(flag);
   }
 
-  for (const { geo, mat, cast, matrices } of batches.values()) {
+  for (const { name, geo, mat, cast, matrices } of batches.values()) {
     const mesh = new THREE.InstancedMesh(geo, mat, matrices.length);
+    if (name.startsWith('roadside')) mesh.name = `Road flowers · ${name}`;
     matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
     mesh.instanceMatrix.needsUpdate = true; mesh.castShadow = cast; mesh.receiveShadow = true;
     mesh.computeBoundingSphere(); root.add(mesh);

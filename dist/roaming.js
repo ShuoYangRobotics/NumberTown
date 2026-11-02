@@ -32,7 +32,7 @@ class MinHeap {
 }
 
 /** Incremental NPC walking; user-selected scenic visitors can stay until moved. */
-export function createRoamingController({ obstacles, world, destinations, random = Math.random, shouldStay = () => false }) {
+export function createRoamingController({ obstacles, world, destinations, random = Math.random, shouldStay = () => false, dynamicObstacles = () => [] }) {
   const states = new Map(), queue = [], searches = new Set(), cells = new Map(), globalObstacles = [];
   const bucketSize = 12, originX = Math.floor(world.minX ?? 0), originZ = Math.floor(world.minZ ?? 0);
   const columns = Math.ceil(world.width - originX) + 1, rows = Math.ceil(world.depth - originZ) + 1;
@@ -250,7 +250,7 @@ export function createRoamingController({ obstacles, world, destinations, random
     }
   }
   function nearby(player, players) {
-    return players.filter(other => other !== player && Math.hypot(other.x - player.x, other.z - player.z) < Math.max(12, (player.radius ?? .6) + (other.radius ?? .6) + 2))
+    return [...players,...dynamicObstacles(player)].filter(other => other !== player && Math.hypot(other.x - player.x, other.z - player.z) < Math.max(12, (player.radius ?? .6) + (other.radius ?? .6) + 2))
       .map(other => ({ x: other.x, z: other.z, radius: (other.radius ?? .6) + .08 }));
   }
   function walk(player, s, players, dt, time) {
