@@ -12,10 +12,14 @@ const HOUSE_PALETTES = [
   ['#e2edf4', '#819fb9', '#c4a475'], ['#faf0d8', '#bf9472', '#86a0a2'],
   ['#f8e3cd', '#d49982', '#8dafa4'],
 ];
+// One generous cottage scale for every neighborhood, including the original town.
+// The footprint keeps the 24-unit residential streets open to wide characters.
+const HOUSE_SIZE = Object.freeze({ w: 10.4, d: 8.8, h: 9, roofHeight: 3,
+  doorWidth: 4.4, doorHeight: 6.5 });
 const SPECIAL_BUILDINGS = new Map([
-  ['94,86', { id: 'library', name: 'NUMBER LIBRARY', kind: 'library', x: 88, w: 18, d: 12, h: 6.9, wall: '#fff1d2', roof: '#758ab9', door: '#657d9c', street: 102 }],
-  ['166,86', { id: 'school', name: 'LITTLE SCHOOL', kind: 'school', w: 16, d: 12, h: 5.8, wall: '#f9dfa6', roof: '#db806f', door: '#7c9d88', street: 99 }],
-  ['142,158', { id: 'town-hall', name: 'TOWN HALL', kind: 'hall', w: 14, d: 10, h: 5.5, wall: '#f5e9cd', roof: '#94a8a4', door: '#7e9c98' }],
+  ['94,86', { id: 'library', name: 'NUMBER LIBRARY', kind: 'library', x: 88, w: 18, d: 12, h: 11, doorWidth: 6, doorHeight: 7.5, wall: '#fff1d2', roof: '#758ab9', door: '#657d9c', street: 102 }],
+  ['166,86', { id: 'school', name: 'LITTLE SCHOOL', kind: 'school', w: 16, d: 12, h: 10.5, doorWidth: 6, doorHeight: 7.5, wall: '#f9dfa6', roof: '#db806f', door: '#7c9d88', street: 99 }],
+  ['142,158', { id: 'town-hall', name: 'TOWN HALL', kind: 'hall', w: 14, d: 10, h: 10.5, doorWidth: 6, doorHeight: 7.5, wall: '#f5e9cd', roof: '#94a8a4', door: '#7e9c98' }],
   ['46,110', { id: 'bakery', name: 'SUNSHINE BAKERY', kind: 'bakery', wall: '#ffedce', roof: '#dba06f', door: '#ba8a73' }],
   ['142,110', { id: 'cafe', name: 'HELLO CAFÉ', kind: 'cafe', wall: '#e6f0e7', roof: '#779b91', door: '#859ca0' }],
   ['46,134', { id: 'flowers', name: 'BLOOM', kind: 'shop', wall: '#f7e4e2', roof: '#c58a9b', door: '#9aaf91' }],
@@ -34,8 +38,7 @@ function addHouse(x, z, bank) {
   const [wall, roof, door] = HOUSE_PALETTES[(number - 1) % HOUSE_PALETTES.length];
   const house = { id: `house-${number}`, name: String(number), kind: 'house', bank,
     neighborhood: bank === 'east' ? 'Eastbank Village' : z < 200 ? 'Rainbow Neighborhood' : 'Sunny Lanes',
-    x, z, w: 8.8 + (number % 3) * .4, d: 8.4 + (number % 2) * .4,
-    h: 4.1 + (number % 4) * .16, wall, roof, door, street: z + 12 };
+    x, z, ...HOUSE_SIZE, wall, roof, door, street: z + 12 };
   BUILDINGS.push(house); return house;
 }
 for (const z of [86, 110, 134, 158, 182, 206, 230, 254, 278, 294]) {
@@ -205,7 +208,7 @@ export const LANDMARKS = [
 export const FRIEND_STARTS = [
   [79, 118],
   [72, 112], [81, 110], [90, 108], [99, 110], [108, 112], [70, 124], [110, 124],
-  [72, 136], [87, 151], [99, 140], [90, 145], [108, 136], [78, 150], [60, 125], [102, 150],
+  [72, 136], [87, 150], [99, 140], [90, 145], [108, 136], [78, 150], [60, 125], [102, 150],
   [79, 125], [66, 141], [114, 137], [66, 112], [114, 112],
   [81, 140], [101, 123], [72, 145], [108, 104], [62, 119],
   [101, 117], [59, 131], [66, 131], [101, 131], [115, 131],

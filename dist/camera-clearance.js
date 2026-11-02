@@ -15,7 +15,7 @@ export function buildingOccluders(buildings, padding = .22) {
     if (![building.x, building.z, building.w, building.d, building.h].every(Number.isFinite)) continue;
     const shop = ['shop', 'bakery', 'cafe'].includes(building.kind);
     const publicBuilding = ['library', 'school', 'hall'].includes(building.kind);
-    const roofHeight = shop ? 3.6 : publicBuilding ? 3 : 2.3;
+    const roofHeight = building.roofHeight ?? (shop ? 3.6 : publicBuilding ? 3 : 2.3);
     add(building, 'walls', building.x, building.z, building.w + .38, building.d + .38, 0, building.h + .2);
     // Keep the overhanging roof separate: an eave is not a wall down to ground.
     add(building, 'roof', building.x, building.z, building.w + 1.1, building.d + 1.15, building.h + .1, building.h + roofHeight + .2);

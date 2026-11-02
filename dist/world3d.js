@@ -126,14 +126,15 @@ export function createTown() {
   for (let z = SQUARE.z - SQUARE.d / 2 + 4; z < SQUARE.z + SQUARE.d / 2; z += 4) box(SQUARE.x, .057, z, SQUARE.w - 2, .015, .045, '#e9dcbf', 0, 0, false);
   // Door paths join the broad street network. They are shallow and walkable.
   for (const b of BUILDINGS) {
+    const approachWidth = b.doorWidth ? b.doorWidth + (b.kind === 'house' ? 1.6 : 4) : b.kind === 'library' ? 9 : 3.7;
     if (b.facing === 'north') {
       const front = b.z - b.d / 2;
-      path(b.x, (front + b.street) / 2, 3.7, front - b.street + .6, COLORS.path, .034);
+      path(b.x, (front + b.street) / 2, approachWidth, front - b.street + .6, COLORS.path, .034);
       continue;
     }
     const front = b.z + b.d / 2;
     const street = b.street;
-    if (street > front) path(b.x, (front + street) / 2, b.doorWidth ? 16 : b.kind === 'library' ? 9 : 3.7, street - front + .6, COLORS.path, .034);
+    if (street > front) path(b.x, (front + street) / 2, approachWidth, street - front + .6, COLORS.path, .034);
   }
 
   function orientedBox(x, y, z, ox, oy, oz, w, h, d, color, ry) {
@@ -195,7 +196,8 @@ export function createTown() {
     const front = b.z + b.d / 2, back = b.z - b.d / 2;
     const publicBuilding = ['library', 'school', 'hall'].includes(b.kind);
     const isShop = ['bakery', 'cafe', 'shop'].includes(b.kind);
-    const roofH = isShop ? 3.6 : publicBuilding ? 3 : 2.3;
+    const isHouse = b.kind === 'house';
+    const roofH = b.roofHeight ?? (isShop ? 3.6 : publicBuilding ? 3 : 2.3);
     box(b.x, .18, b.z, b.w + .35, .36, b.d + .35, '#e6d4b6');
     box(b.x, b.h / 2 + .17, b.z, b.w, b.h, b.d, b.wall);
     box(b.x, b.h - .05, b.z, b.w + .38, .25, b.d + .38, COLORS.trim);
@@ -210,20 +212,22 @@ export function createTown() {
     put('door', COLORS.trim, b.x, .22, front + .04, doorW + .28, doorH + .16, .18);
     put('door', b.door, b.x, .24, front + .23, doorW, doorH, .08);
     box(b.x, .18, front + .45, doorW + .65, .2, .9, '#e1d1b7');
-    ball(b.x + doorW * .28, 1.4, front + .38, .08, .08, .08, '#d2b775');
-    if (publicBuilding) box(b.x, 1.8, front + .34, .045, 2.9, .05, COLORS.trim);
+    const knobSize = .13;
+    ball(b.x + doorW * .28, doorH * .46, front + .38, knobSize, knobSize, knobSize, '#d2b775');
+    if (publicBuilding) box(b.x, doorH * .47 + .24, front + .34, .08, doorH * .9, .05, COLORS.trim);
     for (const dx of [-1, 1]) {
-      windowAt(b.x + dx * b.w * (isShop ? .38 : .29), b.h * .49 + .25, front + .1, isShop ? 3.4 : publicBuilding ? 2.1 : 1.55, isShop ? 7 : publicBuilding ? 2.25 : 1.7);
-      windowAt(b.x + dx * b.w * .26, b.h * .48 + .25, back - .1, 1.55, 1.8, Math.PI);
-      for (const dz of [-1, 1]) windowAt(b.x + dx * (b.w / 2 + .1), b.h * .48 + .25, b.z + dz * b.d * .23, 1.45, 1.75, dx * Math.PI / 2);
+      windowAt(b.x + dx * b.w * (isShop ? .38 : isHouse ? .36 : .34), b.h * .49 + .25, front + .1, isShop ? 3.4 : publicBuilding ? 2.5 : 1.8, isShop ? 7 : publicBuilding ? 4.5 : 4.2);
+      windowAt(b.x + dx * b.w * .26, b.h * .48 + .25, back - .1, isShop ? 1.55 : 2.3, isShop ? 1.8 : 3.8, Math.PI);
+      for (const dz of [-1, 1]) windowAt(b.x + dx * (b.w / 2 + .1), b.h * .48 + .25, b.z + dz * b.d * .23, isShop ? 1.45 : 2.1, isShop ? 1.75 : 3.8, dx * Math.PI / 2);
     }
-    put('circle', COLORS.trim, b.x, b.h + 1.0, front + .57, .67, .67, 1, 0, 0, 0, false);
-    put('circle', COLORS.darkGlass, b.x, b.h + 1.0, front + .58, .48, .48, 1, 0, 0, 0, false);
-    box(b.x, b.h + 1.0, front + .6, .08, .95, .05, COLORS.trim);
-    box(b.x, b.h + 1.0, front + .6, .95, .08, .05, COLORS.trim);
-    if (b.kind === 'house') {
-      makeSign(b.name, b.x + doorW / 2 + .55, 2.2, front + .2, .5, .5);
-      planter(b.x - b.w * .3, front + .45, 1.85, .65, index);
+    const gableY = b.h + (isHouse ? 1.3 : 1), gableScale = isHouse ? 1.25 : 1;
+    put('circle', COLORS.trim, b.x, gableY, front + .57, .67 * gableScale, .67 * gableScale, 1, 0, 0, 0, false);
+    put('circle', COLORS.darkGlass, b.x, gableY, front + .58, .48 * gableScale, .48 * gableScale, 1, 0, 0, 0, false);
+    box(b.x, gableY, front + .6, .08, .95 * gableScale, .05, COLORS.trim);
+    box(b.x, gableY, front + .6, .95 * gableScale, .08, .05, COLORS.trim);
+    if (isHouse) {
+      makeSign(b.name, b.x, doorH + 1, front + .2, .85, .65);
+      planter(b.x - b.w * .36, front + .45, 2.2, .65, index);
     } else {
       makeSign(b.name, b.x, b.h - .62, front + .29, Math.min(b.w - .7, isShop ? 21 : b.kind === 'library' ? 12 : 8.8), isShop ? 1.2 : .75);
     }
@@ -237,9 +241,10 @@ export function createTown() {
         box(x, awningY - .22, front + 1.25, awningW / segments, .32, .12, i % 2 ? COLORS.trim : stripe);
       }
     }
-    if (index % 3 !== 1) {
-      box(b.x + b.w * .27, b.h + roofH * .72, b.z - b.d * .2, .75, 1.5, .75, '#c4a38e');
-      box(b.x + b.w * .27, b.h + roofH * .72 + .78, b.z - b.d * .2, .95, .2, .95, '#e1c7ae');
+    if (isHouse || index % 3 !== 1) {
+      const chimneyScale = isHouse ? 1.25 : 1;
+      box(b.x + b.w * .27, b.h + roofH * .72, b.z - b.d * .2, .75 * chimneyScale, 1.5 * chimneyScale, .75 * chimneyScale, '#c4a38e');
+      box(b.x + b.w * .27, b.h + roofH * .72 + .78 * chimneyScale, b.z - b.d * .2, .95 * chimneyScale, .2, .95 * chimneyScale, '#e1c7ae');
     }
     if (b.kind === 'library') {
       // A little book crest above the library's round window.
