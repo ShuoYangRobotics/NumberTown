@@ -43,7 +43,8 @@ Paths below are relative to the repository root.
 | `dist/town-map.js`, `dist/map-view.js` | Large map, bounded pan/zoom, follow marker, responsive destinations, and label visibility |
 | `dist/road-flowers.js` | Deterministic verge planting clear of roads, doors, water, and activities |
 | `dist/town-pets.js` | Twenty instanced cats/dogs, validated road graph, wandering, and approach greetings |
-| `dist/pet-sounds.js` | Local meow/bark synthesis, gesture-based audio activation, and mute control |
+| `dist/assets/audio/` | Bundled CC0 dog recording and source/license credits |
+| `dist/pet-sounds.js` | Recorded dog barks, generated meows, gesture-based activation, and cancellation of playing/pending audio |
 | `dist/camera-clearance.js` | Roof and wall sight lines; gentle automatic camera lift |
 | `dist/navigation.js` | Camera-relative movement, collision checks, and safe positions |
 | `dist/roaming.js` | Destination choice, route planning, and unselected character movement |
@@ -98,4 +99,6 @@ See the [playing guide](PLAYING.md) for the expected controls and activities.
 
 The current geographic bounds are x = −320 to 1040, z = −90 to 690. `WORLD.width` remains the east boundary; use `WORLD.width - WORLD.minX` for the horizontal span. Houses/stores are generated in `world-data.js`, and each bank’s counts appear in `?debug=1` diagnostics. The train park’s authored scenery is offset through `TRAIN_PARK_OFFSET`, while all public coordinates and physics use world space.
 
-Number encounters use body-edge distance and vertical separation. Only the active visible character speaks, with a shared 12-second quiet interval, a 45-second unordered-pair cooldown, and alternating solo/nearby math. Named voices must be recognized natural English voices; browser-default English is the fallback.
+Number encounters use body-edge distance and vertical separation. Only the active visible character speaks, with a shared 12-second quiet interval, a 45-second unordered-pair cooldown, and alternating solo/nearby math. Named voices must be recognized natural English voices; browser-default English is the fallback. Speaker identities are deduplicated across quality variants, preferring premium/enhanced local voices. Each of the 51 characters has a stable pitch/pace combination, within pitch 0.90–1.16 and rate 0.90–1.08, at full volume. Adjacent profiles contrast even with one installed voice.
+
+Dog greetings use `dist/assets/audio/dog-bark.wav`, a bundled recording decoded once when sound is enabled. A pending greeting is canceled if sound is muted, the friend changes, or another pet call replaces it. The debug panel shows `pets.audio.bark` (`idle`, `loading`, `ready`, or `unavailable`) and pending/playing state. Fetch or decoding failure leaves the game and cat calls working.

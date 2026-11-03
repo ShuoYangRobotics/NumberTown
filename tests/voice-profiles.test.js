@@ -10,7 +10,7 @@ const voices = Object.freeze([
 ]);
 const sound = ({ pitch, rate, volume }) => ({ pitch, rate, volume });
 
-test('all 51 friends have stable, distinct, audible settings close to natural speech', () => {
+test('all 51 friends have stable, distinct timbre and pace at full volume', () => {
   assert.deepEqual(CHARACTERS.map(character => character.number), Array.from({ length: 51 }, (_, i) => i));
   const profiles = CHARACTERS.map(({ number }) => getVoiceProfile(number));
   assert.equal(new Set(profiles.map(profile => JSON.stringify(sound(profile)))).size, CHARACTERS.length);
@@ -21,9 +21,25 @@ test('all 51 friends have stable, distinct, audible settings close to natural sp
     assert.deepEqual(profile, getVoiceProfile(String(number)));
     assert.ok(Object.isFrozen(profile));
     assert.equal(profile.voice, null); assert.equal(profile.lang, 'en-US');
-    assert.ok(profile.pitch >= .97 && profile.pitch <= 1.03, 'pitch for ' + number);
-    assert.ok(profile.rate >= .95 && profile.rate <= 1, 'rate for ' + number);
-    assert.ok(profile.volume >= .92 && profile.volume <= 1, 'volume for ' + number);
+    assert.ok(profile.pitch >= .90 && profile.pitch <= 1.16, 'comfortable pitch for ' + number);
+    assert.ok(profile.rate >= .90 && profile.rate <= 1.08, 'clear speaking pace for ' + number);
+    assert.equal(profile.volume, 1, 'full audible volume for ' + number);
+  }
+});
+
+test('neighboring numbers contrast audibly even when only one natural voice is installed', () => {
+  const profiles = CHARACTERS.map(({ number }) => getVoiceProfile(number, [voices[0]]));
+  assert.equal(new Set(profiles.map(profile => profile.voice)).size, 1);
+  assert.equal(new Set(profiles.map(({ pitch, rate }) => `${pitch}:${rate}`)).size, 51,
+    'uniqueness must come from timbre and pace, never from volume');
+  for (let number = 1; number < profiles.length; number++) {
+    const previous = profiles[number - 1], current = profiles[number];
+    assert.ok(Math.abs(current.pitch - previous.pitch) >= .079 || Math.abs(current.rate - previous.rate) >= .089,
+      `${number - 1} and ${number} need a perceptible pitch or pace change`);
+  }
+  for (const [first, second] of [[16, 28], [28, 40], [16, 40]]) {
+    assert.ok(Math.abs(profiles[first].pitch - profiles[second].pitch) >= .079,
+      `${first} and ${second} should have clearly different natural timbres`);
   }
 });
 
@@ -41,6 +57,15 @@ test('natural local English identities are stable across list order and duplicat
     }
   }
   assert.deepEqual([...selected].sort(), ['Daniel', 'Karen', 'Samantha']);
+});
+
+test('timbre groups rotate native speakers instead of repeating a six-character cycle', () => {
+  for (const natural of [voices.slice(0, 3), [...voices.slice(0, 3), voice('Moira', 'en-IE'), voice('Tessa', 'en-ZA'), voice('Alex')]]) {
+    assert.equal(new Set([16, 28, 40].map(number => getVoiceProfile(number, natural).voice)).size, 3,
+      'Sixteen, Twenty-Eight and Forty should use different natural speakers');
+    const warmGroup = [1, 7, 13].map(number => getVoiceProfile(number, natural).voice);
+    assert.equal(new Set(warmGroup).size, 3, 'repeating timbres should still rotate speakers');
+  }
 });
 
 test('novelty, whispering, singing and robotic voices are never selected', () => {
@@ -93,6 +118,35 @@ test('ordinary platform voice variants and normalized English language tags rema
     assert.ok(!profile.lang.includes('_'));
   }
   for (const lang of ['english', 'den-US', '', 'fr-FR']) assert.equal(getVoiceProfile(0, [voice('Samantha', lang)]).voice, null);
+});
+
+test('quality variants of the same speaker do not occupy multiple character voices', () => {
+  const samantha = voice('Samantha', 'en-US', true, { voiceURI: 'com.apple.voice.compact.en-US.Samantha' });
+  const enhanced = voice('Samantha (Enhanced)', 'en_US', true, { voiceURI: 'com.apple.voice.enhanced.en-US.Samantha' });
+  const premium = voice('Samantha (Premium)', 'en-US', true, { voiceURI: 'com.apple.voice.premium.en-US.Samantha' });
+  const david = voice('Microsoft David Desktop - English (United States)');
+  const davidNeural = voice('Microsoft David (Natural) - English (United States)');
+  const natural = [samantha, enhanced, premium, david, davidNeural, voices[1]];
+  const expected = new Set([premium, davidNeural, voices[1]]);
+  const chosen = new Set();
+  for (const { number } of CHARACTERS) {
+    const profile = getVoiceProfile(number, natural);
+    chosen.add(profile.voice);
+    assert.ok(expected.has(profile.voice));
+    assert.deepEqual(profile, getVoiceProfile(number, [...natural].reverse()));
+    assert.deepEqual(profile, getVoiceProfile(number, [...natural, enhanced, { ...premium }]));
+    if (number > 0) assert.notEqual(profile.voice, getVoiceProfile(number - 1, natural).voice);
+  }
+  assert.deepEqual(chosen, expected);
+});
+
+test('deduplication prefers reliable local speech and resolves equal-quality variants deterministically', () => {
+  const local = voice('Microsoft Aria Desktop - English (United States)');
+  const online = voice('Microsoft Aria Online (Natural) - English (United States)', 'en-US', false);
+  const alpha = voice('Samantha (Enhanced)', 'en-US', false, { voiceURI: 'samantha-a' });
+  const beta = voice('Samantha (Enhanced)', 'en-US', undefined, { voiceURI: 'samantha-b', localService: undefined });
+  for (const order of [[online, local], [local, online]]) assert.equal(getVoiceProfile(40, order).voice, local);
+  for (const order of [[alpha, beta], [beta, alpha]]) assert.equal(getVoiceProfile(16, order).voice, alpha);
 });
 
 test('late voice availability keeps settings stable, Zero is distinct, and invalid identities use One', () => {
