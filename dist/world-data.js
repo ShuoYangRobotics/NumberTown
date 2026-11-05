@@ -93,6 +93,34 @@ for (const [bank, market] of Object.entries(MARKETS)) {
 for (const z of MARKETS.west.rows) for (const x of [-290, -250]) {
   const house = addHouse(x, z, 'west'); house.street = z + 24; house.neighborhood = 'Orchard Lane';
 }
+// Five cottages face the existing southern market promenade; another five
+// finish the eastern market streets without crowding the train park entrance.
+for (const x of [-290, -250, -190, -140, -90]) {
+  const house = addHouse(x, 344, 'west');
+  house.facing = 'north'; house.street = 330; house.neighborhood = 'Sunset Cottages';
+}
+for (const z of MARKETS.east.rows) {
+  const house = addHouse(595, z, 'east');
+  house.street = z + 24; house.neighborhood = 'East Market Cottages';
+}
+
+const blobHomeLots = new Set(['70,86', '118,86', '70,158', '94,158', '118,158',
+  '22,110', '190,134', '287,110', '311,206', '-290,98']);
+/** A straight, visible entrance corridor, shared by the houses and residents.
+ * Only this home's collision id may be bypassed between doorstep and inside;
+ * the ordinary road and every other building remain solid. +z faces south.
+ */
+export const NUMBERBLOB_HOMES = Object.freeze(BUILDINGS.filter(building => building.kind === 'house'
+  && (Number(building.name) > 80 || blobHomeLots.has(`${building.x},${building.z}`))).map(building => {
+  building.numberblobHome = true;
+  const facing = building.facing ?? 'south', direction = facing === 'north' ? -1 : 1;
+  const front = building.z + direction * building.d / 2;
+  return Object.freeze({ id: building.id, bank: building.bank, facing,
+    approach: Object.freeze({ x: building.x, z: building.street }),
+    doorstep: Object.freeze({ x: building.x, z: front + direction * 1.25 }),
+    inside: Object.freeze({ x: building.x, z: front - direction * 2.2 }),
+    doorWidth: building.doorWidth, doorHeight: building.doorHeight });
+}));
 
 // Center-line road segments never extend past their declared end points.
 export const ROAD_SEGMENTS = [];
@@ -198,12 +226,13 @@ export const LANDMARKS = [
   { id: 'school', name: 'Little school', description: 'Learn something new with your friends.', x: 166, z: 96, radius: 9, arrival: { x: 166, z: 99 } },
   { id: 'bakery', name: 'Bakery', description: 'Something sweet is baking in the spacious West Market.', x: -190, z: 117, radius: 13, arrival: { x: -190, z: 122 } },
   { id: 'cafe', name: 'Café', description: 'Stop by for a friendly hello.', x: -140, z: 117, radius: 13, arrival: { x: -140, z: 122 } },
-  { id: 'neighborhoods', name: 'Rainbow neighborhood', description: 'Follow colorful rooftops through sixty westbank homes.', x: 154, z: 230, radius: 20, arrival: { x: 154, z: 242 } },
+  { id: 'neighborhoods', name: 'Rainbow neighborhood', description: 'Follow colorful rooftops through sixty-five westbank homes.', x: 154, z: 230, radius: 20, arrival: { x: 154, z: 242 } },
   { id: 'sunny-lanes', name: 'Sunny Lanes', description: 'Little homes and leafy streets lead toward the hill.', x: 130, z: 278, radius: 20, arrival: { x: 130, z: 290 } },
   { id: 'market', name: 'West Market', description: 'Twenty roomy shops with wide promenades and colorful awnings.', x: -115, z: 218, radius: 45, arrival: { x: -115, z: 218 } },
   { id: 'east-market', name: 'East Market', description: 'Ten more stores between Wheel Park and the Discovery Train.', x: 515, z: 218, radius: 45, arrival: { x: 515, z: 218 } },
   { id: 'orchard-lane', name: 'Orchard Lane', description: 'Ten new homes at the western edge of town.', x: -270, z: 218, radius: 30, arrival: { x: -270, z: 218 } },
-  { id: 'eastbank', name: 'Eastbank Village', description: 'Twenty more colorful homes across the river.', x: 294, z: 218, radius: 24, arrival: { x: 294, z: 218 } },
+  { id: 'numberblob-homes', name: 'Numberblob homes', description: 'Meet the little residents hopping along the cottage paths and through their open front doors.', x: -250, z: 344, radius: 25, arrival: { x: -250, z: 330 } },
+  { id: 'eastbank', name: 'Eastbank Village', description: 'Twenty-five colorful homes across the river.', x: 294, z: 218, radius: 24, arrival: { x: 294, z: 218 } },
 ];
 export const FRIEND_STARTS = [
   [79, 118],

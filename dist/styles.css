@@ -73,3 +73,6 @@
 
 /* Brief pet greetings stay attached to the animal. */
 .pet-speech{min-width:82px;max-width:160px;padding:9px 14px;font-size:17px;font-weight:750;background:#fff8e5;border-color:#f1dba9;z-index:3}.pet-speech::after{background:#fff8e5}.pet-speech .speaker{font-size:7px;color:#a27d4f}
+
+/* Only the nearby speaking resident gets a temporary bubble. */
+.blob-speech{max-width:280px;min-width:150px;background:#eefbfa;border-color:#9cd4cf;font-size:13px;line-height:1.5;z-index:3}.blob-speech::after{background:#eefbfa}.blob-speech .speaker{color:#347f7a}

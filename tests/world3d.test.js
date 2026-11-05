@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS, SQUARE, STATUE, POND } from '../dist/world-data.js';
+import { WORLD, OBSTACLES, LANDMARKS, FRIEND_STARTS, BUILDINGS, BUILDING_APPROACHES, EXPANSION_CONNECTIONS, ROAD_SEGMENTS, SQUARE, STATUE, POND, NUMBERBLOB_HOMES } from '../dist/world-data.js';
 import { BRIDGES, riverX, riverWidth } from '../dist/geography.js';
 import { createTown } from '../dist/world3d.js';
 import { getCharacterArrangements } from '../dist/arrangements.js';
 import { CHARACTERS, getCharacterMetrics } from '../dist/character-data.js';
-import { Matrix4, Vector3 } from '../dist/vendor/three.module.js';
+import { Matrix4, Vector3, Raycaster } from '../dist/vendor/three.module.js';
+import { collides } from '../dist/navigation.js';
 
 // Check the widest funny form as well as the original cast. The route check uses a separate
 // occupancy grid, so a safe-looking destination cannot conceal a sealed route.
@@ -82,10 +83,10 @@ test('landmark arrivals and all neighborhoods connect to the town square for a w
   }
 });
 
-test('the expanded banks have sixty west homes, twenty east homes, and thirty spacious stores', () => {
+test('the expanded banks have sixty-five west homes, twenty-five east homes, and thirty spacious stores', () => {
   assert.deepEqual(WORLD, { width: 1040, depth: 690, minX: -320, minZ: -90, margin: 2 });
-  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'west').length, 60);
-  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'east').length, 20);
+  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'west').length, 65);
+  assert.equal(BUILDINGS.filter(b => b.kind === 'house' && b.bank === 'east').length, 25);
   assert.equal(BUILDINGS.filter(b => ['shop', 'bakery', 'cafe'].includes(b.kind)).length, 30);
   for (const [bank, count] of [['west', 20], ['east', 10]]) {
     const shops = BUILDINGS.filter(b => ['shop','bakery','cafe'].includes(b.kind) && b.bank === bank);
@@ -104,14 +105,62 @@ test('the expanded banks have sixty west homes, twenty east homes, and thirty sp
   assert.equal(SQUARE.w, 64); assert.equal(SQUARE.d, 56);
   for (const b of BUILDINGS) {
     const o = OBSTACLES.find(obstacle => obstacle.id === b.id);
-    if (b.bank === 'west') assert.ok(o.x >= WORLD.minX + 2 && o.x + o.w <= 214 && o.z >= 78 && o.z + o.d <= 304, `${b.id} leaves the west town bounds`);
-    else assert.ok(o.x >= 270 && o.x + o.w < 600 && o.z >= 78, `${b.id} enters the river or reserved activity area`);
+    if (b.bank === 'west') assert.ok(o.x >= WORLD.minX + 2 && o.x + o.w <= 214 && o.z >= 78 && o.z + o.d <= 350, `${b.id} leaves the west town bounds`);
+    else assert.ok(o.x >= 270 && o.x + o.w < 610 && o.z >= 78, `${b.id} enters the river or reserved activity area`);
     const overlapsSquare = o.x < SQUARE.x + SQUARE.w / 2 && o.x + o.w > SQUARE.x - SQUARE.w / 2 &&
       o.z < SQUARE.z + SQUARE.d / 2 && o.z + o.d > SQUARE.z - SQUARE.d / 2;
     assert.equal(overlapsSquare, false, `${b.id} intrudes into the square`);
   }
   assert.equal(POND.rx, 17); assert.equal(POND.rz, 12);
   assert.ok(ROAD_SEGMENTS.every(r => Math.min(r.z1, r.z2) >= 78), 'Town roads must stay south of the mountains');
+});
+
+test('twenty Numberblob homes connect their doorways to existing streets without crossing other scenery', () => {
+  assert.equal(NUMBERBLOB_HOMES.length, 20);
+  assert.equal(new Set(NUMBERBLOB_HOMES.map(home => home.id)).size, 20);
+  assert.equal(NUMBERBLOB_HOMES.filter(home => Number(home.id.slice(6)) > 80).length, 10);
+  const profiles = BUILDINGS.filter(b => b.kind === 'house').map(({ w, d, h, roofHeight, doorWidth, doorHeight }) =>
+    JSON.stringify({ w, d, h, roofHeight, doorWidth, doorHeight }));
+  assert.equal(new Set(profiles).size, 1, 'all ninety cottages retain the same generous scale');
+  for (const home of NUMBERBLOB_HOMES) {
+    const building = BUILDINGS.find(b => b.id === home.id);
+    assert.ok(building.numberblobHome);
+    assert.ok(ROAD_SEGMENTS.some(road => Math.abs(road.z1 - road.z2) < 1e-9
+      && Math.abs(home.approach.z - road.z1) < 1e-9
+      && home.approach.x >= Math.min(road.x1, road.x2) && home.approach.x <= Math.max(road.x1, road.x2))
+      || (Math.abs(home.approach.x - SQUARE.x) <= SQUARE.w / 2 && Math.abs(home.approach.z - SQUARE.z) <= SQUARE.d / 2),
+    `${home.id} approach must join the street or the paved square`);
+    assert.equal(collides(home.doorstep.x, home.doorstep.z, OBSTACLES, WORLD, .55), false);
+    assert.ok(collides(home.inside.x, home.inside.z, OBSTACLES, WORLD, .55), 'the home stays solid to ordinary character navigation');
+    const passageObstacles = OBSTACLES.filter(o => o.id !== home.id);
+    for (let step = 0; step <= 60; step++) {
+      const t = step / 60, x = home.approach.x + (home.inside.x - home.approach.x) * t;
+      const z = home.approach.z + (home.inside.z - home.approach.z) * t;
+      assert.equal(collides(x, z, passageObstacles, WORLD, .55), false, `${home.id} entrance meets other scenery`);
+    }
+  }
+});
+
+test('Numberblob doorways are actual open geometry with a low floor and visible side walls', () => {
+  const town = createTown(); town.root.updateWorldMatrix(true, true);
+  const walls = town.root.children.filter(mesh => mesh.isInstancedMesh
+    && ['BoxGeometry', 'ExtrudeGeometry'].includes(mesh.geometry.type));
+  const ray = new Raycaster();
+  for (const home of NUMBERBLOB_HOMES) {
+    const building = BUILDINGS.find(b => b.id === home.id);
+    const inward = home.facing === 'north' ? 1 : -1;
+    const distance = Math.abs(home.inside.z - home.doorstep.z);
+    for (const offset of [-.55, 0, .55]) for (const height of [.12, .6, 1.1]) {
+      ray.set(new Vector3(home.doorstep.x + offset, height, home.doorstep.z), new Vector3(0, 0, inward));
+      ray.near = 0; ray.far = distance;
+      assert.equal(ray.intersectObjects(walls, false).length, 0, `${home.id} resident corridor is visibly blocked at ${offset},${height}`);
+    }
+    for (const side of [-1, 1]) {
+      ray.set(new Vector3(building.x + side * 3.2, .8, home.doorstep.z), new Vector3(0, 0, inward));
+      ray.near = 0; ray.far = distance;
+      assert.ok(ray.intersectObjects(walls, false).length > 0, `${home.id} must retain a solid wall beside the opening`);
+    }
+  }
 });
 
 test('the centerpiece is a real 27-cubie statue with six tiled faces and a solid pedestal', () => {

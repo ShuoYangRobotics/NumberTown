@@ -44,6 +44,8 @@ Paths below are relative to the repository root.
 | `dist/road-flowers.js` | Deterministic verge planting clear of roads, doors, water, and activities |
 | `dist/town-pets.js` | Twenty instanced cats/dogs, validated road graph, wandering, and approach greetings |
 | `dist/assets/audio/` | Bundled CC0 dog recording and source/license credits |
+| `dist/numberblobs.js` | Ninety instanced bouncing residents, shared road graph, home entrance routes, and proximity greetings |
+| `dist/numberblob-dialogue.js` | Thirty shuffled responses, readable math, and separate robot speech profiles |
 | `dist/pet-sounds.js` | Recorded dog barks, generated meows, gesture-based activation, and cancellation of playing/pending audio |
 | `dist/camera-clearance.js` | Roof and wall sight lines; gentle automatic camera lift |
 | `dist/navigation.js` | Camera-relative movement, collision checks, and safe positions |
@@ -102,3 +104,7 @@ The current geographic bounds are x = −320 to 1040, z = −90 to 690. `WORLD.w
 Number encounters use body-edge distance and vertical separation. Only the active visible character speaks, with a shared 12-second quiet interval, a 45-second unordered-pair cooldown, and alternating solo/nearby math. Named voices must be recognized natural English voices; browser-default English is the fallback. Speaker identities are deduplicated across quality variants, preferring premium/enhanced local voices. Each of the 51 characters has a stable pitch/pace combination, within pitch 0.90–1.16 and rate 0.90–1.08, at full volume. Adjacent profiles contrast even with one installed voice.
 
 Dog greetings use `dist/assets/audio/dog-bark.wav`, a bundled recording decoded once when sound is enabled. A pending greeting is canceled if sound is muted, the friend changes, or another pet call replaces it. The debug panel shows `pets.audio.bark` (`idle`, `loading`, `ready`, or `unavailable`) and pending/playing state. Fetch or decoding failure leaves the game and cat calls working.
+
+Numberblob homes share `NUMBERBLOB_HOMES` entrance metadata with the hollow house models. Ordinary characters still collide with whole houses. A blob may ignore only its destination house obstacle while following its own validated doorway corridor; other walls, water and residents stay solid. The simulation reuses the pets’ road graph instead of running ninety path searches each frame. Numberblobs are residents, not selectable Numberblocks, and do not contribute to cube totals. Their thirty-response shuffled bag is shared across the town. Blob greetings and selected-character facts share the speech channel and alternate, with global/per-resident cooldowns. The debug panel exposes resident positions, movement and home visits under `numberblobs`.
+
+The original user-supplied Numberblob pictures are archived unchanged in `references/numberblobs/`.

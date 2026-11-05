@@ -45,7 +45,7 @@ Friends you take onto Sunny Hill or the mountain route **stay where you leave th
 
 ## Places and activities
 
-The world spans **1,360 × 780 units**, with **80 houses**: 60 on the west bank and 20 on the east bank. There are also **30 stores**: 20 west and 10 east, and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks and in the expanded southern sea.
+The world spans **1,360 × 780 units**, with **90 houses**: 65 on the west bank and 25 on the east bank. There are also **30 stores**: 20 west and 10 east, and **3 public buildings**: the library, school, and town hall. Use the map to find destinations on both banks and in the expanded southern sea.
 
 - **Town square:** a colorful Rubik’s cube statue balances on one corner and spins at 50 degrees per second, completing a turn every 7.2 seconds.
 - **Duck pond and gardens:** follow the shore, watch the ducks, and explore the flowers and paths.
@@ -88,6 +88,14 @@ Forty-One through Fifty join the town with their reference colors and accessorie
 
 For numbers above 30, the first eight **T** transformations are a diamond, butterfly wings, picture frame, robot, rocket, puppy, 3D castle, and 3D bridge. Rectangles, tens-and-ones shapes, and connected crazy forms remain in the cycle. Every shape keeps the exact number and colors of its cubes.
 
-The town now has **60 west-bank homes and 20 east-bank homes**, plus **20 stores in West Market and 10 in East Market**. Wider shop fronts, forecourts, promenades, and bridges give large friends more room. The train park is farther east beyond East Market.
+The town now has **65 west-bank homes and 25 east-bank homes**, plus **20 stores in West Market and 10 in East Market**. Wider shop fronts, forecourts, promenades, and bridges give large friends more room. The train park is farther east beyond East Market.
 
-Only your selected friend talks. Clear natural English voices use comfortable pitch, pace, and volume; the precise voice depends on your browser. Math remarks vary addition splits (such as 11 + 19 = 30) and explain exact subtraction or division. Meeting nearby friends occasionally starts a calculation involving both numbers, such as 30 × 5 = 150 or 30 ÷ 5 = 6. Division never uses zero as a divisor, and subtraction answers stay nonnegative.
+Only your selected Numberblock shares number facts; nearby Numberblobs can answer with their own greetings. Clear natural English voices use comfortable pitch, pace, and volume; the precise voice depends on your browser. Math remarks vary addition splits (such as 11 + 19 = 30) and explain exact subtraction or division. Meeting nearby friends occasionally starts a calculation involving both numbers, such as 30 × 5 = 150 or 30 ÷ 5 = 6. Division never uses zero as a divisor, and subtraction answers stay nonnegative.
+
+## Numberblob neighbors
+
+Ninety colorful Numberblobs live in town. Their round bodies are one cube across, with two raised eyes and opening mouths. They bounce along the streets, pause to chat, and enter and leave twenty homes through open doors. The ten new cottages bring the total to ninety houses. Find **Numberblob homes** on the map, or look beside the town square and along neighborhood streets.
+
+Walk close to an outdoor blob to receive one of thirty responses about math, weather, mountains, or the sea. They take turns with your selected character, cycle through the whole shuffled response collection before repeating, and do not all speak together. A blob you have already greeted needs a break and a new approach before greeting again. Blobs indoors, far away, or on a different level stay quiet.
+
+The sound button enables their robot voices as well as existing voices and pet sounds. Fred or Zarvox is used when installed; other browsers use clear English with a clipped robot cadence. Numberblocks keep their natural voices. Numberblob mouths move with their speech, and bubbles work even with sound off. Switching characters, asking for a number fact, traveling, or boarding the train stops the previous conversation.

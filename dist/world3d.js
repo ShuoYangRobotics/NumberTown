@@ -217,8 +217,30 @@ export function createTown() {
     const isShop = ['bakery', 'cafe', 'shop'].includes(b.kind);
     const isHouse = b.kind === 'house';
     const roofH = b.roofHeight ?? (isShop ? 3.6 : publicBuilding ? 3 : 2.3);
-    box(b.x, .18, b.z, b.w + .35, .36, b.d + .35, '#e6d4b6');
-    box(b.x, b.h / 2 + .17, b.z, b.w, b.h, b.d, b.wall);
+    const doorW = b.doorWidth || (publicBuilding ? 2.9 : 1.6), doorH = b.doorHeight || (publicBuilding ? 3.25 : 2.55);
+    if (b.numberblobHome) {
+      // These homes are hollow, with a real doorway: residents cross an open
+      // corridor instead of disappearing through a painted door or solid cube.
+      // The floor meets the shallow path rather than forming a blob-sized step.
+      box(b.x, 0, b.z, b.w + .35, .08, b.d + .35, '#dfc998');
+      const wallThickness = .32, sideWidth = (b.w - doorW) / 2;
+      for (const side of [-1, 1]) {
+        box(b.x + side * (b.w / 2 - wallThickness / 2), b.h / 2 + .04, b.z,
+          wallThickness, b.h, b.d, b.wall);
+        box(b.x + side * (doorW / 2 + sideWidth / 2), b.h / 2 + .04, front - wallThickness / 2,
+          sideWidth, b.h, wallThickness, b.wall);
+      }
+      box(b.x, b.h / 2 + .04, back + wallThickness / 2, b.w, b.h, wallThickness, b.wall);
+      box(b.x, (b.h + doorH) / 2 + .04, front - wallThickness / 2,
+        doorW, b.h - doorH, wallThickness, b.wall);
+      box(b.x, b.h - .12, b.z, b.w, .24, b.d, '#dcc6a2');
+      // Warm back walls and a small rug make the open interior easy to read.
+      box(b.x, 2.1, back + .34, b.w - .7, 4, .05, '#c6a876');
+      box(b.x, .045, front - 2.5, doorW - .7, .012, 3.5, '#e5b582');
+    } else {
+      box(b.x, .18, b.z, b.w + .35, .36, b.d + .35, '#e6d4b6');
+      box(b.x, b.h / 2 + .17, b.z, b.w, b.h, b.d, b.wall);
+    }
     box(b.x, b.h - .05, b.z, b.w + .38, .25, b.d + .38, COLORS.trim);
     // The roof has front, back, and two sloped faces; it is never a billboard.
     put('roof', b.roof, b.x, b.h + .12, b.z, b.w + 1.1, roofH, b.d + 1.1);
@@ -227,12 +249,22 @@ export function createTown() {
     for (const dx of [-1, 1]) for (const dz of [-1, 1]) {
       box(b.x + dx * (b.w / 2 - .11), b.h / 2 + .15, b.z + dz * (b.d / 2 - .11), .22, b.h, .22, COLORS.trim);
     }
-    const doorW = b.doorWidth || (publicBuilding ? 2.9 : 1.6), doorH = b.doorHeight || (publicBuilding ? 3.25 : 2.55);
-    put('door', COLORS.trim, b.x, .22, front + .04, doorW + .28, doorH + .16, .18);
-    put('door', b.door, b.x, .24, front + .23, doorW, doorH, .08);
-    box(b.x, .18, front + .45, doorW + .65, .2, .9, '#e1d1b7');
-    const knobSize = .13;
-    ball(b.x + doorW * .28, doorH * .46, front + .38, knobSize, knobSize, knobSize, '#d2b775');
+    if (b.numberblobHome) {
+      for (const side of [-1, 1]) box(b.x + side * (doorW / 2 + .11), doorH / 2 + .04,
+        front + .08, .22, doorH, .24, COLORS.trim);
+      box(b.x, doorH + .15, front + .08, doorW + .44, .22, .24, COLORS.trim);
+      box(b.x, .025, front + .35, doorW + .44, .05, .8, '#e1d1b7');
+      const opening = Math.PI * .42, hingeX = b.x - doorW / 2;
+      put('door', b.door, hingeX + Math.cos(opening) * doorW / 2, .04,
+        front - Math.sin(opening) * doorW / 2, doorW, doorH, .14, 0, opening);
+      ball(hingeX + Math.cos(opening) * doorW * .78 + Math.sin(opening) * .2, doorH * .46,
+        front - Math.sin(opening) * doorW * .78 + Math.cos(opening) * .2, .13, .13, .13, '#d2b775');
+    } else {
+      put('door', COLORS.trim, b.x, .22, front + .04, doorW + .28, doorH + .16, .18);
+      put('door', b.door, b.x, .24, front + .23, doorW, doorH, .08);
+      box(b.x, .18, front + .45, doorW + .65, .2, .9, '#e1d1b7');
+      ball(b.x + doorW * .28, doorH * .46, front + .38, .13, .13, .13, '#d2b775');
+    }
     if (publicBuilding) box(b.x, doorH * .47 + .24, front + .34, .08, doorH * .9, .05, COLORS.trim);
     for (const dx of [-1, 1]) {
       windowAt(b.x + dx * b.w * (isShop ? .38 : isHouse ? .36 : .34), b.h * .49 + .25, front + .1, isShop ? 3.4 : publicBuilding ? 2.5 : 1.8, isShop ? 7 : publicBuilding ? 4.5 : 4.2);

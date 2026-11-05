@@ -127,10 +127,10 @@ test('park, pitch, and every bridge remain connected and walkable in the complet
   }
 });
 
-test('the river separates sixty west-bank homes from twenty east-bank homes and the attractions',()=>{
+test('the river separates sixty-five west-bank homes from twenty-five east-bank homes and the attractions',()=>{
   const west=BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='west');
   const east=BUILDINGS.filter(b=>b.kind==='house'&&b.bank==='east');
-  assert.equal(west.length,60);assert.equal(east.length,20);
+  assert.equal(west.length,65);assert.equal(east.length,25);
   for(const b of west)for(const z of [b.z-b.d/2,b.z,b.z+b.d/2])assert.ok(b.x+b.w/2+2<riverX(z)-riverWidth(z)/2,`${b.id} overlaps west bank`);
   for(const b of east)for(const z of [b.z-b.d/2,b.z,b.z+b.d/2])assert.ok(b.x-b.w/2-2>riverX(z)+riverWidth(z)/2,`${b.id} overlaps east bank`);
   assert.ok(PARK.bounds.minX>riverX(PARK.z)+riverWidth(PARK.z)/2);

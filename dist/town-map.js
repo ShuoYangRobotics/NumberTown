@@ -10,7 +10,7 @@ import {MAP_MAX_ZOOM,fitMapView,clampMapView,zoomMapView,centerMapView,resizeMap
 /** A true plan of the playable geography, built from the world data. */
 export function mountTownMap(container,places,onVisit){
   const roads=ROAD_SEGMENTS.map(r=>`<path d="M${r.x1} ${r.z1}L${r.x2} ${r.z2}" stroke-width="${r.width}"/>`).join('');
-  const buildings=BUILDINGS.map(b=>`<rect x="${b.x-b.w/2}" y="${b.z-b.d/2}" width="${b.w}" height="${b.d}" rx="1" fill="${b.roof}" stroke="#fff9" stroke-width=".8"><title>${b.kind==='house'?`${b.bank} bank house ${b.name}`:b.name}</title></rect>`).join('');
+  const buildings=BUILDINGS.map(b=>`<rect x="${b.x-b.w/2}" y="${b.z-b.d/2}" width="${b.w}" height="${b.d}" rx="1" fill="${b.roof}" stroke="#fff9" stroke-width=".8"><title>${b.kind==='house'?`${b.bank} bank house ${b.name}${b.numberblobHome?' · Numberblob home':''}`:b.name}</title></rect>`).join('');
   const riverPoints=[];
   for(let z=WORLD.minZ;z<=RIVER.endZ;z+=2)riverPoints.push([z,riverX(z),riverWidth(z)/2]);
   const riverPath=riverPoints.map(([z,x,w],i)=>`${i?'L':'M'}${x-w} ${z}`).join(' ')+riverPoints.slice().reverse().map(([z,x,w])=>`L${x+w} ${z}`).join(' ')+'Z';
@@ -22,7 +22,7 @@ export function mountTownMap(container,places,onVisit){
     <div class="map-zoom"><button type="button" data-map="out" aria-label="Zoom out map">−</button><output class="map-scale" aria-label="Map zoom">100%</output><button type="button" data-map="in" aria-label="Zoom in map">+</button></div>
     <button type="button" data-map="fit">Fit entire map</button><button type="button" data-map="follow" aria-pressed="false">Follow me</button>
     <span class="map-key"><span class="map-dot"></span> You are here</span>
-  </div><div class="map-layout"><div class="map-viewport" tabindex="0" role="group" aria-label="Interactive town map" aria-describedby="map-instructions"><svg viewBox="${WORLD.minX} ${WORLD.minZ} ${WORLD.width-WORLD.minX} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: sixty west-bank houses and twenty west-bank stores, twenty east-bank houses and ten east-bank stores, three river bridges, eastern park and football, a winding path to a northern summit deck, an eastern train park with four landscapes, and a large southern bay with a sloping sandy seabed and an underwater garden.">
+  </div><div class="map-layout"><div class="map-viewport" tabindex="0" role="group" aria-label="Interactive town map" aria-describedby="map-instructions"><svg viewBox="${WORLD.minX} ${WORLD.minZ} ${WORLD.width-WORLD.minX} ${WORLD.depth-WORLD.minZ}" role="img" aria-label="NumberTown: sixty-five west-bank houses and twenty west-bank stores, twenty-five east-bank houses and ten east-bank stores, three river bridges, eastern park and football, a winding path to a northern summit deck, an eastern train park with four landscapes, and a large southern bay with a sloping sandy seabed and an underwater garden.">
     <defs><linearGradient id="bay-depth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4e5c9"/><stop offset=".46" stop-color="#8accc7"/><stop offset="1" stop-color="#65b6bd"/></linearGradient></defs>
     <rect x="${WORLD.minX}" y="${WORLD.minZ}" width="${WORLD.width-WORLD.minX}" height="${WORLD.depth-WORLD.minZ}" rx="8" fill="#dce6c9"/>
     <rect x="${WORLD.minX}" y="${COAST.beachStart}" width="${WORLD.width-WORLD.minX}" height="${WORLD.depth-COAST.beachStart}" fill="#efdeb0"/>

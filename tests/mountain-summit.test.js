@@ -214,9 +214,9 @@ test('summit rails and route boundaries keep wide friends supported during attem
   }
 });
 
-test('the original town spawns, building counts, and low terrain remain unchanged', () => {
-  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'west').length, 60);
-  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'east').length, 20);
+test('expanded town houses, spawns, and low destinations remain clear of mountain terrain', () => {
+  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'west').length, 65);
+  assert.equal(BUILDINGS.filter(building => building.kind === 'house' && building.bank === 'east').length, 25);
   for (const [index, point] of FRIEND_STARTS.entries()) {
     assert.equal(collides(point.x, point.z, obstacles, WORLD, getCharacterMetrics(CHARACTERS[index]).radius), false);
     close(groundHeight(point.x, point.z), 0);
